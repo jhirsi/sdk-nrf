@@ -274,7 +274,7 @@ int       iperf_init_stream(struct iperf_stream *, struct iperf_test *);
 void      iperf_free_stream(struct iperf_stream * sp);
 
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-int iperf_main(int argc, char *argv[]);
+int iperf_main(int argc, char **argv, char* ram_file_ptr, int ram_file_len, struct k_poll_signal *kill_signal);
 #endif
 
 int has_tcpinfo(void);
@@ -306,7 +306,12 @@ void nrf_iperf3_usage();
 int nrf_iperf3_mock_getsockdomain(struct iperf_test *test, int sock);
 #endif
 
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+void warning(struct iperf_test *ipt, const char *str);
+#else
 void warning(const char *);
+#endif
+
 int iperf_exchange_results(struct iperf_test *);
 int iperf_init_test(struct iperf_test *);
 int iperf_create_send_timers(struct iperf_test *);
@@ -460,6 +465,7 @@ enum {
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
     IENOMEMORY = 302,         // no dynamic memory from heap
     IETESTSTARTTIMEOUT = 303, // testing start timeout
+    IEKILL = 304,             // not an error but testing was killed
 #endif
 };
 

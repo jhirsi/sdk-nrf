@@ -75,7 +75,24 @@ iperf_err(struct iperf_test *test, const char *format, ...)
 	    if (ct) {
 		fprintf(stderr, "%s", ct);
 	    }
-	    fprintf(stderr, "iperf3: %s\n", str);
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+	    /* Write to RAM "file" if requested: */
+	    if (test != NULL && test->ram_file_len && test->ram_file_ptr != NULL) {
+		    int total_len;
+
+		    total_len = strlen(test->ram_file_ptr) + strlen(str);
+		    if (total_len >= test->ram_file_len) {
+			    strcpy(test->ram_file_ptr,
+				   "WARNING: response buffer was too short and was flushed\n"
+                   "...and started from the beginning\n");
+		    }
+            strcat(str, "\n");
+		    strcat(test->ram_file_ptr, str);
+	    } else
+#endif
+	    {
+		    fprintf(stderr, "iperf3: %s\n", str);
+	    }
 	}
     va_end(argp);
 }
@@ -85,7 +102,7 @@ void
 iperf_errexit(struct iperf_test *test, const char *format, ...)
 {
     va_list argp;
-    char str[1000]; /* NRF_IPERF3_INTEGRATION_TODO: heap instead of stack? */
+    char str[1024];
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
     time_t now;
     struct tm *ltm = NULL;
@@ -118,7 +135,24 @@ iperf_errexit(struct iperf_test *test, const char *format, ...)
 	    if (ct) {
 		fprintf(stderr, "%s", ct);
 	    }
-	    fprintf(stderr, "iperf3: %s\n", str);
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+		/* Write to RAM "file" if requested: */
+	    if (test != NULL && test->ram_file_len && test->ram_file_ptr != NULL) {
+		    int total_len;
+
+		    total_len = strlen(test->ram_file_ptr) + strlen(str);
+		    if (total_len >= test->ram_file_len) {
+			    strcpy(test->ram_file_ptr,
+				   "WARNING: response buffer was too short and was flushed\n"
+                   "...and started from the beginning\n");
+		    }
+            strcat(str, "\n");
+		    strcat(test->ram_file_ptr, str);
+	    } else
+#endif
+	    {
+		    fprintf(stderr, "iperf3: %s\n", str);
+	    }
 	}
     va_end(argp);
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
@@ -228,11 +262,12 @@ iperf_strerror(int int_errno)
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)			
         case IENOMEMORY:
             snprintf(errstr, len, "unable to create a new test - no memory");
-            perr = 1;
             break;
         case IETESTSTARTTIMEOUT:
             snprintf(errstr, len, "timeout for waiting actual test to be started");
-            perr = 1;
+            break;
+        case IEKILL:
+            snprintf(errstr, len, "kill signal received - aborting");
             break;
 #endif
         case IEINITTEST:

@@ -259,7 +259,10 @@ struct iperf_test
     char     *bind_address;                     /* first -B option */
 
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-    struct sockaddr remote_addr; /* added */
+    struct k_poll_signal *kill_signal;
+    struct sockaddr remote_addr;
+    char *ram_file_ptr;
+    int ram_file_len;
 #endif
 
     TAILQ_HEAD(xbind_addrhead, xbind_entry) xbind_addrs; /* all -X opts */
