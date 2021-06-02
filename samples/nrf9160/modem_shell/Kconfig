@@ -69,6 +69,16 @@ config MOSH_FOTA
 	help
 	  FOTA for performing software updates over-the-air for both modem and application side.
 
+if MOSH_IPERF3
+menu "MoSH iperf3 command selections"
+
+config MOSH_WORKER_THREADS
+	bool "experimental feature to have separate thread for iperf3"
+    default y
+    
+endmenu
+endif #MOSH_LINK
+
 if MOSH_LINK
 menu "MoSH link control selections"
 
