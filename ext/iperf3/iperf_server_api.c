@@ -77,7 +77,9 @@ iperf_server_listen(struct iperf_test *test)
 	    ** kernel does not actually do IPv6.  This is not too unusual,
 	    ** v6 support is and perhaps always will be spotty.
 	    */
-	    warning("this system does not seem to support IPv6 - trying IPv4");
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+	    warning(test, "this system does not seem to support IPv6 - trying IPv4");
+#endif
 	    test->settings->domain = AF_INET;
 	    goto retry;
 	} else {
@@ -556,7 +558,9 @@ iperf_run_server(struct iperf_test *test)
 				 * continue.
 				 */
 				if (errno == ENOENT) {
-				    warning("TCP congestion control algorithm not supported");
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+				    warning(test, "TCP congestion control algorithm not supported");
+#endif
 				}
 				else {
 				    saved_errno = errno;
@@ -581,7 +585,7 @@ iperf_run_server(struct iperf_test *test)
 			    }
 			    test->congestion_used = strdup(ca);
 			    if (test->debug) {
-				printf("Congestion algorithm is %s\n", test->congestion_used);
+				iperf_printf(test, "Congestion algorithm is %s\n", test->congestion_used);
 			    }
 			}
 		    }

@@ -260,6 +260,8 @@ struct iperf_test
 
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
     struct sockaddr remote_addr; /* added */
+    char *ram_file_ptr;
+    int ram_file_len;
 #endif
 
     TAILQ_HEAD(xbind_addrhead, xbind_entry) xbind_addrs; /* all -X opts */
