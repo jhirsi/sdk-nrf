@@ -17,6 +17,7 @@
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
 #include <modem/pdn.h>
+#include <net/multicell_location.h>
 
 #include <nrf_socket.h>
 
@@ -55,10 +56,41 @@ static int32_t modem_rsrp = LINK_RSRP_VALUE_NOT_KNOWN;
 static struct k_work continuous_ncellmeas_work;
 enum link_ncellmeas_modes ncellmeas_mode = LINK_NCELLMEAS_MODE_NONE;
 
+static K_SEM_DEFINE(cell_data_ready, 0, 1);
+
+static struct lte_lc_ncell neighbor_cells[17];
+static struct lte_lc_cells_info cell_data = {
+	.neighbor_cells = neighbor_cells,
+};
+
 static void link_continuous_ncellmeas(struct k_work *work)
 {
-	if (ncellmeas_mode == LINK_NCELLMEAS_MODE_CONTINUOUS) {
-		link_ncellmeas_start(true, LINK_NCELLMEAS_MODE_CONTINUOUS);
+	struct multicell_location location;
+	int err;
+
+		err = lte_lc_neighbor_cell_measurement();
+		if (shell_global != NULL) {
+			if (err) {
+				shell_error(
+					shell_global,
+					"lte_lc_neighbor_cell_measurement() returned err %d",
+					err);
+				shell_error(
+					shell_global,
+					"Cannot start neigbor measurements");
+			}
+		}
+	
+	k_sem_take(&cell_data_ready, K_FOREVER); /* TODO: cannot use system queue at the end? */
+
+	err = multicell_location_get(&cell_data, &location);
+	if (err) {
+		shell_error(shell_global, "Failed to acquire location, error: %d", err);
+	} else {
+		shell_print(shell_global, "Location obtained from %s: ", CONFIG_MULTICELL_LOCATION_HOSTNAME);
+		shell_print(shell_global, "\tLatitude: %f", location.latitude);
+		shell_print(shell_global, "\tLongitude: %f", location.longitude);
+		shell_print(shell_global, "\tAccuracy: %.0f", location.accuracy);		
 	}
 }
 
@@ -107,6 +139,7 @@ static void link_rsrp_signal_update(struct k_work *work)
 
 void link_init(void)
 {
+	int err;
 #if defined(CONFIG_MODEM_INFO)
 	k_work_init(&modem_info_work, link_modem_info_work);
 	k_work_init(&modem_info_signal_work, link_rsrp_signal_update);
@@ -123,6 +156,10 @@ void link_init(void)
 
 	lte_lc_register_handler(link_ind_handler);
 
+	err = multicell_location_provision_certificate(false);
+	if (err) {
+		shell_error(shell_global, "Certificate provisioning failed");
+	}
 /* With CONFIG_LWM2M_CARRIER, MoSH auto connect must be disabled
  * because LwM2M carrier lib handles that.
  */
@@ -191,6 +228,15 @@ void link_ind_handler(const struct lte_lc_evt *const evt)
 				cells.neighbor_cells[i].earfcn,
 				cells.neighbor_cells[i].time_diff);
 		}
+
+		/* Copy current and neighbor cell information. */
+		memcpy(&cell_data, &evt->cells_info, sizeof(struct lte_lc_cells_info));
+		memcpy(neighbor_cells, evt->cells_info.neighbor_cells,
+			sizeof(struct lte_lc_ncell) * cell_data.ncells_count);
+		cell_data.neighbor_cells = neighbor_cells;
+
+		k_sem_give(&cell_data_ready);
+
 	} break;
 	case LTE_LC_EVT_MODEM_SLEEP_EXIT_PRE_WARNING:
 	case LTE_LC_EVT_MODEM_SLEEP_ENTER:
@@ -345,18 +391,20 @@ void link_ncellmeas_start(bool start, enum link_ncellmeas_modes mode)
 
 	ncellmeas_mode = mode;
 	if (start) {
-		ret = lte_lc_neighbor_cell_measurement();
-		if (shell_global != NULL) {
-			if (ret) {
-				shell_error(
-					shell_global,
-					"lte_lc_neighbor_cell_measurement() returned err %d",
-					ret);
-				shell_error(
-					shell_global,
-					"Cannot start neigbor measurements");
-			}
-		}
+		k_work_submit(&continuous_ncellmeas_work);
+
+		// ret = lte_lc_neighbor_cell_measurement();
+		// if (shell_global != NULL) {
+		// 	if (ret) {
+		// 		shell_error(
+		// 			shell_global,
+		// 			"lte_lc_neighbor_cell_measurement() returned err %d",
+		// 			ret);
+		// 		shell_error(
+		// 			shell_global,
+		// 			"Cannot start neigbor measurements");
+		// 	}
+		// }
 	} else {
 		ret = lte_lc_neighbor_cell_measurement_cancel();
 		if (shell_global != NULL) {
