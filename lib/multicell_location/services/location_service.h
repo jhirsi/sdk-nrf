@@ -23,22 +23,31 @@ extern "C" {
  *
  * @return 0 on success, or negative error code on failure.
  */
-int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
+int location_service_generate_request_nrfcloud(const struct lte_lc_cells_info *cell_data,
 				      char *buf, size_t buf_len);
+int location_service_generate_request_here(const struct lte_lc_cells_info *cell_data,
+				      char *buf, size_t buf_len);
+int location_service_generate_request_skyhook(const struct lte_lc_cells_info *cell_data,
+				      char *buf, size_t buf_len);
+
 
 /* @brief Get pointer to the location service's null-terminated hostname.
  *
  * @return A pointer to null-terminated hostname in case of success,
  *	   or NULL in case of failure.
  */
-const char *location_service_get_hostname(void);
+const char *location_service_get_hostname_nrfcloud(void);
+const char *location_service_get_hostname_here(void);
+const char *location_service_get_hostname_skyhook(void);
 
 /* @brief Get pointer to certificate to location service.
  *
  * @return A pointer to null-terminated root CA certificate in case of success,
  *	   or NULL in case of failure.
  */
-const char *location_service_get_certificate(void);
+const char *location_service_get_certificate_nrfcloud(void);
+const char *location_service_get_certificate_here(void);
+const char *location_service_get_certificate_skyhook(void);
 
 /* @brief Parse a response from a location service, and populate the provided
  *	  location structure.
@@ -48,7 +57,9 @@ const char *location_service_get_certificate(void);
  *
  * @return 0 on success, or -1 on failure.
  */
-int location_service_parse_response(const char *response, struct multicell_location *location);
+int location_service_parse_response_nrfcloud(const char *response, struct multicell_location *location);
+int location_service_parse_response_here(const char *response, struct multicell_location *location);
+int location_service_parse_response_skyhook(const char *response, struct multicell_location *location);
 
 #ifdef __cplusplus
 }

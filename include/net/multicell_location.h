@@ -14,6 +14,17 @@
 extern "C" {
 #endif
 
+/**
+ * @brief  Multicell location service IDs.
+ */
+
+enum multicell_location_service_id {
+	MULTICELL_LOCATION_SERV_NONE,
+	MULTICELL_LOCATION_SERV_NRFCLOUD,
+	MULTICELL_LOCATION_SERV_HERE,
+	MULTICELL_LOCATION_SERV_SKYHOOK,
+};
+
 /** @defgroup multicell_location Multicell location
  * @{
  */
@@ -39,7 +50,8 @@ struct multicell_location {
  * @return 0 on success, or negative error code on failure.
  */
 int multicell_location_get(const struct lte_lc_cells_info *cell_data,
-			   struct multicell_location *location);
+			   struct multicell_location *location,
+			   enum multicell_location_service_id service);
 
 /* @brief Provision TLS certificate that the selected location service requires
  *	  for HTTPS connections.
@@ -57,7 +69,7 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
  *
  * @return 0 on success, or negative error code on failure.
  */
-int multicell_location_provision_certificate(bool overwrite);
+int multicell_location_provision_certificate(bool overwrite, enum multicell_location_service_id service);
 
 /** @} */
 

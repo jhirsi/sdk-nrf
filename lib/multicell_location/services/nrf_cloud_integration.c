@@ -16,7 +16,7 @@
 
 LOG_MODULE_REGISTER(multicell_location_nrf_cloud, CONFIG_MULTICELL_LOCATION_LOG_LEVEL);
 
-#define HOSTNAME CONFIG_MULTICELL_LOCATION_HOSTNAME
+#define HOSTNAME CONFIG_MULTICELL_LOCATION_NRF_CLOUD_HOSTNAME
 
 /* Length of nrf9160 device IMEI */
 #define IMEI_LEN 15
@@ -79,17 +79,17 @@ static const char tls_certificate[] =
 	"VsyuLAOQ1xk4meTKCRlb/weWsKh/NEnfVqn3sF/tM+2MR7cwA130A4w=\n"
 	"-----END CERTIFICATE-----\n";
 
-const char *location_service_get_hostname(void)
+const char *location_service_get_hostname_nrfcloud(void)
 {
 	return HOSTNAME;
 }
 
-const char *location_service_get_certificate(void)
+const char *location_service_get_certificate_nrfcloud(void)
 {
 	return tls_certificate;
 }
 
-int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
+int location_service_generate_request_nrfcloud(const struct lte_lc_cells_info *cell_data,
 				      char *buf, size_t buf_len)
 {
 	int len;
@@ -129,7 +129,7 @@ int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
 	return 0;
 }
 
-int location_service_parse_response(const char *response, struct multicell_location *location)
+int location_service_parse_response_nrfcloud(const char *response, struct multicell_location *location)
 {
 	int err;
 	struct cJSON *root_obj, *lat_obj, *lng_obj, *accuracy_obj;

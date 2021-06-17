@@ -23,9 +23,7 @@
 
 #include <logging/log.h>
 
-#define TLS_SEC_TAG	CONFIG_MULTICELL_LOCATION_TLS_SEC_TAG
 #define HTTPS_PORT	CONFIG_MULTICELL_LOCATION_HTTPS_PORT
-#define HOSTNAME	CONFIG_MULTICELL_LOCATION_HOSTNAME
 
 LOG_MODULE_REGISTER(multicell_location, CONFIG_MULTICELL_LOCATION_LOG_LEVEL);
 
@@ -35,14 +33,46 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_MULTICELL_LOCATION_SERVICE_NONE),
 static char http_request[CONFIG_MULTICELL_LOCATION_SEND_BUF_SIZE];
 static char recv_buf[CONFIG_MULTICELL_LOCATION_RECV_BUF_SIZE];
 
-static int tls_setup(int fd)
+static int tls_setup(int fd, const char *hostname, enum multicell_location_service_id used_service)
 {
 	int err;
 	int verify = TLS_PEER_VERIFY_REQUIRED;
 	/* Security tag that we have provisioned the certificate to */
-	const sec_tag_t tls_sec_tag[] = {
-		CONFIG_MULTICELL_LOCATION_TLS_SEC_TAG,
+
+	const sec_tag_t tls_sec_here_tag[] = {
+		CONFIG_MULTICELL_LOCATION_HERE_TLS_SEC_TAG,
+
 	};
+	const sec_tag_t tls_sec_skyhook_tag[] = {
+		CONFIG_MULTICELL_LOCATION_SKYHOOK_TLS_SEC_TAG,
+
+	};
+	const sec_tag_t tls_sec_nrfcloud_tag[] = {
+		CONFIG_MULTICELL_LOCATION_NRF_CLOUD_TLS_SEC_TAG,
+
+	};
+	const sec_tag_t *used_tls_sec_tag_list;
+
+	switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+	case MULTICELL_LOCATION_SERV_NRFCLOUD:
+		used_tls_sec_tag_list = tls_sec_nrfcloud_tag;
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+	case MULTICELL_LOCATION_SERV_HERE:
+		used_tls_sec_tag_list = tls_sec_here_tag;
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+	case MULTICELL_LOCATION_SERV_SKYHOOK:
+		used_tls_sec_tag_list = tls_sec_skyhook_tag;
+		break;
+#endif
+	default:
+		LOG_ERR("Unknown service, used_service %d", used_service);
+		return -EINVAL;
+	}
 
 	err = setsockopt(fd, SOL_TLS, TLS_PEER_VERIFY, &verify, sizeof(verify));
 	if (err) {
@@ -53,14 +83,14 @@ static int tls_setup(int fd)
 	/* Associate the socket with the security tag
 	 * we have provisioned the certificate with.
 	 */
-	err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, tls_sec_tag,
-			 sizeof(tls_sec_tag));
+	err = setsockopt(fd, SOL_TLS, TLS_SEC_TAG_LIST, used_tls_sec_tag_list,
+			 sizeof(sec_tag_t) * ARRAY_SIZE(tls_sec_here_tag));
 	if (err) {
 		LOG_ERR("Failed to setup TLS sec tag, error: %d", errno);
 		return -errno;
 	}
 
-	err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, HOSTNAME, sizeof(HOSTNAME) - 1);
+	err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, hostname, strlen(hostname));
 	if (err < 0) {
 		LOG_ERR("Failed to set hostname option, errno: %d", errno);
 		return -errno;
@@ -69,7 +99,8 @@ static int tls_setup(int fd)
 	return 0;
 }
 
-static int execute_http_request(const char *request, size_t request_len)
+static int execute_http_request(const char *request, size_t request_len,
+	enum multicell_location_service_id used_service)
 {
 	int err, fd, bytes;
 	size_t offset = 0;
@@ -78,8 +109,30 @@ static int execute_http_request(const char *request, size_t request_len)
 		.ai_family = AF_INET,
 		.ai_socktype = SOCK_STREAM,
 	};
+	const char *hostname;
 
-	err = getaddrinfo(location_service_get_hostname(), NULL, &hints, &res);
+	switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+	case MULTICELL_LOCATION_SERV_NRFCLOUD:
+		hostname = location_service_get_hostname_nrfcloud();
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+	case MULTICELL_LOCATION_SERV_HERE:
+		hostname = location_service_get_hostname_here();
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+	case MULTICELL_LOCATION_SERV_SKYHOOK:
+		hostname = location_service_get_hostname_skyhook();
+		break;
+#endif
+	default:
+		LOG_ERR("No hostname for used_service: %d", used_service);
+		return -EINVAL;
+	}
+
+	err = getaddrinfo(hostname, NULL, &hints, &res);
 	if (err) {
 		LOG_ERR("getaddrinfo() failed, error: %d", err);
 		return err;
@@ -103,7 +156,7 @@ static int execute_http_request(const char *request, size_t request_len)
 	}
 
 	/* Setup TLS socket options */
-	err = tls_setup(fd);
+	err = tls_setup(fd, hostname, used_service);
 	if (err) {
 		goto clean_up;
 	}
@@ -214,7 +267,8 @@ clean_up:
 }
 
 int multicell_location_get(const struct lte_lc_cells_info *cell_data,
-			   struct multicell_location *location)
+			   struct multicell_location *location,
+			   enum multicell_location_service_id used_service)
 {
 	int err;
 
@@ -228,8 +282,31 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 		LOG_WRN("Increase CONFIG_MULTICELL_LOCATION_MAX_NEIGHBORS to use more cells");
 	}
 
-	err = location_service_generate_request(cell_data, http_request,
-						sizeof(http_request));
+	switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+	case MULTICELL_LOCATION_SERV_NRFCLOUD:
+		err = location_service_generate_request_nrfcloud(
+			cell_data, http_request, sizeof(http_request));
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+	case MULTICELL_LOCATION_SERV_HERE:
+		err = location_service_generate_request_here(
+			cell_data, http_request, sizeof(http_request));
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+	case MULTICELL_LOCATION_SERV_SKYHOOK:
+		err = location_service_generate_request_skyhook(
+			cell_data, http_request, sizeof(http_request));
+		break;
+#endif
+	default:
+		LOG_ERR("Unknown service, service: %d", used_service);
+		err = -EINVAL;
+		break;
+	}
+
 	if (err) {
 		LOG_ERR("Failed to generate HTTP request, error: %d", err);
 		return err;
@@ -237,7 +314,7 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 
 	LOG_DBG("Generated request:\n%s", log_strdup(http_request));
 
-	err = execute_http_request(http_request, strlen(http_request));
+	err = execute_http_request(http_request, strlen(http_request), used_service);
 	if (err == -ETIMEDOUT) {
 		LOG_WRN("Data reception timed out, attempting to parse possibly incomplete data");
 	} else if (err) {
@@ -245,7 +322,30 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 		return err;
 	}
 
-	err = location_service_parse_response(recv_buf, location);
+	switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+	case MULTICELL_LOCATION_SERV_NRFCLOUD:
+		err = location_service_parse_response_nrfcloud(recv_buf,
+							       location);
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+	case MULTICELL_LOCATION_SERV_HERE:
+		err = location_service_parse_response_here(recv_buf, location);
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+	case MULTICELL_LOCATION_SERV_SKYHOOK:
+		err = location_service_parse_response_skyhook(recv_buf,
+							      location);
+		break;
+#endif
+	default:
+		LOG_ERR("Unknown service %d to parse http response", used_service);
+		err = -EINVAL;
+		break;
+	}
+
 	if (err) {
 		LOG_ERR("Failed to parse HTTP response");
 		return -ENOMSG;
@@ -254,19 +354,46 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 	return 0;
 }
 
-int multicell_location_provision_certificate(bool overwrite)
+int multicell_location_provision_certificate(bool overwrite,
+	enum multicell_location_service_id used_service)
 {
 	int err;
 	bool exists;
 	uint8_t unused;
-	const char *certificate = location_service_get_certificate();
+	nrf_sec_tag_t used_sec_tag;
+	const char *certificate = NULL;
+
+	switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+	case MULTICELL_LOCATION_SERV_NRFCLOUD:
+		certificate = location_service_get_certificate_nrfcloud();
+		used_sec_tag = CONFIG_MULTICELL_LOCATION_NRF_CLOUD_TLS_SEC_TAG;
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+	case MULTICELL_LOCATION_SERV_HERE:
+		certificate = location_service_get_certificate_here();
+		used_sec_tag = CONFIG_MULTICELL_LOCATION_HERE_TLS_SEC_TAG;
+		break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+	case MULTICELL_LOCATION_SERV_SKYHOOK:
+		certificate = location_service_get_certificate_skyhook();
+		used_sec_tag = CONFIG_MULTICELL_LOCATION_SKYHOOK_TLS_SEC_TAG;
+		break;
+#endif
+	default:
+		LOG_ERR("No certificate for service %d", used_service);
+		certificate = NULL;
+		break;
+	}
 
 	if (certificate == NULL) {
 		LOG_ERR("No certificate was provided by the location service");
 		return -EFAULT;
 	}
 
-	err = modem_key_mgmt_exists(TLS_SEC_TAG,
+	err = modem_key_mgmt_exists(used_sec_tag,
 				    MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
 				    &exists, &unused);
 	if (err) {
@@ -278,21 +405,21 @@ int multicell_location_provision_certificate(bool overwrite)
 		/* For the sake of simplicity we delete what is provisioned
 		 * with our security tag and reprovision our certificate.
 		 */
-		err = modem_key_mgmt_delete(TLS_SEC_TAG,
+		err = modem_key_mgmt_delete(used_sec_tag,
 					    MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN);
 		if (err) {
 			LOG_ERR("Failed to delete existing certificate, err %d", err);
 		}
 	} else if (exists && !overwrite) {
 		LOG_INF("A certificate is already provisioned to sec tag %d",
-			TLS_SEC_TAG);
+			used_sec_tag);
 		return 0;
 	}
 
 	LOG_INF("Provisioning certificate");
 
 	/*  Provision certificate to the modem */
-	err = modem_key_mgmt_write(TLS_SEC_TAG,
+	err = modem_key_mgmt_write(used_sec_tag,
 				   MODEM_KEY_MGMT_CRED_TYPE_CA_CHAIN,
 				   certificate, strlen(certificate));
 	if (err) {

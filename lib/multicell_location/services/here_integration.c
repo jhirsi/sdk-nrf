@@ -15,7 +15,7 @@
 
 LOG_MODULE_REGISTER(multicell_location_here, CONFIG_MULTICELL_LOCATION_LOG_LEVEL);
 
-#define HOSTNAME	CONFIG_MULTICELL_LOCATION_HOSTNAME
+#define HOSTNAME	CONFIG_MULTICELL_LOCATION_HERE_HOSTNAME
 
 /* Estimated size requirements for HTTP header */
 #define HTTP_HEADER_SIZE	200
@@ -121,17 +121,17 @@ static const char tls_certificate[] =
 	"WD9f\n"
 	"-----END CERTIFICATE-----\n";
 
-const char *location_service_get_hostname(void)
+const char *location_service_get_hostname_here(void)
 {
 	return HOSTNAME;
 }
 
-const char *location_service_get_certificate(void)
+const char *location_service_get_certificate_here(void)
 {
 	return tls_certificate;
 }
 
-int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
+int location_service_generate_request_here(const struct lte_lc_cells_info *cell_data,
 				      char *buf, size_t buf_len)
 {
 	int len;
@@ -214,7 +214,7 @@ int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
 	return 0;
 }
 
-int location_service_parse_response(const char *response, struct multicell_location *location)
+int location_service_parse_response_here(const char *response, struct multicell_location *location)
 {
 	int err;
 	struct cJSON *root_obj, *location_obj, *lat_obj, *lng_obj, *accuracy_obj;

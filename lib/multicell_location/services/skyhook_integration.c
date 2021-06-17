@@ -18,7 +18,7 @@
 LOG_MODULE_REGISTER(multicell_location_skyhook, CONFIG_MULTICELL_LOCATION_LOG_LEVEL);
 
 #define API_KEY		CONFIG_MULTICELL_LOCATION_SKYHOOK_API_KEY
-#define HOSTNAME	CONFIG_MULTICELL_LOCATION_HOSTNAME
+#define HOSTNAME	CONFIG_MULTICELL_LOCATION_SKYHOOK_HOSTNAME
 
 /* The timing advance returned by the nRF9160 modem must be divided by 16
  * to have the range expected by Skyhook.
@@ -128,12 +128,12 @@ BUILD_ASSERT(sizeof(HOSTNAME) > 1, "Hostname must be configured");
 static char body[1536];
 static char neighbors[NEIGHBOR_BUFFER_SIZE];
 
-const char *location_service_get_hostname(void)
+const char *location_service_get_hostname_skyhook(void)
 {
 	return HOSTNAME;
 }
 
-const char *location_service_get_certificate(void)
+const char *location_service_get_certificate_skyhook(void)
 {
 	return tls_certificate;
 }
@@ -147,7 +147,7 @@ static int adjust_rsrp(int input)
 	return input - 141;
 }
 
-int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
+int location_service_generate_request_skyhook(const struct lte_lc_cells_info *cell_data,
 				      char *buf, size_t buf_len)
 {
 	int len;
@@ -288,7 +288,7 @@ int location_service_generate_request(const struct lte_lc_cells_info *cell_data,
 	return 0;
 }
 
-int location_service_parse_response(const char *response, struct multicell_location *location)
+int location_service_parse_response_skyhook(const char *response, struct multicell_location *location)
 {
 	int err;
 	struct cJSON *root_obj, *location_obj, *lat_obj, *lng_obj, *accuracy_obj;
