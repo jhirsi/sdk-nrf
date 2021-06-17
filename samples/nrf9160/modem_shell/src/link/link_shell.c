@@ -13,6 +13,10 @@
 
 #include <modem/at_cmd.h>
 
+#if defined(CONFIG_MULTICELL_LOCATION)
+#include <net/multicell_location.h>
+#endif
+
 #include "link.h"
 #include "link_api.h"
 #include "link_shell.h"
@@ -64,6 +68,7 @@ struct link_shell_cmd_args_t {
 	enum lte_lc_system_mode sysmode_option;
 	enum lte_lc_system_mode_preference sysmode_lte_pref_option;
 	enum lte_lc_lte_mode lte_mode;
+	enum multicell_location_service_id location_service;
 };
 
 /******************************************************************************/
@@ -226,11 +231,15 @@ static const char link_rsrp_usage_str[] =
 	"  -u, --unsubscribe,  Unsubscribe for RSRP info\n";
 
 static const char link_ncellmeas_usage_str[] =
-	"Usage: link ncellmeas --single | --continuous |--cancel\n"
+	"Usage: link ncellmeas --single | --continuous |--cancel [--nrfcloud | --here | --skyhook]\n"
 	"Options:\n"
 	"      --single,     Start a neighbor cell measurement and report result\n"
 	"      --continuous, Start continuous neighbor cell measurement mode and report result\n"
-	"      --cancel,     Cancel/Stop neighbor cell measurement if still ongoing\n";
+	"      --cancel,     Cancel/Stop neighbor cell measurement if still ongoing\n"
+	"Optional location service to be used for fetching also location:\n"
+	"      --nrfcloud,   Use NRF Cloud as a location service\n"
+	"      --here,       Use Here as a location service\n"
+	"      --skyhook,    Use Skyhook as a location service\n";
 
 static const char link_msleep_usage_str[] =
 	"Usage: link msleep --subscribe [options] | --unsubscribe\n"
@@ -283,6 +292,9 @@ enum {
 	LINK_SHELL_OPT_STOP,
 	LINK_SHELL_OPT_SINGLE,
 	LINK_SHELL_OPT_CONTINUOUS,
+	LINK_SHELL_OPT_NRFCLOUD_SERVICE,
+	LINK_SHELL_OPT_HERE_SERVICE,
+	LINK_SHELL_OPT_SKYHOOK_SERVICE,
 };
 
 /* Specifying the expected options (both long and short): */
@@ -334,6 +346,9 @@ static struct option long_options[] = {
 	{ "single", no_argument, 0, LINK_SHELL_OPT_SINGLE },
 	{ "continuous", no_argument, 0, LINK_SHELL_OPT_CONTINUOUS },
 	{ "threshold", required_argument, 0, LINK_SHELL_OPT_THRESHOLD_TIME },
+	{ "nrfcloud", no_argument, 0, LINK_SHELL_OPT_NRFCLOUD_SERVICE },
+	{ "here", no_argument, 0, LINK_SHELL_OPT_HERE_SERVICE },
+	{ "skyhook", no_argument, 0, LINK_SHELL_OPT_SKYHOOK_SERVICE },
 	{ 0, 0, 0, 0 }
 };
 
@@ -401,6 +416,10 @@ static void link_shell_cmd_defaults_set(struct link_shell_cmd_args_t *link_cmd_a
 		LTE_LC_SYSTEM_MODE_PREFER_AUTO;
 	link_cmd_args->lte_mode = LTE_LC_LTE_MODE_NONE;
 	link_cmd_args->ncellmeasmode = LINK_NCELLMEAS_MODE_NONE;
+	link_cmd_args->ncellmeasmode = LINK_NCELLMEAS_MODE_NONE;
+#if defined(CONFIG_MULTICELL_LOCATION)
+	link_cmd_args->location_service = MULTICELL_LOCATION_SERV_NONE;
+#endif
 }
 
 /******************************************************************************/
@@ -813,6 +832,21 @@ int link_shell(const struct shell *shell, size_t argc, char **argv)
 				return -EINVAL;
 			}
 			break;
+#if defined(CONFIG_MULTICELL_LOCATION)
+		case LINK_SHELL_OPT_NRFCLOUD_SERVICE:
+			link_cmd_args.location_service =
+				MULTICELL_LOCATION_SERV_NRFCLOUD;
+			break;
+		case LINK_SHELL_OPT_HERE_SERVICE:
+			link_cmd_args.location_service =
+				MULTICELL_LOCATION_SERV_HERE;
+			break;
+
+		case LINK_SHELL_OPT_SKYHOOK_SERVICE:
+			link_cmd_args.location_service =
+				MULTICELL_LOCATION_SERV_SKYHOOK;
+			break;
+#endif
 		case '?':
 			goto show_usage;
 		default:
@@ -1251,13 +1285,13 @@ int link_shell(const struct shell *shell, size_t argc, char **argv)
 		break;
 	case LINK_CMD_NCELLMEAS:
 		if (link_cmd_args.common_option == LINK_COMMON_STOP) {
-			link_ncellmeas_start(false, LINK_NCELLMEAS_MODE_NONE);
+			link_ncellmeas_start(false, LINK_NCELLMEAS_MODE_NONE, MULTICELL_LOCATION_SERV_NONE);
 
 		} else if (link_cmd_args.ncellmeasmode != LINK_NCELLMEAS_MODE_NONE) {
 			shell_print(
 				shell,
 				"Neighbor cell measurements and reporting starting");
-			link_ncellmeas_start(true, link_cmd_args.ncellmeasmode);
+			link_ncellmeas_start(true, link_cmd_args.ncellmeasmode, link_cmd_args.location_service);
 		} else {
 			goto show_usage;
 		}

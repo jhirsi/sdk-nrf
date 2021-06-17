@@ -17,7 +17,10 @@
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
 #include <modem/pdn.h>
+
+#if defined(CONFIG_MULTICELL_LOCATION)
 #include <net/multicell_location.h>
+#endif
 
 #include <nrf_socket.h>
 
@@ -56,6 +59,10 @@ static int32_t modem_rsrp = LINK_RSRP_VALUE_NOT_KNOWN;
 static struct k_work continuous_ncellmeas_work;
 enum link_ncellmeas_modes ncellmeas_mode = LINK_NCELLMEAS_MODE_NONE;
 
+#if defined(CONFIG_MULTICELL_LOCATION)
+enum multicell_location_service_id location_service = MULTICELL_LOCATION_SERV_NONE;
+#endif
+
 static K_SEM_DEFINE(cell_data_ready, 0, 1);
 
 static struct lte_lc_ncell neighbor_cells[17];
@@ -83,23 +90,49 @@ static void link_continuous_ncellmeas(struct k_work *work)
 	
 	k_sem_take(&cell_data_ready, K_FOREVER); /* TODO: cannot use system queue at the end? */
 
-	err = multicell_location_get(&cell_data, &location);
-	if (err) {
-		shell_error(shell_global, "Failed to acquire location, error: %d", err);
-	} else {
-		char gmaps_str[512];
+#if defined(CONFIG_MULTICELL_LOCATION)
+	if (location_service != MULTICELL_LOCATION_SERV_NONE) {
+		err = multicell_location_get(&cell_data, &location,
+					     location_service);
+		if (err) {
+			shell_error(shell_global,
+				    "Failed to acquire location, error: %d",
+				    err);
+		} else {
+			char gmaps_str[512];
+			char hostname[256];
 
-		shell_print(shell_global, "Location obtained from %s: ",
-			CONFIG_MULTICELL_LOCATION_HOSTNAME);
-		shell_print(shell_global, "\tLatitude: %f", location.latitude);
-		shell_print(shell_global, "\tLongitude: %f", location.longitude);
-		shell_print(shell_global, "\tAccuracy: %.0f", location.accuracy);
+			if (location_service == MULTICELL_LOCATION_SERV_HERE) {
+				sprintf(hostname, "%s",
+					CONFIG_MULTICELL_LOCATION_HERE_HOSTNAME);
+			} else if (location_service ==
+				   MULTICELL_LOCATION_SERV_NRFCLOUD) {
+				sprintf(hostname, "%s",
+					CONFIG_MULTICELL_LOCATION_NRF_CLOUD_HOSTNAME);
+			} else if (location_service ==
+				   MULTICELL_LOCATION_SERV_SKYHOOK) {
+				sprintf(hostname, "%s",
+					CONFIG_MULTICELL_LOCATION_SKYHOOK_HOSTNAME);
+			} else {
+				sprintf(hostname, "%s", "not known");
+			}
 
-		sprintf(gmaps_str, "\tGoogle maps URL: https://maps.google.com/?q=%f,%f",
-			location.latitude,
-			location.longitude);
-		shell_print(shell_global, "%s", gmaps_str);
+			shell_print(shell_global,
+				    "Location obtained from %s: ", hostname);
+			shell_print(shell_global, "\tLatitude: %f",
+				    location.latitude);
+			shell_print(shell_global, "\tLongitude: %f",
+				    location.longitude);
+			shell_print(shell_global, "\tAccuracy: %.0f",
+				    location.accuracy);
+
+			sprintf(gmaps_str,
+				"\tGoogle maps URL: https://maps.google.com/?q=%f,%f",
+				location.latitude, location.longitude);
+			shell_print(shell_global, "%s", gmaps_str);
+		}
 	}
+#endif
 }
 
 /******************************************************************************/
@@ -164,10 +197,21 @@ void link_init(void)
 
 	lte_lc_register_handler(link_ind_handler);
 
-	err = multicell_location_provision_certificate(false);
+#if defined(CONFIG_MULTICELL_LOCATION)
+	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_NRFCLOUD);
 	if (err) {
-		shell_error(shell_global, "Certificate provisioning failed");
+		shell_error(shell_global, "NRF CLoud certificate provisioning failed");
 	}
+	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_HERE);
+	if (err) {
+		shell_error(shell_global, "Here certificate provisioning failed");
+	}
+	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_SKYHOOK);
+	if (err) {
+		shell_error(shell_global, "Skyhook certificate provisioning failed");
+	}
+#endif
+
 /* With CONFIG_LWM2M_CARRIER, MoSH auto connect must be disabled
  * because LwM2M carrier lib handles that.
  */
@@ -414,11 +458,14 @@ void link_rsrp_subscribe(bool subscribe)
 	}
 }
 
-void link_ncellmeas_start(bool start, enum link_ncellmeas_modes mode)
+void link_ncellmeas_start(bool start, enum link_ncellmeas_modes mode, enum multicell_location_service_id service)
 {
 	int ret;
 
 	ncellmeas_mode = mode;
+#if defined(CONFIG_MULTICELL_LOCATION)
+	location_service = service;
+#endif
 	if (start) {
 		k_work_submit(&continuous_ncellmeas_work);
 
