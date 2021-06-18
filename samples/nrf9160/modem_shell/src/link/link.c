@@ -61,9 +61,10 @@ enum link_ncellmeas_modes ncellmeas_mode = LINK_NCELLMEAS_MODE_NONE;
 
 #if defined(CONFIG_MULTICELL_LOCATION)
 enum multicell_location_service_id location_service = MULTICELL_LOCATION_SERV_NONE;
-#endif
-
+char location_api_key[LINK_API_KEY_STR_MAX_LENGTH + 1];
+char *current_location_api_key_ptr;
 static K_SEM_DEFINE(cell_data_ready, 0, 1);
+#endif
 
 static struct lte_lc_ncell neighbor_cells[17];
 static struct lte_lc_cells_info cell_data = {
@@ -87,13 +88,13 @@ static void link_continuous_ncellmeas(struct k_work *work)
 					"Cannot start neigbor measurements");
 			}
 		}
-	
-	k_sem_take(&cell_data_ready, K_FOREVER); /* TODO: cannot use system queue at the end? */
 
 #if defined(CONFIG_MULTICELL_LOCATION)
+	k_sem_take(&cell_data_ready, K_FOREVER); /* TODO: cannot use system queue at the end? */
+
 	if (location_service != MULTICELL_LOCATION_SERV_NONE) {
 		err = multicell_location_get(&cell_data, &location,
-					     location_service);
+					     location_service, current_location_api_key_ptr);
 		if (err) {
 			shell_error(shell_global,
 				    "Failed to acquire location, error: %d",
@@ -104,15 +105,30 @@ static void link_continuous_ncellmeas(struct k_work *work)
 
 			if (location_service == MULTICELL_LOCATION_SERV_HERE) {
 				sprintf(hostname, "%s",
-					CONFIG_MULTICELL_LOCATION_HERE_HOSTNAME);
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+					CONFIG_MULTICELL_LOCATION_HERE_HOSTNAME
+#else
+					"not configured"
+#endif
+					);
 			} else if (location_service ==
 				   MULTICELL_LOCATION_SERV_NRFCLOUD) {
 				sprintf(hostname, "%s",
-					CONFIG_MULTICELL_LOCATION_NRF_CLOUD_HOSTNAME);
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+					CONFIG_MULTICELL_LOCATION_NRF_CLOUD_HOSTNAME
+#else
+					"not configured"
+#endif					
+					);
 			} else if (location_service ==
 				   MULTICELL_LOCATION_SERV_SKYHOOK) {
 				sprintf(hostname, "%s",
-					CONFIG_MULTICELL_LOCATION_SKYHOOK_HOSTNAME);
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+					CONFIG_MULTICELL_LOCATION_SKYHOOK_HOSTNAME
+#else
+					"not configured"
+#endif
+					);
 			} else {
 				sprintf(hostname, "%s", "not known");
 			}
@@ -198,18 +214,26 @@ void link_init(void)
 	lte_lc_register_handler(link_ind_handler);
 
 #if defined(CONFIG_MULTICELL_LOCATION)
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
 	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_NRFCLOUD);
 	if (err) {
 		shell_error(shell_global, "NRF CLoud certificate provisioning failed");
 	}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
 	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_HERE);
 	if (err) {
 		shell_error(shell_global, "Here certificate provisioning failed");
 	}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
 	err = multicell_location_provision_certificate(false, MULTICELL_LOCATION_SERV_SKYHOOK);
 	if (err) {
 		shell_error(shell_global, "Skyhook certificate provisioning failed");
 	}
+#endif
+	memset(location_api_key, 0, sizeof(location_api_key));
+	current_location_api_key_ptr = NULL;
 #endif
 
 /* With CONFIG_LWM2M_CARRIER, MoSH auto connect must be disabled
@@ -294,8 +318,9 @@ void link_ind_handler(const struct lte_lc_evt *const evt)
 		memcpy(neighbor_cells, evt->cells_info.neighbor_cells,
 			sizeof(struct lte_lc_ncell) * cell_data.ncells_count);
 		cell_data.neighbor_cells = neighbor_cells;
-
+#if defined(CONFIG_MULTICELL_LOCATION)
 		k_sem_give(&cell_data_ready);
+#endif
 
 	} break;
 	case LTE_LC_EVT_MODEM_SLEEP_EXIT_PRE_WARNING:
@@ -458,29 +483,24 @@ void link_rsrp_subscribe(bool subscribe)
 	}
 }
 
-void link_ncellmeas_start(bool start, enum link_ncellmeas_modes mode, enum multicell_location_service_id service)
+void link_ncellmeas_start(bool start, enum link_ncellmeas_modes mode,
+			  enum multicell_location_service_id service,
+			  char *api_key)
 {
 	int ret;
 
 	ncellmeas_mode = mode;
 #if defined(CONFIG_MULTICELL_LOCATION)
 	location_service = service;
+	if (api_key != NULL) {
+		strcpy(location_api_key, api_key);
+		current_location_api_key_ptr = location_api_key;
+	} else {
+		current_location_api_key_ptr = NULL;
+	}
 #endif
 	if (start) {
 		k_work_submit(&continuous_ncellmeas_work);
-
-		// ret = lte_lc_neighbor_cell_measurement();
-		// if (shell_global != NULL) {
-		// 	if (ret) {
-		// 		shell_error(
-		// 			shell_global,
-		// 			"lte_lc_neighbor_cell_measurement() returned err %d",
-		// 			ret);
-		// 		shell_error(
-		// 			shell_global,
-		// 			"Cannot start neigbor measurements");
-		// 	}
-		// }
 	} else {
 		ret = lte_lc_neighbor_cell_measurement_cancel();
 		if (shell_global != NULL) {

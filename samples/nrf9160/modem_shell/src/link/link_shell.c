@@ -231,15 +231,19 @@ static const char link_rsrp_usage_str[] =
 	"  -u, --unsubscribe,  Unsubscribe for RSRP info\n";
 
 static const char link_ncellmeas_usage_str[] =
-	"Usage: link ncellmeas --single | --continuous |--cancel [--nrfcloud | --here | --skyhook]\n"
+	"Usage:\n"
+	"link ncellmeas --single | --continuous |--cancel [--nrfcloud | --here | --skyhook [--apikey <string>]]\n"
 	"Options:\n"
-	"      --single,     Start a neighbor cell measurement and report result\n"
-	"      --continuous, Start continuous neighbor cell measurement mode and report result\n"
-	"      --cancel,     Cancel/Stop neighbor cell measurement if still ongoing\n"
+	"      --single,          Start a neighbor cell measurement and report result\n"
+	"      --continuous,      Start continuous neighbor cell measurement mode\n"
+	"                         and report result\n"
+	"      --cancel,          Cancel/Stop neighbor cell measurement if still ongoing\n"
 	"Optional location service to be used for fetching also location:\n"
-	"      --nrfcloud,   Use NRF Cloud as a location service\n"
-	"      --here,       Use Here as a location service\n"
-	"      --skyhook,    Use Skyhook as a location service\n";
+	"      --nrfcloud,        Use NRF Cloud as a location service\n"
+	"      --here,            Use Here as a location service\n"
+	"      --skyhook,         Use Skyhook as a location service\n"
+	"Location service authentication:\n"
+	"      --apikey <string>, Custom api key string, default: CONFIG_MULTICELL_LOCATION_<service>_API_KEY\n";
 
 static const char link_msleep_usage_str[] =
 	"Usage: link msleep --subscribe [options] | --unsubscribe\n"
@@ -295,6 +299,7 @@ enum {
 	LINK_SHELL_OPT_NRFCLOUD_SERVICE,
 	LINK_SHELL_OPT_HERE_SERVICE,
 	LINK_SHELL_OPT_SKYHOOK_SERVICE,
+	LINK_SHELL_OPT_AUTH_API_KEY,
 };
 
 /* Specifying the expected options (both long and short): */
@@ -349,6 +354,7 @@ static struct option long_options[] = {
 	{ "nrfcloud", no_argument, 0, LINK_SHELL_OPT_NRFCLOUD_SERVICE },
 	{ "here", no_argument, 0, LINK_SHELL_OPT_HERE_SERVICE },
 	{ "skyhook", no_argument, 0, LINK_SHELL_OPT_SKYHOOK_SERVICE },
+	{ "apikey", required_argument, 0, LINK_SHELL_OPT_AUTH_API_KEY },
 	{ 0, 0, 0, 0 }
 };
 
@@ -504,6 +510,7 @@ int link_shell(const struct shell *shell, size_t argc, char **argv)
 	bool require_subscribe = false;
 	bool require_option = false;
 	char *apn = NULL;
+	char *api_key = NULL;
 	char *family = NULL;
 	int protocol = 0;
 	bool protocol_given = false;
@@ -845,6 +852,18 @@ int link_shell(const struct shell *shell, size_t argc, char **argv)
 		case LINK_SHELL_OPT_SKYHOOK_SERVICE:
 			link_cmd_args.location_service =
 				MULTICELL_LOCATION_SERV_SKYHOOK;
+			break;
+		case LINK_SHELL_OPT_AUTH_API_KEY:
+			apn_len = strlen(optarg);
+			if (apn_len > LINK_API_KEY_STR_MAX_LENGTH) {
+				shell_error(
+					shell,
+					"API key string length %d exceeded. Maximum is %d.",
+					apn_len, LINK_API_KEY_STR_MAX_LENGTH);
+				ret = -EINVAL;
+				goto show_usage;
+			}
+			api_key = optarg;
 			break;
 #endif
 		case '?':
@@ -1285,13 +1304,17 @@ int link_shell(const struct shell *shell, size_t argc, char **argv)
 		break;
 	case LINK_CMD_NCELLMEAS:
 		if (link_cmd_args.common_option == LINK_COMMON_STOP) {
-			link_ncellmeas_start(false, LINK_NCELLMEAS_MODE_NONE, MULTICELL_LOCATION_SERV_NONE);
+			link_ncellmeas_start(false, LINK_NCELLMEAS_MODE_NONE,
+					     MULTICELL_LOCATION_SERV_NONE,
+					     NULL);
 
 		} else if (link_cmd_args.ncellmeasmode != LINK_NCELLMEAS_MODE_NONE) {
 			shell_print(
 				shell,
 				"Neighbor cell measurements and reporting starting");
-			link_ncellmeas_start(true, link_cmd_args.ncellmeasmode, link_cmd_args.location_service);
+			link_ncellmeas_start(true, link_cmd_args.ncellmeasmode,
+					     link_cmd_args.location_service,
+					     api_key);
 		} else {
 			goto show_usage;
 		}
