@@ -17,7 +17,6 @@
 
 LOG_MODULE_REGISTER(multicell_location_skyhook, CONFIG_MULTICELL_LOCATION_LOG_LEVEL);
 
-#define API_KEY		CONFIG_MULTICELL_LOCATION_SKYHOOK_API_KEY
 #define HOSTNAME	CONFIG_MULTICELL_LOCATION_SKYHOOK_HOSTNAME
 
 /* The timing advance returned by the nRF9160 modem must be divided by 16
@@ -34,7 +33,7 @@ LOG_MODULE_REGISTER(multicell_location_skyhook, CONFIG_MULTICELL_LOCATION_LOG_LE
  */
 
 #define HTTP_REQUEST_HEADER						\
-	"POST /wps2/json/location?key="API_KEY"&user=%s HTTP/1.1\r\n"	\
+	"POST /wps2/json/location?key=%s&user=%s HTTP/1.1\r\n"	\
 	"Host: "HOSTNAME"\r\n"					        \
 	"Content-Type: application/json\r\n"				\
 	"Connection: close\r\n"						\
@@ -122,7 +121,6 @@ static const char tls_certificate[] =
 	"CAUw7C29C79Fv1C5qfPrmAESrciIxpg0X40KPMbp1ZWVbd4=\n"
 	"-----END CERTIFICATE-----\n";
 
-BUILD_ASSERT(sizeof(API_KEY) > 1, "API key must be configured");
 BUILD_ASSERT(sizeof(HOSTNAME) > 1, "Hostname must be configured");
 
 static char body[1536];
@@ -148,7 +146,7 @@ static int adjust_rsrp(int input)
 }
 
 int location_service_generate_request_skyhook(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len)
+				      char *buf, size_t buf_len, char *api_key)
 {
 	int len;
 	enum lte_lc_lte_mode mode;
@@ -158,7 +156,7 @@ int location_service_generate_request_skyhook(const struct lte_lc_cells_info *ce
 	size_t neighbors_to_use =
 		MIN(CONFIG_MULTICELL_LOCATION_MAX_NEIGHBORS, cell_data->ncells_count);
 
-	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0)) {
+	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0) || (api_key == NULL)) {
 		return -EINVAL;
 	}
 
@@ -223,7 +221,7 @@ int location_service_generate_request_skyhook(const struct lte_lc_cells_info *ce
 			return -ENOMEM;
 		}
 
-		len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", imei, strlen(body), body);
+		len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", api_key, imei, strlen(body), body);
 		if ((len < 0) || (len >= buf_len)) {
 			LOG_ERR("Too small buffer for HTTP request body");
 			return -ENOMEM;
@@ -279,7 +277,7 @@ int location_service_generate_request_skyhook(const struct lte_lc_cells_info *ce
 		return -ENOMEM;
 	}
 
-	len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", imei, strlen(body), body);
+	len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", api_key, imei, strlen(body), body);
 	if ((len < 0) || (len >= buf_len)) {
 		LOG_ERR("Too small buffer for HTTP request");
 		return -ENOMEM;

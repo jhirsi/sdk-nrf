@@ -36,7 +36,7 @@ BUILD_ASSERT(sizeof(CONFIG_MULTICELL_LOCATION_NRF_CLOUD_API_KEY) > 1,
 #define HTTP_REQUEST_HEADER							\
 	"GET /v1/location/single-cell" REQUEST_PARAMETERS " HTTP/1.1\r\n"	\
 	"Host: "HOSTNAME"\r\n"							\
-	"Authorization: Bearer "API_KEY"\r\n"					\
+	"Authorization: Bearer %s\r\n"					\
 	"Connection: close\r\n"							\
 	"Content-Type: application/json\r\n\r\n"
 
@@ -90,13 +90,13 @@ const char *location_service_get_certificate_nrfcloud(void)
 }
 
 int location_service_generate_request_nrfcloud(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len)
+				      char *buf, size_t buf_len, char *api_key)
 {
 	int len;
 	int err;
 	char device_id[20];
 
-	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0)) {
+	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0) || (api_key == NULL)) {
 		return -EINVAL;
 	}
 
@@ -120,7 +120,8 @@ int location_service_generate_request_nrfcloud(const struct lte_lc_cells_info *c
 		       cell_data->current_cell.mcc,
 		       cell_data->current_cell.mnc,
 		       cell_data->current_cell.tac,
-		       cell_data->current_cell.id);
+		       cell_data->current_cell.id,
+		       api_key);
 	if ((len < 0) || (len >= buf_len)) {
 		LOG_ERR("Too small buffer for HTTP request");
 		return -ENOMEM;

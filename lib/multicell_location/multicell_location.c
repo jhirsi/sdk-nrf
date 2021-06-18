@@ -268,12 +268,67 @@ clean_up:
 
 int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 			   struct multicell_location *location,
-			   enum multicell_location_service_id used_service)
+			   enum multicell_location_service_id used_service,
+			   char *api_key)
 {
 	int err;
 
 	if ((cell_data == NULL) || (location == NULL)) {
 		return -EINVAL;
+	}
+
+	if (!api_key) {
+		/* Use defaults from configuration: */
+		switch (used_service) {
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+		case MULTICELL_LOCATION_SERV_NRFCLOUD:
+			api_key = CONFIG_MULTICELL_LOCATION_NRF_CLOUD_API_KEY;
+			break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+		case MULTICELL_LOCATION_SERV_HERE:
+			api_key = CONFIG_MULTICELL_LOCATION_HERE_API_KEY;
+			break;
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+		case MULTICELL_LOCATION_SERV_SKYHOOK:
+			api_key = CONFIG_MULTICELL_LOCATION_SKYHOOK_API_KEY;
+			break;
+#endif
+		default:
+			if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+				   "none") == 0) {
+				LOG_ERR("No api key given nor configured for service: %d",
+					used_service);
+				err = -EINVAL;
+			}
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+			else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+					"nrfcloud") == 0) {
+				api_key =
+					CONFIG_MULTICELL_LOCATION_NRF_CLOUD_API_KEY;
+			}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+			else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+					"skyhook") == 0) {
+				api_key =
+					CONFIG_MULTICELL_LOCATION_SKYHOOK_API_KEY;
+			}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+			else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+					"here") == 0) {
+				api_key =
+					CONFIG_MULTICELL_LOCATION_HERE_API_KEY;
+			}
+#endif
+			else {
+				LOG_ERR("No service given and wrong configured as a default");
+				err = -EINVAL;
+			}
+			break;
+		}
 	}
 
 	if (cell_data->ncells_count > CONFIG_MULTICELL_LOCATION_MAX_NEIGHBORS) {
@@ -282,29 +337,70 @@ int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 		LOG_WRN("Increase CONFIG_MULTICELL_LOCATION_MAX_NEIGHBORS to use more cells");
 	}
 
-	switch (used_service) {
+	if (used_service != MULTICELL_LOCATION_SERV_NONE) {
+		switch (used_service) {
 #if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
-	case MULTICELL_LOCATION_SERV_NRFCLOUD:
-		err = location_service_generate_request_nrfcloud(
-			cell_data, http_request, sizeof(http_request));
-		break;
+		case MULTICELL_LOCATION_SERV_NRFCLOUD:
+			err = location_service_generate_request_nrfcloud(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+			break;
 #endif
 #if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
-	case MULTICELL_LOCATION_SERV_HERE:
-		err = location_service_generate_request_here(
-			cell_data, http_request, sizeof(http_request));
-		break;
+		case MULTICELL_LOCATION_SERV_HERE:
+			err = location_service_generate_request_here(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+			break;
 #endif
 #if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
-	case MULTICELL_LOCATION_SERV_SKYHOOK:
-		err = location_service_generate_request_skyhook(
-			cell_data, http_request, sizeof(http_request));
-		break;
+		case MULTICELL_LOCATION_SERV_SKYHOOK:
+			err = location_service_generate_request_skyhook(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+			break;
 #endif
-	default:
-		LOG_ERR("Unknown service, service: %d", used_service);
-		err = -EINVAL;
-		break;
+		default:
+			LOG_ERR("Unknown service: %d", used_service);
+			err = -EINVAL;
+			break;
+		}
+
+	} else {
+		/* Use the configured default: */
+		if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT, "none") ==
+		    0) {
+			LOG_ERR("No service given nor configured as a default");
+			err = -EINVAL;
+		}
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD)
+		else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+				"nrfcloud") == 0) {
+			err = location_service_generate_request_nrfcloud(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+		}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_SKYHOOK)
+		else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+				"skyhook") == 0) {
+			err = location_service_generate_request_skyhook(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+		}
+#endif
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_HERE)
+		else if (strcmp(CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT,
+				"here") == 0) {
+			err = location_service_generate_request_here(
+				cell_data, http_request, sizeof(http_request),
+				api_key);
+		}
+#endif
+		else {
+			LOG_ERR("No service given and wrong configured as a default");
+			err = -EINVAL;
+		}
 	}
 
 	if (err) {

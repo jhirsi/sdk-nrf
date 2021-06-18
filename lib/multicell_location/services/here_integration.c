@@ -36,7 +36,7 @@ LOG_MODULE_REGISTER(multicell_location_here, CONFIG_MULTICELL_LOCATION_LOG_LEVEL
 
 #if IS_ENABLED(CONFIG_MULTICELL_LOCATION_HERE_USE_API_KEY)
 BUILD_ASSERT(sizeof(CONFIG_MULTICELL_LOCATION_HERE_API_KEY) > 1, "API key must be configured");
-#define AUTHENTICATION	"apiKey="CONFIG_MULTICELL_LOCATION_HERE_API_KEY
+#define AUTHENTICATION	"apiKey=%s"
 #elif IS_ENABLED(CONFIG_MULTICELL_LOCATION_HERE_USE_APP_CODE_ID)
 BUILD_ASSERT(sizeof(API_APP_CODE) > 1, "App code must be configured");
 BUILD_ASSERT(sizeof(API_APP_ID) > 1, "App ID must be configured");
@@ -132,13 +132,13 @@ const char *location_service_get_certificate_here(void)
 }
 
 int location_service_generate_request_here(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len)
+				      char *buf, size_t buf_len, char *api_key)
 {
 	int len;
 	size_t neighbors_to_use =
 		MIN(CONFIG_MULTICELL_LOCATION_MAX_NEIGHBORS, cell_data->ncells_count);
 
-	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0)) {
+	if ((cell_data == NULL) || (buf == NULL) || (buf_len == 0) || (api_key == NULL)) {
 		return -EINVAL;
 	}
 
@@ -157,7 +157,11 @@ int location_service_generate_request_here(const struct lte_lc_cells_info *cell_
 			return -ENOMEM;
 		}
 
-		len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", strlen(body), body);
+		len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", 
+#if IS_ENABLED(CONFIG_MULTICELL_LOCATION_HERE_USE_API_KEY)
+			api_key,
+#endif
+			strlen(body), body);
 		if ((len < 0) || (len >= buf_len)) {
 			LOG_ERR("Too small buffer for HTTP request");
 			return -ENOMEM;
@@ -205,7 +209,11 @@ int location_service_generate_request_here(const struct lte_lc_cells_info *cell_
 		return -ENOMEM;
 	}
 
-	len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s", strlen(body), body);
+	len = snprintk(buf, buf_len, HTTP_REQUEST_HEADER "%s",
+#if IS_ENABLED(CONFIG_MULTICELL_LOCATION_HERE_USE_API_KEY)
+			api_key,
+#endif	
+			strlen(body), body);
 	if ((len < 0) || (len >= buf_len)) {
 		LOG_ERR("Too small buffer for HTTP request buffer");
 		return -ENOMEM;

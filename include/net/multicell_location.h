@@ -46,12 +46,17 @@ struct multicell_location {
  *
  * @param cell_data Pointer to neighbor cell data.
  * @param location Pointer to location.
+ * @param service Used service. With MULTICELL_LOCATION_SERV_NONE
+ *        CONFIG_MULTICELL_LOCATION_SERVICE_DEFAULT is used
+ * @param api_key Pointer to api key string. With NULL, corresponding values
+ *        from CONFIG_MULTICELL_LOCATION_<service>_API_KEY are used.
  *
  * @return 0 on success, or negative error code on failure.
  */
 int multicell_location_get(const struct lte_lc_cells_info *cell_data,
 			   struct multicell_location *location,
-			   enum multicell_location_service_id service);
+			   enum multicell_location_service_id service,
+			   char *api_key);
 
 /* @brief Provision TLS certificate that the selected location service requires
  *	  for HTTPS connections.

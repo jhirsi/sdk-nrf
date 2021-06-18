@@ -24,11 +24,11 @@ extern "C" {
  * @return 0 on success, or negative error code on failure.
  */
 int location_service_generate_request_nrfcloud(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len);
+				      char *buf, size_t buf_len, char *api_key);
 int location_service_generate_request_here(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len);
+				      char *buf, size_t buf_len, char *api_key);
 int location_service_generate_request_skyhook(const struct lte_lc_cells_info *cell_data,
-				      char *buf, size_t buf_len);
+				      char *buf, size_t buf_len, char *api_key);
 
 
 /* @brief Get pointer to the location service's null-terminated hostname.
