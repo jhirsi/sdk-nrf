@@ -264,3 +264,33 @@ int parse_xmodemsleep(const char *at_response, struct lte_lc_modem_sleep *modem_
  * @retval 7 Evaluation failed, Unspecified.
  */
 int parse_coneval(const char *at_response, struct lte_lc_conn_eval_params *params);
+
+/* @brief Add the handler in the notification list if not already present.
+ *
+ *  @param handler Event handler.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+int notif_handler_list_append_handler(lte_lc_evt_handler_t handler);
+
+/* @brief Remove the handler from the notification list if present.
+ *
+ *  @param handler Event handler.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+int notif_handler_list_remove_notif_handler(lte_lc_evt_handler_t handler);
+
+/* @brief Dispatch notifications for registered event handlers.
+ *
+ *  @param evt Event.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+void notif_handler_list_dispatch(const struct lte_lc_evt *const evt);
+
+/* @brief Test if the handler list is empty.
+ *
+ * @return a boolean, true if it's empty, false otherwise
+ */
+bool notif_handler_list_is_empty(void);
