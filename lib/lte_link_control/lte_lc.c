@@ -51,7 +51,6 @@ enum lte_lc_notif_type {
 
 /* Static variables */
 
-static lte_lc_evt_handler_t evt_handler;
 static bool is_initialized;
 
 #if defined(CONFIG_NRF_MODEM_LIB_TRACE_ENABLED)
@@ -260,7 +259,7 @@ static void at_handler(void *context, const char *response)
 			break;
 		}
 
-		if (!evt_handler) {
+		if (notif_handler_list_is_empty()) {
 			return;
 		}
 
@@ -270,7 +269,7 @@ static void at_handler(void *context, const char *response)
 			evt.type = LTE_LC_EVT_NW_REG_STATUS;
 			evt.nw_reg_status = reg_status;
 
-			evt_handler(&evt);
+			notif_handler_list_dispatch(&evt);
 		}
 
 		/* Cell update event */
@@ -279,7 +278,7 @@ static void at_handler(void *context, const char *response)
 
 			memcpy(&prev_cell, &cell, sizeof(struct lte_lc_cell));
 			memcpy(&evt.cell, &cell, sizeof(struct lte_lc_cell));
-			evt_handler(&evt);
+			notif_handler_list_dispatch(&evt);
 		}
 
 		if (lte_mode != prev_lte_mode) {
@@ -291,7 +290,7 @@ static void at_handler(void *context, const char *response)
 				     LTE_LC_TRACE_LTE_MODE_UPDATE_LTEM :
 				     LTE_LC_TRACE_LTE_MODE_UPDATE_NBIOT);
 
-			evt_handler(&evt);
+			notif_handler_list_dispatch(&evt);
 		}
 
 		if ((reg_status != LTE_LC_NW_REG_REGISTERED_HOME) &&
@@ -308,7 +307,7 @@ static void at_handler(void *context, const char *response)
 			       sizeof(struct lte_lc_psm_cfg));
 			memcpy(&evt.psm_cfg, &psm_cfg,
 			       sizeof(struct lte_lc_psm_cfg));
-			evt_handler(&evt);
+			notif_handler_list_dispatch(&evt);
 		}
 
 		break;
@@ -374,7 +373,7 @@ static void at_handler(void *context, const char *response)
 		LOG_DBG("%%NCELLMEAS notification");
 		LOG_DBG("Neighbor cell count: %d", ncell_count);
 
-		if (!evt_handler) {
+		if (notif_handler_list_is_empty()) {
 			/* No need to parse the response if there is no handler
 			 * to receive the parsed data.
 			 */
@@ -402,7 +401,7 @@ static void at_handler(void *context, const char *response)
 		case 0: /* Fall through */
 		case 1:
 			evt.type = LTE_LC_EVT_NEIGHBOR_CELL_MEAS;
-			evt_handler(&evt);
+			notif_handler_list_dispatch(&evt);
 			break;
 		default:
 			LOG_ERR("Parsing of neighbour cells failed, err: %d", err);
@@ -454,8 +453,8 @@ static void at_handler(void *context, const char *response)
 		break;
 	}
 
-	if (evt_handler && notify) {
-		evt_handler(&evt);
+	if (!notif_handler_list_is_empty() && notify) {
+		notif_handler_list_dispatch(&evt);
 	}
 }
 
@@ -700,22 +699,26 @@ int lte_lc_init(void)
 void lte_lc_register_handler(lte_lc_evt_handler_t handler)
 {
 	if (handler == NULL) {
-		evt_handler = NULL;
-
-		LOG_INF("Previously registered handler (%p) deregistered",
-			handler);
-
+		LOG_INF("NULL as a handler received: Nothing to be done.\n"
+			"Deregister of the handler can done by using lte_lc_deregister_handler()");
 		return;
 	}
 
-	if (evt_handler) {
-		LOG_WRN("Replacing previously registered handler (%p) with %p",
-			evt_handler, handler);
-	}
-
-	evt_handler = handler;
-
+	notif_handler_list_append_handler(handler);
 	return;
+}
+
+int lte_lc_deregister_handler(lte_lc_evt_handler_t handler)
+{
+	if (!is_initialized) {
+		LOG_ERR("Module not initialized yet");
+		return -EINVAL;
+	}
+	if (handler == NULL) {
+		LOG_ERR("Invalid handler (handler=0x%08X)", (uint32_t)handler);
+		return -EINVAL;
+	}
+	return notif_handler_list_remove_notif_handler(handler);
 }
 
 int lte_lc_connect(void)
@@ -735,8 +738,8 @@ int lte_lc_init_and_connect(void)
 int lte_lc_connect_async(lte_lc_evt_handler_t handler)
 {
 	if (handler) {
-		evt_handler = handler;
-	} else if (evt_handler == NULL) {
+		notif_handler_list_append_handler(handler);
+	} else if (notif_handler_list_is_empty()) {
 		LOG_ERR("No handler registered");
 		return -EINVAL;
 	}
