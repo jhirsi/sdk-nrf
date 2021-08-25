@@ -790,7 +790,7 @@ int parse_ncellmeas(const char *at_response, struct lte_lc_cells_info *cells)
 					NULL,
 					&resp_list);
 	if (err && err != -E2BIG) {
-		LOG_ERR("Could not parse AT%%XNCELLMEAS  response, error: %d", err);
+		LOG_ERR("Could not parse AT%%NCELLMEAS  response, error: %d", err);
 		goto clean_exit;
 	} else if (err == -E2BIG) {
 		incomplete = true;
