@@ -69,14 +69,16 @@ int location_service_get_cell_location(const struct lte_lc_cells_info *cell_data
 {
 	int err;
 	struct nrf_cloud_cell_pos_result result;
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD_JWT_GENERATED)
 	struct jwt_data jwt = {
 		.subject = device_id,
-		.audience = NULL,
+		.audience = NULL, /* TODO: does not work if having multiple teams in nrf cloud */
 		.exp_delta_s = (5 * 60),
 		.sec_tag = CONFIG_MULTICELL_LOCATION_NRF_CLOUD_JWT_SEC_TAG,
 		.key = JWT_KEY_TYPE_CLIENT_PRIV,
 		.alg = JWT_ALG_TYPE_ES256
 	};
+#endif
 	struct nrf_cloud_rest_context rest_ctx = {
 		.connect_socket = -1,
 		.keep_alive = false,
@@ -89,7 +91,7 @@ int location_service_get_cell_location(const struct lte_lc_cells_info *cell_data
 	const struct nrf_cloud_rest_cell_pos_request loc_req = {
 		.net_info = (struct lte_lc_cells_info *)cell_data
 	};
-
+#if defined(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD_JWT_GENERATED)
 	err = modem_jwt_generate(&jwt);
 	if (err) {
 		LOG_ERR("Failed to generate JWT, error: %d", err);
@@ -101,7 +103,12 @@ int location_service_get_cell_location(const struct lte_lc_cells_info *cell_data
 	err = nrf_cloud_rest_cell_pos_get(&rest_ctx, &loc_req, &result);
 
 	modem_jwt_free(jwt.jwt_buf);
+#else
+	BUILD_ASSERT(IS_ENABLED(CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD_JWT_COMPILE_TIME));
 
+	rest_ctx.auth = CONFIG_MULTICELL_LOCATION_SERVICE_NRF_CLOUD_JWT_STRING;
+	err = nrf_cloud_rest_cell_pos_get(&rest_ctx, &loc_req, &result);
+#endif
 	if (!err) {
 		location->accuracy = (double)result.unc;
 		location->latitude = result.lat;
