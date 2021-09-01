@@ -57,7 +57,9 @@ manifest:
     - name: zephyr
       remote: jhirsi
       repo-path: sdk-zephyr
-      revision: http_client_with_posix
+      remote: jhirsi
+      revision: http_client_with_posix_and_esp_trials
+
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
