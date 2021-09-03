@@ -51,7 +51,7 @@ struct rip_header_list_item {
 
 int rip_shell(const struct shell *shell, size_t argc, char **argv)
 {
-	int opt, i, j;
+	int opt, i, j, len;
 	int ret = 0;
 	int long_index = 0;
 	struct srest_req_resp_context rest_ctx = { 0 };
@@ -69,7 +69,7 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 	rest_ctx.sec_tag = SREST_CLIENT_NO_SEC;
 	rest_ctx.connect_socket = SREST_CLIENT_SCKT_CONNECT;
 	rest_ctx.port = 80;
-	rest_ctx.body = "";
+	rest_ctx.body = NULL;
 
 	if (argc < 3) {
 		goto show_usage;
@@ -120,6 +120,16 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 		case 'b':
 		//maybe we should allocate memory instead of using commandline? especially if multithreading?
 			rest_ctx.body = optarg;
+			len = strlen(optarg); 
+			if (len > 0) {
+				rest_ctx.body = k_malloc(len + 1);
+				if (rest_ctx.body == NULL) {
+					shell_error(shell, "Cannot allocate memory for given body");
+					return -ENOMEM;
+				} else {
+					strcpy(rest_ctx.body, optarg);
+				}
+			}
 			break;
 		case 'H': {
 			bool room_available = false;
@@ -139,14 +149,11 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 
 			for (i = 0; i < MAX_HEADERS; i++) {
 				if (!headers[i].in_use) {
-#if 0  //maybe we should allocate memory instead of using commandline? especially if multithreading?
 					headers[i].header_str = k_malloc(strlen(optarg) + 1);
 					if (headers[i].header_str == NULL) {
 						shell_error(shell, "Cannot allocate memory for header %s", optarg);
 						break;
 					}
-#endif
-					headers[i].header_str = optarg;
 					headers[i].in_use = true;
 					headers_set = true;
 				}
@@ -189,6 +196,10 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 		shell_error(shell, "Error %d from srest client", ret);
 	} else {
 		shell_print(shell, "Response:\n %s", rest_ctx.response);
+	}
+	k_free(rest_ctx.body);
+	for (i = 0; i < MAX_HEADERS; i++) {
+		k_free(headers[i].header_str);
 	}
 
 	return ret;
