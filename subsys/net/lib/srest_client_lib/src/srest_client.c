@@ -29,7 +29,6 @@
 LOG_MODULE_REGISTER(srest_client, CONFIG_SREST_CLIENT_LIB_LOG_LEVEL);
 
 #define HTTP_PROTOCOL "HTTP/1.1"
-#define SOCKET_PROTOCOL IPPROTO_TLS_1_2
 
 static void http_response_cb(struct http_response *rsp, enum http_final_call final_data,
 			     void *user_data)
@@ -129,9 +128,12 @@ static int do_connect(int *const fd, const char *const hostname, const uint16_t 
 		.ai_socktype = SOCK_STREAM,
 		.ai_next = NULL,
 	};
+	int proto = 0;
 
 	/* Make sure fd is always initialized when this function is called */
 	*fd = -1;
+
+	LOG_DBG("Doing getaddrinfo() with connect addr %s", log_strdup(connect_addr));
 
 	ret = getaddrinfo(connect_addr, NULL, &hints, &addr_info);
 	if (ret) {
@@ -144,7 +146,8 @@ static int do_connect(int *const fd, const char *const hostname, const uint16_t 
 
 	((struct sockaddr_in *)addr_info->ai_addr)->sin_port = htons(port_num);
 
-	*fd = socket(AF_INET, SOCK_STREAM, SOCKET_PROTOCOL);
+	proto = (sec_tag == SREST_CLIENT_NO_SEC) ? IPPROTO_TCP : IPPROTO_TLS_1_2;
+	*fd = socket(AF_INET, SOCK_STREAM, proto);
 	if (*fd == -1) {
 		LOG_ERR("Failed to open socket, error: %d", errno);
 		ret = -ENOTCONN;
@@ -172,7 +175,12 @@ static int do_connect(int *const fd, const char *const hostname, const uint16_t 
 	if (ret) {
 		LOG_ERR("Failed to connect socket, error: %d", errno);
 		ret = -ECONNREFUSED;
+		goto clean_up;
 	}
+	LOG_INF("CONNECTED\n");
+	k_sleep(K_MSEC(1000));
+
+	return ret;
 
 clean_up:
 
@@ -193,13 +201,11 @@ static void close_connection(struct srest_req_resp_context *const rest_ctx)
 	int ret;
 
 	if (!rest_ctx->keep_alive) {
-		assert(rest_ctx->connect_socket >= 0);
-
 		ret = close(rest_ctx->connect_socket);
 		if (ret) {
 			LOG_WRN("Failed to close socket, error: %d", errno);
 		}
-		rest_ctx->connect_socket = -1;
+		rest_ctx->connect_socket = SREST_CLIENT_SCKT_CONNECT;
 	}
 }
 
@@ -238,6 +244,9 @@ static int do_api_call(struct http_request *http_req, struct srest_req_resp_cont
 
 	rest_ctx->response = NULL;
 	rest_ctx->response_len = 0;
+	
+	LOG_INF("DOING HTTP REQ\n");
+	k_sleep(K_MSEC(1000));
 
 	err = http_client_req(rest_ctx->connect_socket, http_req, rest_ctx->timeout_ms, rest_ctx);
 
@@ -256,6 +265,7 @@ static int do_api_call(struct http_request *http_req, struct srest_req_resp_cont
 int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 {
 	__ASSERT_NO_MSG(req_resp_ctx != NULL);
+	//TODO: assert if mandatories missing?
 
 	struct http_request http_req;
 	int ret;
@@ -263,16 +273,23 @@ int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 	init_request(req_resp_ctx, &http_req);
 
 	http_req.url = req_resp_ctx->url;
-	LOG_DBG("URL: %s", log_strdup(http_req.url));
+
+	LOG_DBG("Requesting destination HOST: %s at port %d, URL: %s",
+		log_strdup(req_resp_ctx->host),
+		req_resp_ctx->port,
+		log_strdup(http_req.url));
 
 	http_req.header_fields = req_resp_ctx->header_fields;
 
-	http_req.payload = req_resp_ctx->body;
-	http_req.payload_len = strlen(http_req.payload);
+	if (req_resp_ctx->body != NULL) {
+		http_req.payload = req_resp_ctx->body;
+		http_req.payload_len = strlen(http_req.payload);
+	}
 
 	ret = do_api_call(&http_req, req_resp_ctx);
 	if (ret) {
 		ret = -EIO;
+		LOG_ERR("srest_client_request() failed");
 		goto clean_up;
 	}
 
@@ -284,6 +301,7 @@ int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 	LOG_DBG("API call response len: %u bytes", req_resp_ctx->response_len);
 
 clean_up:
+	/* Note: should be already closed? */
 	close_connection(req_resp_ctx);
 	return ret;
 }

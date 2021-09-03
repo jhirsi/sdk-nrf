@@ -14,7 +14,10 @@
 
 #include <net/http_parser.h>
 
-/** @brief Parameters and data for using the sREST cleint API */
+#define SREST_CLIENT_NO_SEC -1 /* No TLS */
+#define SREST_CLIENT_SCKT_CONNECT -1 /* sREST client lib does a sckt connection */
+
+/** @brief Parameters and data for using the sREST client API */
 struct srest_req_resp_context {
 	/** Connection socket; initialize to -1 and library
 	 * will make the connection.
