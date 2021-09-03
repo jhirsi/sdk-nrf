@@ -47,7 +47,7 @@ struct srest_req_resp_context {
 	const char **header_fields;
 
 	/** Payload/body, may be NULL */
-	const char *body;
+	char *body;
 
 	/* Response: */
 
@@ -62,6 +62,7 @@ struct srest_req_resp_context {
 
 	/** Start of response data in resp_buff */
 	char *response;
+
 	/** Length of response data */
 	size_t response_len;
 

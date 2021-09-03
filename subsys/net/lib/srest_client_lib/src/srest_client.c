@@ -40,7 +40,7 @@ static void http_response_cb(struct http_response *rsp, enum http_final_call fin
 	}
 
 	if (rest_ctx && rsp->body_found && rsp->body_start) {
-		rest_ctx->resp_buff = rsp->body_start;
+		rest_ctx->response = rsp->body_start;
 	}
 
 	if (final_data == HTTP_DATA_FINAL) {
@@ -53,7 +53,7 @@ static void http_response_cb(struct http_response *rsp, enum http_final_call fin
 		}
 
 		rest_ctx->http_status_code = rsp->http_status_code;
-		rest_ctx->resp_buff_len = rsp->content_length;
+		rest_ctx->response_len = rsp->content_length;
 	}
 }
 
@@ -177,8 +177,6 @@ static int do_connect(int *const fd, const char *const hostname, const uint16_t 
 		ret = -ECONNREFUSED;
 		goto clean_up;
 	}
-	LOG_INF("CONNECTED\n");
-	k_sleep(K_MSEC(1000));
 
 	return ret;
 
@@ -245,11 +243,7 @@ static int do_api_call(struct http_request *http_req, struct srest_req_resp_cont
 	rest_ctx->response = NULL;
 	rest_ctx->response_len = 0;
 	
-	LOG_INF("DOING HTTP REQ\n");
-	k_sleep(K_MSEC(1000));
-
 	err = http_client_req(rest_ctx->connect_socket, http_req, rest_ctx->timeout_ms, rest_ctx);
-
 	if (err < 0) {
 		LOG_ERR("http_client_req() error: %d", err);
 		err = -EIO;
@@ -284,6 +278,7 @@ int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 	if (req_resp_ctx->body != NULL) {
 		http_req.payload = req_resp_ctx->body;
 		http_req.payload_len = strlen(http_req.payload);
+		LOG_DBG("Payload: %s", log_strdup(http_req.payload));
 	}
 
 	ret = do_api_call(&http_req, req_resp_ctx);
@@ -295,6 +290,7 @@ int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 
 	if (!req_resp_ctx->response || !req_resp_ctx->response_len) {
 		ret = -ENODATA;
+		LOG_ERR("srest_client_request() failed: no data in response");
 		goto clean_up;
 	}
 
@@ -302,6 +298,9 @@ int srest_client_request(struct srest_req_resp_context *req_resp_ctx)
 
 clean_up:
 	/* Note: should be already closed? */
-	close_connection(req_resp_ctx);
+	if (req_resp_ctx->connect_socket != SREST_CLIENT_SCKT_CONNECT) {
+		/* Socket was not closed yet: */
+		close_connection(req_resp_ctx);
+	}
 	return ret;
 }
