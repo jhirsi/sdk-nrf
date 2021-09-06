@@ -14,15 +14,19 @@
 #include <net/http_parser.h>
 #include <net/srest_client.h>
 
-#include "rip_shell.h"
+#include "srest_shell.h"
 
-static const char rip_shell_cmd_usage_str[] =
-	"Usage: rest [optional options] -h host_to_connect -p port -m method [-b body] [-H header] [-t sec_tag]\n"
+static const char srest_shell_cmd_usage_str[] =
+	"Usage: srest -d host [-p port] [-m method] [-u url] [-b body] [-H header1] [-H header2 ... header10] [-t sec_tag]\n"
 	"\n"
-	"  -h, --help,              Shows this help information\n";
-
-/* Following are not having short options: */
-//TODO
+	"  -d, --host,     Destination host/domain of the URL\n"
+	"Optionals:\n"
+	"  -m, --method,   HTTP method (\"get\" (default) or \"post\")\n"
+	"  -p, --port,     Destination port (default: 80)\n"
+	"  -u, --url,      URL beyond host/domain (default: \"/index.html\")\n"
+	"  -H, --header,   Header\n"
+	"  -b, --body,     Payload body\n"
+	"  -s, --sec_tag,  Used security tag for TLS connection\n";
 
 /* Specifying the expected options (both long and short): */
 static struct option long_options[] = {
@@ -36,40 +40,46 @@ static struct option long_options[] = {
 	{ 0, 0, 0, 0 }
 };
 
-static void rip_shell_print_usage(const struct shell *shell)
+static void srest_shell_print_usage(const struct shell *shell)
 {
-	shell_print(shell, "%s", rip_shell_cmd_usage_str);
+	shell_print(shell, "%s", srest_shell_cmd_usage_str);
 }
 
 /*****************************************************************************/
-#define MAX_HEADERS 10
+#define SREST_REQUEST_MAX_HEADERS 10
+#define SREST_RESPONSE_BUFF_SIZE 1024
+#define SREST_HTTP_REQUEST_TIMEOUT_MS 10000
+#define SREST_DEFAULT_DESTINATION_PORT 80
 
 struct rip_header_list_item {
 	bool in_use;
-	char* header_str;
+	char *header_str;
 };
 
-int rip_shell(const struct shell *shell, size_t argc, char **argv)
+int srest_shell(const struct shell *shell, size_t argc, char **argv)
 {
 	int opt, i, j, len;
 	int ret = 0;
 	int long_index = 0;
 	struct srest_req_resp_context rest_ctx = { 0 };
-	struct rip_header_list_item headers[10] = { 0 };
-	char *req_headers[MAX_HEADERS]; 
+	/* Collect headers to: */
+	struct rip_header_list_item headers[SREST_REQUEST_MAX_HEADERS] = { 0 };
+	char *req_headers[SREST_REQUEST_MAX_HEADERS + 1]; /* Headers to actual request + 1 for NULL */
 	bool headers_set = false;
-	bool method_set = true;
-	bool host_set = true;
-	char response_buf[1024];
+	bool method_set = false;
+	bool host_set = false;
+	char response_buf[SREST_RESPONSE_BUFF_SIZE];
 
-	/* Set defaults: */
+	/* Set the defaults: */
 	rest_ctx.keep_alive = false;
-	rest_ctx.timeout_ms = 5000;
+	rest_ctx.timeout_ms = SREST_HTTP_REQUEST_TIMEOUT_MS;
+	rest_ctx.http_method = HTTP_GET;
 	rest_ctx.url = "/index.html";
 	rest_ctx.sec_tag = SREST_CLIENT_NO_SEC;
 	rest_ctx.connect_socket = SREST_CLIENT_SCKT_CONNECT;
-	rest_ctx.port = 80;
+	rest_ctx.port = SREST_DEFAULT_DESTINATION_PORT;
 	rest_ctx.body = NULL;
+	memset(req_headers, 0, (SREST_REQUEST_MAX_HEADERS + 1) * sizeof(char *));
 
 	if (argc < 3) {
 		goto show_usage;
@@ -101,9 +111,7 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 		case 's':
 			rest_ctx.sec_tag = atoi(optarg);
 			if (rest_ctx.sec_tag == 0) {
-				shell_warn(
-					shell,
-					"sec_tag not an integer (> 0)");
+				shell_warn(shell, "sec_tag not an integer (> 0)");
 				return -EINVAL;
 			}
 			break;
@@ -111,16 +119,13 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 		case 'p':
 			rest_ctx.port = atoi(optarg);
 			if (rest_ctx.port == 0) {
-				shell_warn(
-					shell,
-					"port not an integer (> 0)");
+				shell_warn(shell, "port not an integer (> 0)");
 				return -EINVAL;
 			}
 			break;
 		case 'b':
-		//maybe we should allocate memory instead of using commandline? especially if multithreading?
 			rest_ctx.body = optarg;
-			len = strlen(optarg); 
+			len = strlen(optarg);
 			if (len > 0) {
 				rest_ctx.body = k_malloc(len + 1);
 				if (rest_ctx.body == NULL) {
@@ -135,7 +140,13 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 			bool room_available = false;
 
 			/* Check if there are still room for additional header? */
-			for (i = 0; i < MAX_HEADERS; i++) {
+			len = strlen(optarg);
+			if (len <= 0) {
+				shell_error(shell, "No header given");
+				return -EINVAL;
+			}
+
+			for (i = 0; i < SREST_REQUEST_MAX_HEADERS; i++) {
 				if (!headers[i].in_use) {
 					room_available = true;
 					break;
@@ -143,19 +154,24 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 			}
 
 			if (!room_available) {
-				shell_error(shell, "There are already max number (%d) of headers", MAX_HEADERS);
+				shell_error(shell, "There are already max number (%d) of headers",
+					    SREST_REQUEST_MAX_HEADERS);
 				return -EINVAL;
 			}
 
-			for (i = 0; i < MAX_HEADERS; i++) {
+			for (i = 0; i < SREST_REQUEST_MAX_HEADERS; i++) {
 				if (!headers[i].in_use) {
 					headers[i].header_str = k_malloc(strlen(optarg) + 1);
 					if (headers[i].header_str == NULL) {
-						shell_error(shell, "Cannot allocate memory for header %s", optarg);
+						shell_error(shell,
+							    "Cannot allocate memory for header %s",
+							    optarg);
 						break;
 					}
 					headers[i].in_use = true;
 					headers_set = true;
+					strcpy(headers[i].header_str, optarg);
+					break;
 				}
 			}
 			break;
@@ -167,38 +183,48 @@ int rip_shell(const struct shell *shell, size_t argc, char **argv)
 			goto show_usage;
 		}
 	}
+
 	/* Check that all mandatory args were given: */
-	if (!(host_set && method_set)) {
+	if (!host_set) {
 		shell_error(shell, "Please, give all mandatory options");
 		goto show_usage;
 	}
 
 	rest_ctx.header_fields = NULL;
 	if (headers_set) {
-		for (i = 0; i < MAX_HEADERS; i++) {
-			for (j = 0; j < MAX_HEADERS; i++) {
+		/* Fill given headers to req_headers[] from headers[]: */
+		for (i = 0; i < SREST_REQUEST_MAX_HEADERS; i++) {
+			for (j = 0; j < SREST_REQUEST_MAX_HEADERS; j++) {
 				headers_set = false;
 				if (headers[j].in_use) {
 					headers_set = true;
+					headers[j].in_use = false;
 					break;
 				}
 			}
-			assert(headers_set == true);
-			req_headers[i] = headers[j].header_str;
+			if (headers_set) {
+				req_headers[i] = headers[j].header_str;
+				req_headers[i + 1] = NULL;
+				//shell_print(shell, "header %i set: %s", i, req_headers[i]);
+			}
 		}
 		rest_ctx.header_fields = (const char **)req_headers;
 	}
 	rest_ctx.resp_buff = response_buf;
-	rest_ctx.resp_buff_len = 1024;
+	rest_ctx.resp_buff_len = SREST_RESPONSE_BUFF_SIZE;
 
 	ret = srest_client_request(&rest_ctx);
 	if (ret) {
 		shell_error(shell, "Error %d from srest client", ret);
 	} else {
-		shell_print(shell, "Response:\n %s", rest_ctx.response);
+		shell_print(shell,
+			    "Response:\n"
+			    "  HTTP status: %d\n\n"
+			    "  %s",
+			    rest_ctx.http_status_code, rest_ctx.response);
 	}
 	k_free(rest_ctx.body);
-	for (i = 0; i < MAX_HEADERS; i++) {
+	for (i = 0; i < SREST_REQUEST_MAX_HEADERS; i++) {
 		k_free(headers[i].header_str);
 	}
 
@@ -208,6 +234,6 @@ show_usage:
 	/* Reset getopt for another users */
 	optreset = 1;
 
-	rip_shell_print_usage(shell);
+	srest_shell_print_usage(shell);
 	return ret;
 }

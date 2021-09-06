@@ -44,7 +44,7 @@
 #include "location_shell.h"
 #endif
 #if defined(CONFIG_MOSH_SIMPLE_REST_CLIENT)
-#include "rip_shell.h"
+#include "srest_shell.h"
 #endif
 
 #include "uart/uart_shell.h"
@@ -223,7 +223,7 @@ SHELL_CMD_REGISTER(location, NULL,
 #endif
 
 #if defined(CONFIG_MOSH_SIMPLE_REST_CLIENT)
-SHELL_CMD_REGISTER(rest, NULL,
+SHELL_CMD_REGISTER(srest, NULL,
 	"Simple REST Client.",
-	rip_shell);
+	srest_shell);
 #endif

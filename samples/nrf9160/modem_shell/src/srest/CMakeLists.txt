@@ -6,4 +6,4 @@
 
 target_include_directories(app PRIVATE .)
 
-target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/rip_shell.c)
+target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/srest_shell.c)
