@@ -24,12 +24,12 @@ config LOCATION_METHOD_CELLULAR
 
 config LOCATION_METHOD_WLAN
 	bool "Allow WLAN positioning to be used for obtaining the location"
+	depends on WIFI
 	select SREST_CLIENT_LIB
 	select NET_MGMT
 	select NET_MGMT_EVENT
 	select NET_MGMT_EVENT_INFO
-	depends on WIFI
-	default y
+	default y if WIFI
 
 if LOCATION_METHOD_WLAN
 
