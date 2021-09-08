@@ -14,59 +14,68 @@
 
 #include <net/http_parser.h>
 
-#define SREST_CLIENT_NO_SEC -1 /* No TLS */
+#define SREST_CLIENT_NO_SEC -1       /* No TLS */
 #define SREST_CLIENT_SCKT_CONNECT -1 /* sREST client lib does a sckt connection */
+
+/** @brief Some common HTTP status codes */
+enum srest_http_status {
+	SREST_HTTP_STATUS_OK = 200,
+	SREST_HTTP_STATUS_BAD_REQ = 400,
+	SREST_HTTP_STATUS_UNAUTH = 401,
+	SREST_HTTP_STATUS_FORBIDDEN = 403,
+	SREST_HTTP_STATUS_NOT_FOUND = 404,
+};
 
 /** @brief Parameters and data for using the sREST client API */
 struct srest_req_resp_context {
-	/** Connection socket; initialize to -1 and library
-	 * will make the connection.
-	 */
+
+	/** Request: */
+
+	/** Connection socket; initialize to -1 and library will make the connection. */
 	int connect_socket;
 
-	/** If the connection should remain after API call */
+	/** If the connection should remain after API call. */
 	bool keep_alive;
 
-	/* Request: */
+	/** Security tag. Intialize to -1 and TLS will not be used. */
+	int sec_tag;
 
-	int sec_tag; /* -1: TLS not used */
-
-	/** Used HTTP method */
+	/** Used HTTP method. */
 	enum http_method http_method;
 
-	/** Hostname to be used in the request */
+	/** Hostname to be used in the request. */
 	const char *host;
 
-	/** Port number to be used in the request */
+	/** Port number to be used in the request. */
 	uint16_t port;
 
 	/** The URL for this request, for example: /index.html */
 	const char *url;
 
-	/** The HTTP header fields. This is a NULL terminated list of header fields. */
+	/** The HTTP header fields. This is a NULL terminated list of header fields. May be NULL. */
 	const char **header_fields;
 
-	/** Payload/body, may be NULL */
+	/** Payload/body, may be NULL. */
 	char *body;
 
-	/* Response: */
+	/** Response: */
 
-	/** Timeout value for receiving response data */
+	/** User given timeout value for receiving a response data. */
 	int32_t timeout_ms;
 
-	/** User allocated buffer for receiving API response.
-	 */
+	/** User allocated buffer for receiving API response.*/
 	char *resp_buff;
+
 	/** Size of resp_buff */
 	size_t resp_buff_len;
 
-	/** Start of response data in resp_buff */
+	/** Out: start of response data in resp_buff */
 	char *response;
 
-	/** Length of response data */
+	/** Out: Length of response data */
 	size_t response_len;
 
-	/** Numeric HTTP status code which corresponds to the
+	/** Out: Numeric HTTP status code which corresponds to the
 	 * textual description.
 	 */
 	uint16_t http_status_code;
