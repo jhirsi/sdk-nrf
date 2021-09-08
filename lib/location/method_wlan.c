@@ -81,7 +81,8 @@ static void method_wlan_handle_wifi_scan_result(struct net_mgmt_event_callback *
 			log_strdup(
 				latest_scan_results[current_scan_result_count - 1].mac_addr_str));
 	} else {
-		LOG_WRN("Scanning result (mac %s) did not fit to result buffer - dropping it", log_strdup(entry->mac));
+		LOG_WRN("Scanning result (mac %s) did not fit to result buffer - dropping it",
+			log_strdup(entry->mac));
 	}
 }
 
@@ -95,7 +96,10 @@ static void method_wlan_handle_wifi_scan_done(struct net_mgmt_event_callback *cb
 		LOG_INF("Scan request done.");
 		k_sem_give(&wlan_scanning_ready);
 	}
-	latest_scan_result_count = (current_scan_result_count > CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES)? CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES : current_scan_result_count;
+	latest_scan_result_count =
+		(current_scan_result_count > CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES) ?
+			CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES :
+			current_scan_result_count;
 	current_scan_result_count = 0;
 }
 
@@ -138,6 +142,7 @@ static void method_wlan_positioning_work_fn(struct k_work *work)
 		running = false;
 		return;
 	}
+
 	ret = k_sem_take(&wlan_scanning_ready, K_FOREVER);
 	if (ret) {
 		LOG_WRN("Timeout for WLAN scanning - cannot fetch location");
@@ -204,7 +209,15 @@ int method_wlan_init(void)
 {
 	wlan_iface = net_if_get_default();
 	if (wlan_iface == NULL) {
-		LOG_ERR("Could not get the default interface for WLAN");
+		LOG_ERR("Could not get the default interface");
+		return -1;
+	}
+
+	/* No possibility to check if this is really a wlan iface, thus doing
+	 * some extra checking:
+	 */
+	if (!net_if_is_ip_offloaded(wlan_iface)) {
+		LOG_ERR("Given interface not overloaded");
 		return -1;
 	}
 
