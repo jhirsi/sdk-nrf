@@ -65,6 +65,8 @@ static int here_wlan_rest_pos_req_json_format(
 			goto cleanup;
 		}
 		cJSON_AddItemToObject(wlan_info_obj, "mac", mac_address_obj);
+
+		//TODO: RSSI: key: "rss"
 	
 		if (!cJSON_AddItemToArray(wlan_array, wlan_info_obj)) {
 			cJSON_Delete(wlan_info_obj);
@@ -120,8 +122,7 @@ static int here_wlan_rest_pos_response_parse(const char *const buf,
 
 	root_obj = cJSON_Parse(buf);
 	if (!root_obj) {
-		LOG_DBG("No JSON found for here wlan positioning response");
-
+		LOG_ERR("No JSON found for here wlan positioning response");
 		ret = -ENOMSG;
 		goto cleanup;
 	}
@@ -130,15 +131,14 @@ static int here_wlan_rest_pos_response_parse(const char *const buf,
 
 	location_obj = cJSON_GetObjectItemCaseSensitive(root_obj, "location");
 	if (location_obj == NULL) {
-		LOG_DBG("No 'location' object found");
-
+		LOG_ERR("No 'location' object found");
 		ret = -ENOMSG;
 		goto cleanup;
 	}
 
 	lat_obj = cJSON_GetObjectItemCaseSensitive(location_obj, "lat");
 	if (lat_obj == NULL) {
-		LOG_DBG("No 'lat' object found");
+		LOG_ERR("No 'lat' object found");
 
 		ret = -ENOMSG;
 		goto cleanup;
@@ -146,7 +146,7 @@ static int here_wlan_rest_pos_response_parse(const char *const buf,
 
 	lng_obj = cJSON_GetObjectItemCaseSensitive(location_obj, "lng");
 	if (lng_obj == NULL) {
-		LOG_DBG("No 'lng' object found");
+		LOG_ERR("No 'lng' object found");
 
 		ret = -ENOMSG;
 		goto cleanup;
@@ -154,7 +154,7 @@ static int here_wlan_rest_pos_response_parse(const char *const buf,
 
 	accuracy_obj = cJSON_GetObjectItemCaseSensitive(location_obj, "accuracy");
 	if (accuracy_obj == NULL) {
-		LOG_DBG("No 'accuracy' object found");
+		LOG_ERR("No 'accuracy' object found");
 
 		ret = -ENOMSG;
 		goto cleanup;
@@ -165,6 +165,9 @@ static int here_wlan_rest_pos_response_parse(const char *const buf,
 	result->accuracy = accuracy_obj->valuedouble;
 
 cleanup:
+	if (ret) {
+		LOG_DBG("Unparsed response:\n%s", log_strdup(buf));
+	}
 	cJSON_Delete(root_obj);
 	return ret;
 }
@@ -191,7 +194,7 @@ int here_rest_wlan_pos_get(
 	char *body = NULL;
 	int ret = 0;
 
-	/* Set the defaults: TODO some of these in srest lib?*/
+	/* Set the defaults: TODO some of these in srest lib? or setter?*/
 	rest_ctx.keep_alive = false;
 	rest_ctx.timeout_ms = 5000;
 	rest_ctx.http_method = HTTP_POST;
@@ -217,9 +220,15 @@ int here_rest_wlan_pos_get(
 		LOG_ERR("Error from srest client lib, err: %d", ret);
 		goto clean_up;
 	}
-	
+
+	if (rest_ctx.http_status_code != SREST_HTTP_STATUS_OK) {
+		LOG_ERR("HTTP status: %d", rest_ctx.http_status_code);
+		/* Let it fail in parsing */
+	}
+
 	ret = here_wlan_rest_pos_response_parse(rest_ctx.response, result);
 	if (ret) {
+		LOG_ERR("Here rest response parsing failed, err: %d", ret);
 		ret = -EBADMSG;
 	}
 clean_up:

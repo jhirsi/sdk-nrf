@@ -36,17 +36,17 @@ static struct k_work_args method_wlan_start_work;
 
 static bool running;
 
-static uint32_t scan_result_index;
-static uint32_t scan_result_count;
+static uint32_t current_scan_result_count;
+static uint32_t latest_scan_result_count;
 struct method_wlan_scan_result {
 	char mac_addr_str[WIFI_MAC_MAX_LEN];
 };
 
-static struct method_wlan_scan_result latest_scan_results[CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES];
+static struct method_wlan_scan_result
+	latest_scan_results[CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES];
 static K_SEM_DEFINE(wlan_scanning_ready, 0, 1);
 
 /******************************************************************************/
-
 
 static int method_wlan_scanning_start(void)
 {
@@ -54,9 +54,9 @@ static int method_wlan_scanning_start(void)
 
 	LOG_DBG("Triggering start of WLAN scanning");
 	assert(wlan_iface != NULL);
-	
-	scan_result_count = 0;
-	scan_result_index = 0;
+
+	latest_scan_result_count = 0;
+	current_scan_result_count = 0;
 
 	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, wlan_iface, NULL, 0);
 	if (ret) {
@@ -67,41 +67,42 @@ static int method_wlan_scanning_start(void)
 }
 
 /******************************************************************************/
+
 static void method_wlan_handle_wifi_scan_result(struct net_mgmt_event_callback *cb)
 {
-	const struct wifi_scan_result *entry =
-		(const struct wifi_scan_result *)cb->info;
+	const struct wifi_scan_result *entry = (const struct wifi_scan_result *)cb->info;
 
-	scan_result_index++;
+	current_scan_result_count++;
 
-	if (scan_result_index < CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES) {
-		sprintf(latest_scan_results[scan_result_index - 1].mac_addr_str, "%s", entry->mac);
-		LOG_DBG("scan result: mac address: %s", log_strdup(latest_scan_results[scan_result_index - 1].mac_addr_str));
+	if (current_scan_result_count <= CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES) {
+		sprintf(latest_scan_results[current_scan_result_count - 1].mac_addr_str, "%s",
+			entry->mac);
+		LOG_DBG("scan result: mac address: %s",
+			log_strdup(
+				latest_scan_results[current_scan_result_count - 1].mac_addr_str));
 	} else {
-		LOG_WRN("Scanning result did not fit to result buffer - dropping it");
+		LOG_WRN("Scanning result (mac %s) did not fit to result buffer - dropping it", log_strdup(entry->mac));
 	}
 }
 
 static void method_wlan_handle_wifi_scan_done(struct net_mgmt_event_callback *cb)
 {
-	const struct wifi_status *status =
-		(const struct wifi_status *)cb->info;
+	const struct wifi_status *status = (const struct wifi_status *)cb->info;
 
 	if (status->status) {
-		LOG_WRN("WLAN scan request failed (%d)", status->status);
+		LOG_WRN("WLAN scan request failed (%d).", status->status);
 	} else {
-		LOG_INF("Scan request done");
+		LOG_INF("Scan request done.");
 		k_sem_give(&wlan_scanning_ready);
 	}
-	scan_result_count = scan_result_index;
-	scan_result_index = 0;
+	latest_scan_result_count = (current_scan_result_count > CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES)? CONFIG_LOCATION_METHOD_WLAN_MAX_MAC_ADDRESSES : current_scan_result_count;
+	current_scan_result_count = 0;
 }
 
 static struct net_mgmt_event_callback method_wlan_net_mgmt_cb;
 
-void method_wlan_net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
-				    	       uint32_t mgmt_event, 
-				    	       struct net_if *iface)
+void method_wlan_net_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+					struct net_if *iface)
 {
 	if (running) {
 		switch (mgmt_event) {
@@ -115,7 +116,7 @@ void method_wlan_net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
 		default:
 			break;
 		}
-	}	
+	}
 }
 
 /******************************************************************************/
@@ -133,7 +134,7 @@ static void method_wlan_positioning_work_fn(struct k_work *work)
 	if (ret) {
 		LOG_WRN("Cannot start WLAN scanning, err %d", ret);
 		loc_core_event_cb_error();
-		k_sem_give(&wlan_scanning_ready);//TODO: do we need this here?
+		k_sem_give(&wlan_scanning_ready); //TODO: do we need this here?
 		running = false;
 		return;
 	}
@@ -147,15 +148,16 @@ static void method_wlan_positioning_work_fn(struct k_work *work)
 		struct here_rest_wlan_pos_result result;
 
 		/* Fill scanning results: */
-		assert(scan_result_count > 0);
+		assert(latest_scan_result_count > 0);
 
-		request.mac_addr_count = scan_result_count;
-		for (int i = 0; i < scan_result_count; i++) {
-			strcpy(request.mac_addresses[i].mac_addr_str, latest_scan_results[i].mac_addr_str);
+		request.mac_addr_count = latest_scan_result_count;
+		for (int i = 0; i < latest_scan_result_count; i++) {
+			strcpy(request.mac_addresses[i].mac_addr_str,
+			       latest_scan_results[i].mac_addr_str);
 		}
 		ret = here_rest_wlan_pos_get(&request, &result);
 		if (ret) {
-			LOG_ERR("Failed to acquire location, error: %d", ret);
+			LOG_ERR("Failed to acquire location from Here REST api, error: %d", ret);
 			loc_core_event_cb_error();
 			running = false;
 		} else {
@@ -167,8 +169,10 @@ static void method_wlan_positioning_work_fn(struct k_work *work)
 				running = false;
 			}
 		}
-	}	
+	}
 }
+
+/******************************************************************************/
 
 int method_wlan_cancel(void)
 {
@@ -205,11 +209,10 @@ int method_wlan_init(void)
 	}
 
 	running = false;
-	scan_result_index = 0;
-	scan_result_count = 0;
+	current_scan_result_count = 0;
+	latest_scan_result_count = 0;
 
-	net_mgmt_init_event_callback(&method_wlan_net_mgmt_cb,
-				     method_wlan_net_mgmt_event_handler,
+	net_mgmt_init_event_callback(&method_wlan_net_mgmt_cb, method_wlan_net_mgmt_event_handler,
 				     (NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE));
 
 	net_mgmt_add_event_callback(&method_wlan_net_mgmt_cb);
