@@ -176,6 +176,7 @@ nRF9160 samples
 * :ref:`modem_shell_application` sample:
 
   * Added a new shell command ``rest`` for sending simple REST requests and receiving responses to them.
+  * Added a new shell command ``location`` for using Location library to retrieve device's location with different location methods.
 
 * :ref:`gnss_sample` sample:
 
