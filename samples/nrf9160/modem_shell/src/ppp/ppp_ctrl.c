@@ -298,7 +298,7 @@ static int ppp_ctrl_modem_sckt_create(void)
 
 	ppp_modem_data_socket_fd = socket(AF_PACKET, SOCK_RAW, 0);
 	if (ppp_modem_data_socket_fd < 0) {
-		mosh_error("modem data socket creation failed: (%d)!!!!\n", -errno);
+		mosh_error("modem data socket creation failed: (%d)\n", -errno);
 		goto return_error;
 	} else {
 		mosh_print("modem data socket %d created for modem data", ppp_modem_data_socket_fd);
@@ -331,7 +331,7 @@ static int ppp_ctrl_zephyr_sckt_create(void)
 	/* Create raw Zephyr socket for passing data to/from ppp link: */
 	ppp_data_socket_fd = socket(AF_PACKET, SOCK_RAW | SOCK_NATIVE, IPPROTO_RAW);
 	if (ppp_data_socket_fd < 0) {
-		mosh_error("PPP Zephyr data socket creation failed: (%d)!!!!\n", -errno);
+		mosh_error("PPP Zephyr data socket creation failed: (%d)\n", -errno);
 		goto return_error;
 	} else {
 		mosh_print("PPP Zephyr data socket %d created", ppp_data_socket_fd);
@@ -379,17 +379,26 @@ int ppp_ctrl_sckts_create(void)
 
 void ppp_ctrl_close_sckts(void)
 {
+	int err;
 
 	k_sem_reset(&msocket_sem);
+	k_sem_reset(&zsocket_sem);
+
 	if (ppp_modem_data_socket_fd != PPP_MODEM_DATA_RAW_SCKT_FD_NONE) {
 		mosh_print("Closing PPP modem sckt");
-		(void)close(ppp_modem_data_socket_fd);
+		err = close(ppp_modem_data_socket_fd);
+		if (err) {
+			mosh_print("Closing of PPP modem sckt failed, errno %d", -errno);
+		}
 		ppp_modem_data_socket_fd = PPP_MODEM_DATA_RAW_SCKT_FD_NONE;
 	}
-	k_sem_reset(&zsocket_sem);
+
 	if (ppp_data_socket_fd != PPP_MODEM_DATA_RAW_SCKT_FD_NONE) {
 		mosh_print("Closing PPP zephyr sckt");
-		(void)close(ppp_data_socket_fd);
+		err = close(ppp_data_socket_fd);
+		if (err) {
+			mosh_print("Closing of PPP zephyr sckt failed, errno %d", -errno);
+		}
 		ppp_data_socket_fd = PPP_MODEM_DATA_RAW_SCKT_FD_NONE;
 	}
 }
