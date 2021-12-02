@@ -499,6 +499,11 @@ static int cmd_gnss_agps_inject(const struct shell *shell, size_t argc, char **a
 	return gnss_inject_agps_data();
 }
 
+static int cmd_gnss_agps_expiry(const struct shell *shell, size_t argc, char **argv)
+{
+	return gnss_get_agps_expiry();
+}
+
 static int cmd_gnss_pgps(const struct shell *shell, size_t argc, char **argv)
 {
 	return print_help(shell, argc, argv);
@@ -944,6 +949,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		  "<ephe> <alm> <utc> <klob> <neq> <time> <pos> <integrity>\nSet filter for "
 		  "allowed AGPS data.\n0 = disabled, 1 = enabled (default all enabled).",
 		  cmd_gnss_agps_filter),
+	SHELL_CMD_ARG(expiry, NULL, "Query A-GPS data expiry information from GNSS.",
+		      cmd_gnss_agps_expiry, 1, 0),
 	SHELL_SUBCMD_SET_END
 );
 

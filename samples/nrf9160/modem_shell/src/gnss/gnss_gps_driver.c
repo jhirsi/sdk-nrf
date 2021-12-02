@@ -360,6 +360,12 @@ int gnss_enable_pgps(void)
 	return -EOPNOTSUPP;
 }
 
+int gnss_get_agps_expiry(void)
+{
+	mosh_error("GNSS: Operation not supported in GPS driver mode");
+	return -EOPNOTSUPP;
+}
+
 int gnss_set_pvt_output_level(uint8_t level)
 {
 	if (level < 0 || level > 2) {
