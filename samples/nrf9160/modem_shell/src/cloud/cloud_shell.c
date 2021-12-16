@@ -9,6 +9,7 @@
 #include <net/nrf_cloud.h>
 #include <nrf_cloud_fsm.h>
 #include <shell/shell.h>
+#include <shell/shell_uart.h>
 #include "mosh_print.h"
 
 #if defined(CONFIG_NRF_CLOUD_AGPS)
@@ -18,6 +19,8 @@
 #include <net/nrf_cloud_pgps.h>
 #endif
 
+#define CLOUD_CMD_MAX_LENGTH 150
+
 BUILD_ASSERT(
 	IS_ENABLED(CONFIG_NRF_CLOUD_MQTT) &&
 	IS_ENABLED(CONFIG_NRF_CLOUD_CONNECTION_POLL_THREAD));
@@ -26,6 +29,9 @@ static struct k_work_delayable cloud_reconnect_work;
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 static struct k_work notify_pgps_work;
 #endif
+static struct k_work cloud_cmd_work;
+
+static char shell_cmd[CLOUD_CMD_MAX_LENGTH];
 
 static int cloud_shell_print_usage(const struct shell *shell, size_t argc, char **argv)
 {
@@ -67,6 +73,65 @@ static void notify_pgps(struct k_work *work)
 }
 #endif /* defined(CONFIG_NRF_CLOUD_PGPS) */
 
+static void cloud_cmd_execute(struct k_work *work)
+{
+	const struct shell *shell = shell_backend_uart_get_ptr();
+
+	shell_execute_cmd(shell, shell_cmd);
+	memset(shell_cmd, 0, CLOUD_CMD_MAX_LENGTH);
+}
+
+static bool cloud_shell_parse_mosh_cmd(const char *buf_in)
+{
+	char *cmd_start_ptr = NULL;
+	char *cmd_end_ptr = NULL;
+
+	/* MoSh commands are identified by setting appId to "MODEM_SHELL" */
+	char *string_ptr = strstr(buf_in, "\"appId\"");
+
+	if (string_ptr) {
+		string_ptr = strstr(string_ptr, ":");
+		if (string_ptr) {
+			string_ptr = strstr(string_ptr, "\"MODEM_SHELL\"");
+		}
+	}
+
+	if (!string_ptr) {
+		return false; /* appId is not present or it is different from MODEM_SHELL */
+	}
+
+	/* TODO: - Maybe add similar block for checking the that messageType == "CMD".
+	 *       - Handle quotation marks inside commands. They are not parsed properly.
+	 */
+
+	/* Actual command is contained in data field */
+	string_ptr = strstr(buf_in, "\"data\"");
+	if (string_ptr) {
+		string_ptr = strstr(string_ptr, ":");
+		if (string_ptr) {
+			cmd_start_ptr = strstr(string_ptr, "\"");
+			if (cmd_start_ptr) {
+				cmd_end_ptr = strstr(cmd_start_ptr + 1, "\"");
+			}
+		}
+	}
+
+	if (!cmd_end_ptr) {
+		return false; /* data field is not present or it's malformed */
+	}
+
+	int parsed_cmd_length = cmd_end_ptr - cmd_start_ptr - 1;
+
+	if (parsed_cmd_length <= CLOUD_CMD_MAX_LENGTH) {
+		memcpy(shell_cmd, cmd_start_ptr + 1, parsed_cmd_length);
+	} else {
+		mosh_error("Received cloud command exceeds the maximum permissible length %d",
+			   CLOUD_CMD_MAX_LENGTH);
+	}
+
+	return true;
+}
+
 static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 {
 	int err = 0;
@@ -101,7 +166,14 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 	case NRF_CLOUD_EVT_RX_DATA:
 		mosh_print("NRF_CLOUD_EVT_RX_DATA");
 		if (((char *)evt->data.ptr)[0] == '{') {
-			/* Not A-GPS data */
+			/* Not A-GPS data. Check if it's a MoSh command sent from the cloud */
+			mosh_print("%s", evt->data.ptr);
+
+			bool cmd_found = cloud_shell_parse_mosh_cmd(evt->data.ptr);
+
+			if (cmd_found) {
+				k_work_submit(&cloud_cmd_work);
+			}
 			break;
 		}
 #if defined(CONFIG_NRF_CLOUD_AGPS)
@@ -159,6 +231,8 @@ static void cmd_cloud_connect(const struct shell *shell, size_t argc, char **arg
 		}
 
 		initialized = true;
+
+		k_work_init(&cloud_cmd_work, cloud_cmd_execute);
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 		k_work_init(&notify_pgps_work, notify_pgps);
 #endif

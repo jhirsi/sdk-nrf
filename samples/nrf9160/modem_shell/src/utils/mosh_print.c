@@ -14,13 +14,20 @@
 #include <sys/cbprintf.h>
 #include <shell/shell.h>
 #include <shell/shell_uart.h>
+#include <net/nrf_cloud.h>
 
 #include "mosh_print.h"
+
 
 static const struct shell *mosh_shell;
 
 /** Configuration on whether timestamps are added to the print. */
 bool mosh_print_timestamp_use;
+
+#if defined(CONFIG_MOSH_CLOUD)
+/** Wrap all mosh prints into JSON and send to nRF Cloud over MQTT */
+bool mosh_print_cloud_echo;
+#endif
 
 /** Buffer used for printing the timestamp. */
 static char timestamp_str[30];
@@ -132,6 +139,18 @@ void mosh_fprintf(enum mosh_print_level print_level, const char *fmt, ...)
 		break;
 	}
 
+#if defined(CONFIG_NRF_CLOUD_MQTT)
+	if (mosh_print_cloud_echo) {
+		static struct nrf_cloud_sensor_data mosh_cloud_print = {
+			.type = NRF_CLOUD_DEVICE_INFO,
+			.data.ptr = mosh_print_buf,
+			.data.len = sizeof(mosh_print_buf),
+			.tag = 1,
+		};
+
+		nrf_cloud_sensor_data_stream(&mosh_cloud_print);
+	}
+#endif
 	k_mutex_unlock(&mosh_print_buf_mutex);
 	va_end(args);
 }
