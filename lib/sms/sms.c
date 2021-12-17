@@ -39,7 +39,13 @@ LOG_MODULE_REGISTER(sms, CONFIG_SMS_LOG_LEVEL);
 /** @brief SMS structure where received SMS is parsed. */
 static struct sms_data sms_data_info;
 
-/** @brief Worker handling SMS acknowledgements */
+/** @brief Stack for SMS acknowledgements work queue. */
+K_THREAD_STACK_DEFINE(sms_ack_stack_area, 768);
+
+/** @brief Work queue for SMS acknowledgements. */
+struct k_work_q sms_ack_work_q;
+
+/** @brief Worker handling SMS acknowledgements. */
 static struct k_work sms_ack_work;
 
 /**
@@ -118,10 +124,13 @@ void sms_at_handler(void *context, const char *at_notif)
 	}
 
 sms_ack:
-	/* Use system work queue to ACK SMS PDU because we cannot
-	 * call at_cmd_write from a notification callback.
+	/* We cannot call at_cmd_write from a notification callback so using a work queue.
+	 * We cannot use system work queue to ACK SMS PDU because SMS sending might be still
+	 * blocking it for a while. It would be better to move SMS sending to separate
+	 * work queue and do SMS ACK in system work queue but that would need asynchronous
+	 * sms_send_text().
 	 */
-	k_work_submit(&sms_ack_work);
+	k_work_submit_to_queue(&sms_ack_work_q, &sms_ack_work);
 }
 
 /**
@@ -134,6 +143,16 @@ static int sms_init(void)
 {
 	char *resp = sms_buf_tmp;
 	int ret;
+	static bool sms_ack_work_q_started;
+
+	if (!sms_ack_work_q_started) {
+		k_work_queue_init(&sms_ack_work_q);
+		k_work_queue_start(
+			&sms_ack_work_q,
+			sms_ack_stack_area, K_THREAD_STACK_SIZEOF(sms_ack_stack_area),
+			5, NULL);
+		sms_ack_work_q_started = true;
+	}
 
 	k_work_init(&sms_ack_work, &sms_ack);
 
