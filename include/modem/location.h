@@ -304,6 +304,23 @@ const char *location_method_str(enum location_method method);
  */
 int location_agps_data_process(const char *buf, size_t buf_len);
 
+/** @brief Register event handler for location events.
+ *
+ *  @param handler Event handler.
+ */
+void location_register_handler(location_event_handler_t handler);
+
+/**
+ * @brief Function to de-register event handler for location events.
+ *
+ *  @param handler Event handler.
+ *
+ * @retval 0            If command execution was successful.
+ * @retval -ENXIO       If handler cannot be found.
+ * @retval -EINVAL      If handler is a NULL pointer.
+ */
+int location_deregister_handler(location_event_handler_t handler);
+
 /** @} */
 
 #ifdef __cplusplus
