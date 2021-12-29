@@ -13,11 +13,22 @@
 #include <nrf_modem_at.h>
 #include <modem/at_cmd_parser.h>
 #include <modem/at_params.h>
+#include <modem/location.h>
 #include <net/nrf_cloud.h>
 
 #include "location_utils.h"
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
+
+static K_MUTEX_DEFINE(list_mtx);
+
+/**@brief List element for event handler list. */
+struct event_handler {
+	sys_snode_t          node;
+	location_event_handler_t handler;
+};
+
+static sys_slist_t handler_list;
 
 #define AT_CMD_PDP_ACT_READ "AT+CGACT?"
 #define MODEM_PARAM_STR_MAX_LEN 16
@@ -27,6 +38,125 @@ LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
 #define L(x) L_(x)
 
 char jwt_buf[600];
+
+/**
+ * @brief Find the handler from the event handler list.
+ *
+ * @return The node or NULL if not found and its previous node in @p prev_out.
+ */
+static struct event_handler *location_event_handler_list_find_node(struct event_handler **prev_out,
+	location_event_handler_t handler)
+{
+	struct event_handler *prev = NULL, *curr;
+
+	SYS_SLIST_FOR_EACH_CONTAINER(&handler_list, curr, node) {
+		if (curr->handler == handler) {
+			*prev_out = prev;
+			return curr;
+		}
+		prev = curr;
+	}
+	return NULL;
+}
+
+/**@brief Test if the handler list is empty. */
+bool location_event_handler_list_is_empty(void)
+{
+	return sys_slist_is_empty(&handler_list);
+}
+
+/**@brief Add the handler in the event handler list if not already present. */
+int location_event_handler_list_append_handler(location_event_handler_t handler)
+{
+	struct event_handler *to_ins;
+
+	k_mutex_lock(&list_mtx, K_FOREVER);
+
+	/* Check if handler is already registered. */
+	if (location_event_handler_list_find_node(&to_ins, handler) != NULL) {
+		LOG_DBG("Handler already registered. Nothing to do");
+		k_mutex_unlock(&list_mtx);
+		return 0;
+	}
+
+	/* Allocate memory and fill. */
+	to_ins = (struct event_handler *)k_malloc(sizeof(struct event_handler));
+	if (to_ins == NULL) {
+		k_mutex_unlock(&list_mtx);
+		return -ENOBUFS;
+	}
+	memset(to_ins, 0, sizeof(struct event_handler));
+	to_ins->handler = handler;
+
+	/* Insert handler in the list. */
+	sys_slist_append(&handler_list, &to_ins->node);
+	k_mutex_unlock(&list_mtx);
+	return 0;
+}
+
+/**@brief Remove the handler from the event handler list if registered. */
+int location_event_handler_list_remove_event_handler(location_event_handler_t handler)
+{
+	struct event_handler *curr, *prev = NULL;
+
+	k_mutex_lock(&list_mtx, K_FOREVER);
+
+	/* Check if the handler is registered before removing it. */
+	curr = location_event_handler_list_find_node(&prev, handler);
+	if (curr == NULL) {
+		LOG_WRN("Handler not registered. Nothing to do");
+		k_mutex_unlock(&list_mtx);
+		return 0;
+	}
+
+	/* Remove the handler from the list. */
+	sys_slist_remove(&handler_list, &prev->node, &curr->node);
+	k_free(curr);
+
+	k_mutex_unlock(&list_mtx);
+	return 0;
+}
+
+/**@brief dispatch events. */
+void location_event_handler_list_dispatch(const struct location_event_data *const evt)
+{
+	struct event_handler *curr, *tmp;
+
+	k_mutex_lock(&list_mtx, K_FOREVER);
+
+	/* Dispatch events to all registered handlers */
+	LOG_DBG("Dispatching events:");
+	SYS_SLIST_FOR_EACH_CONTAINER_SAFE(&handler_list, curr, tmp, node) {
+		LOG_DBG(" - handler=0x%08X", (uint32_t)curr->handler);
+		curr->handler(evt);
+	}
+	LOG_DBG("Done");
+
+	k_mutex_unlock(&list_mtx);
+}
+
+/**@brief Remove the handler from the event handler list if registered. */
+int location_event_handler_list_remove_handler(location_event_handler_t handler)
+{
+	struct event_handler *curr, *prev = NULL;
+
+	k_mutex_lock(&list_mtx, K_FOREVER);
+
+	/* Check if the handler is registered before removing it. */
+	curr = location_event_handler_list_find_node(&prev, handler);
+	if (curr == NULL) {
+		LOG_WRN("Handler not registered. Nothing to do");
+		k_mutex_unlock(&list_mtx);
+		return 0;
+	}
+
+	/* Remove the handler from the list. */
+	sys_slist_remove(&handler_list, &prev->node, &curr->node);
+	k_free(curr);
+
+	k_mutex_unlock(&list_mtx);
+	return 0;
+}
 
 bool location_utils_is_default_pdn_active(void)
 {
@@ -115,3 +245,5 @@ const char *location_utils_nrf_cloud_jwt_generate(void)
 
 	return jwt_buf;
 }
+
+

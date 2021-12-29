@@ -10,6 +10,8 @@
 #include <modem/location.h>
 
 #include "location_core.h"
+#include "location_utils.h"
+
 #if defined(CONFIG_LOCATION_METHOD_GNSS)
 #include "method_gnss.h"
 #endif
@@ -21,9 +23,6 @@
 #endif
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
-
-/** Event handler. */
-static location_event_handler_t event_handler;
 
 /***** Variables for storing information on currently handled location request *****/
 
@@ -194,7 +193,10 @@ int location_core_event_handler_set(location_event_handler_t handler)
 		return -EINVAL;
 	}
 
-	event_handler = handler;
+	if (location_event_handler_list_append_handler(handler)) {
+		LOG_ERR("Cannot add location event handler");
+		return -EINVAL;
+	}
 
 	return 0;
 }
@@ -367,7 +369,7 @@ void location_core_event_cb_assistance_request(const struct nrf_modem_gnss_agps_
 
 	agps_request_event_data.id = LOCATION_EVT_GNSS_ASSISTANCE_REQUEST;
 	agps_request_event_data.request = *request;
-	event_handler(&agps_request_event_data);
+	location_event_handler_list_dispatch(&agps_request_event_data);
 }
 #endif
 
@@ -433,7 +435,7 @@ void location_core_event_cb(const struct location_data *location)
 		LOG_ERR("Location acquisition failed and fallbacks are also done");
 	}
 
-	event_handler(&current_event_data);
+	location_event_handler_list_dispatch(&current_event_data);
 
 	if (current_config.interval > 0) {
 		k_work_schedule_for_queue(

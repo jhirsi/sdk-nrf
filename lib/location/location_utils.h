@@ -7,6 +7,8 @@
 #ifndef LOCATION_UTILS_H
 #define LOCATION_UTILS_H
 
+#include <modem/location.h>
+
 /** Modem parameters. */
 struct location_utils_modem_params_info {
 	/** Mobile Country Code. */
@@ -52,5 +54,35 @@ int location_utils_modem_params_read(struct location_utils_modem_params_info *mo
  * @return JWT buffer if generation was successful. NULL if generation failed.
  */
 const char *location_utils_nrf_cloud_jwt_generate(void);
+
+/* @brief Add the handler in the event handler list if not already present.
+ *
+ *  @param handler Event handler.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+int location_event_handler_list_append_handler(location_event_handler_t handler);
+
+/* @brief Remove the handler from the event handler list if present.
+ *
+ *  @param handler Event handler.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+int location_event_handler_list_remove_handler(location_event_handler_t handler);
+
+/* @brief Dispatch events for the registered event handlers.
+ *
+ *  @param evt Event.
+ *
+ * @return Zero on success, negative errno code if the API call fails.
+ */
+void location_event_handler_list_dispatch(const struct location_event_data *const evt);
+
+/* @brief Test if the handler list is empty.
+ *
+ * @return a boolean, true if it's empty, false otherwise
+ */
+bool location_event_handler_list_is_empty(void);
 
 #endif /* LOCATION_UTILS_H */

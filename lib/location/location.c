@@ -13,6 +13,7 @@
 #endif
 
 #include "location_core.h"
+#include "location_utils.h"
 
 LOG_MODULE_REGISTER(location, CONFIG_LOCATION_LOG_LEVEL);
 
@@ -135,6 +136,34 @@ static void location_config_method_defaults_set(
 		method->wifi.timeout = 30;
 		method->wifi.service = LOCATION_SERVICE_ANY;
 	}
+}
+
+void location_register_handler(location_event_handler_t handler)
+{
+	if (handler == NULL) {
+		LOG_INF("NULL as a location handler received: Nothing to be done.");
+		return;
+	}
+
+	if (location_event_handler_list_append_handler(handler)) {
+		LOG_ERR("Cannot add location handler");
+		return;
+	}
+}
+
+int location_deregister_handler(location_event_handler_t handler)
+{
+	if (!initialized) {
+		LOG_ERR("Module not initialized yet");
+		return -EINVAL;
+	}
+
+	if (handler == NULL) {
+		LOG_ERR("Invalid handler (handler=0x%08X)", (uint32_t)handler);
+		return -EINVAL;
+	}
+
+	return location_event_handler_list_remove_handler(handler);
 }
 
 void location_config_defaults_set(
