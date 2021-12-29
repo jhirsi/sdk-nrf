@@ -1,0 +1,47 @@
+#
+# Copyright (c) 2022 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig METRICS
+	bool "Metrics"
+	depends on LOCATION
+	depends on LTE_LINK_CONTROL
+	depends on AT_MONITOR
+
+if METRICS
+
+config METRICS_CLOUD_THINGSPEAK
+	bool "Cloud https://thingspeak.com/"
+	default y
+	depends on MODEM_INFO
+	select REST_CLIENT
+	select CJSON_LIB
+
+if METRICS_CLOUD_THINGSPEAK
+config METRICS_CLOUD_THINGSPEAK_HOSTNAME
+	string "Hostname"
+	default "api.thingspeak.com"
+
+config METRICS_CLOUD_THINGSPEAK_CHANNEL_ID_STR
+	string "Channel ID"
+
+config METRICS_CLOUD_THINGSPEAK_WRITE_API_KEY
+	string "API key for writing"
+	help
+	  API key used for authentication.
+
+config METRICS_CLOUD_THINGSPEAK_TLS_SEC_TAG
+	int "Security tag for TLS certificates"
+	default 66
+	help
+	  Not supported but TODO if needed.
+
+endif # METRICS_CLOUD_THINGSPEAK
+
+module = METRICS
+module-str = Metrics
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # METRICS
