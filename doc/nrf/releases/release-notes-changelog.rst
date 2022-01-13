@@ -111,6 +111,7 @@ nRF9160 samples
 
   * Added a new shell command ``cloud`` for establishing an MQTT connection to nRF Cloud.
   * Bunch of PPP updates. For example, started using of Zephyr async ppp driver configuration to provide better throughput for dialup.
+  * DK LED #1 is indicating LTE registration status.
 
 * :ref:`http_application_update_sample` sample:
 
