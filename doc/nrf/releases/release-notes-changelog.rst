@@ -110,6 +110,7 @@ nRF9160 samples
 * :ref:`modem_shell_application` sample:
 
   * Added a new shell command ``cloud`` for establishing an MQTT connection to nRF Cloud.
+  * Bunch of PPP updates. For example, started using of Zephyr async ppp driver configuration to provide better throughput for dialup.
 
 * :ref:`http_application_update_sample` sample:
 
