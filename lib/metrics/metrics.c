@@ -16,6 +16,13 @@
 #include <nrf_modem_at.h>
 #include <modem/at_monitor.h>
 
+#if defined(CONFIG_MEMFAULT)
+#include <memfault/metrics/metrics.h>
+#include <memfault/ports/zephyr/http.h>
+#include <memfault/core/data_packetizer.h>
+#include <memfault/core/trace_event.h>
+#endif
+
 #include "integrations/integrations.h"
 
 LOG_MODULE_REGISTER(metrics, CONFIG_METRICS_LOG_LEVEL);
@@ -49,6 +56,44 @@ static struct lte_lc_cells_info cell_data = {
 };
 struct location_metrics current_metrics;
 
+#if defined(CONFIG_MEMFAULT)
+#define MEMFAULT_THREAD_STACK_SIZE 1024
+
+static K_SEM_DEFINE(mflt_internal_send_sem, 0, 1);
+
+static void metrics_memfault_internal_send(void)
+{
+	while (true) {
+		k_sem_take(&mflt_internal_send_sem, K_FOREVER);
+
+		LOG_ERR("Starting to send memfault data");
+
+		/* Because memfault_zephyr_port_post_data() can block for a long time we cannot
+		 * call it from the system workqueue.
+		 */
+		memfault_zephyr_port_post_data();
+	}
+}
+
+K_THREAD_DEFINE(mflt_send_thread, MEMFAULT_THREAD_STACK_SIZE, metrics_memfault_internal_send, NULL,
+		NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO, 0, 0);
+
+static void metrics_send_memfault_data(void)
+{
+	bool data_available;
+
+	/* Trigger collection of heartbeat data. */
+	memfault_metrics_heartbeat_debug_trigger();
+
+	data_available = memfault_packetizer_data_available();
+	if (data_available) {
+		k_sem_give(&mflt_internal_send_sem);
+	} else {
+		LOG_ERR("No data to sent to memfault");
+	}
+}
+#endif /* if defined(CONFIG_MEMFAULT) */
+
 static void metrics_cellular_lte_ind_handler(const struct lte_lc_evt *const evt)
 {
 	switch (evt->type) {
@@ -77,6 +122,7 @@ static void metrics_cellular_lte_ind_handler(const struct lte_lc_evt *const evt)
 			LOG_INF("No neighbor cell information from modem.");
 		}
 	} break;
+
 	default:
 		break;
 	}
@@ -140,10 +186,35 @@ static void metrics_send_work_fn(struct k_work *work)
 /* Trigger sending of metrics based on location */
 static void metrics_location_event_handler(const struct location_event_data *event_data)
 {
+#if defined(CONFIG_MEMFAULT)
+	int err = 0;
+#endif
 	switch (event_data->id) {
 	case LOCATION_EVT_LOCATION:
+#if defined(CONFIG_MEMFAULT)
+		err = memfault_metrics_heartbeat_add(MEMFAULT_METRICS_KEY(LocationAcquiredCount),
+						     1);
+		if (err) {
+			LOG_ERR("Failed to increment LocationAcquiredCount");
+		}
+#endif
+
 		LOG_INF("LOCATION_EVT_LOCATION");
 
+#if RM_JH
+		MEMFAULT_TRACE_EVENT_WITH_LOG(LocationAcquired,
+						"imei: %s,"
+						"method: %s,"
+						"latitude: %.06f,"
+						"longitude: %.06f,"
+						"accuracy: %.01f",
+							current_metrics.device_imei_str,
+							location_method_str(
+								event_data->location.method),
+							event_data->location.latitude,
+							event_data->location.longitude,
+							event_data->location.accuracy);
+#endif
 		memcpy(&current_metrics.location_data, event_data,
 		       sizeof(struct location_event_data));
 		memcpy(&current_metrics.cell_data, &cell_data, sizeof(struct lte_lc_cells_info));
@@ -151,14 +222,29 @@ static void metrics_location_event_handler(const struct location_event_data *eve
 		k_work_submit_to_queue(&metrics_work_q, &metrics_send_work);
 		break;
 	case LOCATION_EVT_TIMEOUT:
+#if defined(CONFIG_MEMFAULT)
+		err = memfault_metrics_heartbeat_add(MEMFAULT_METRICS_KEY(LocationTimeoutCount), 1);
+		if (err) {
+			LOG_ERR("Failed to increment LocationTimeoutCount");
+		}
+#endif
 		LOG_INF("LOCATION_EVT_TIMEOUT");
 		break;
 	case LOCATION_EVT_ERROR:
+#if defined(CONFIG_MEMFAULT)
+		err = memfault_metrics_heartbeat_add(MEMFAULT_METRICS_KEY(LocationErrorCount), 1);
+		if (err) {
+			LOG_ERR("Failed to increment LocationErrorCount");
+		}
+#endif
 		LOG_ERR("LOCATION_EVT_ERROR");
 		break;
 	default:
 		break;
 	}
+#if defined(CONFIG_MEMFAULT)
+	metrics_send_memfault_data();
+#endif
 }
 
 #define AT_CMD_IMEI "AT+CGSN"
