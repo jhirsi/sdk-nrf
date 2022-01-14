@@ -21,6 +21,9 @@
 #include <memfault/ports/zephyr/http.h>
 #include <memfault/core/data_packetizer.h>
 #include <memfault/core/trace_event.h>
+#include <memfault/components.h>
+#include <memfault/core/log.h>
+#include <memfault/core/platform/debug_log.h>
 #endif
 
 #include "integrations/integrations.h"
@@ -57,6 +60,15 @@ static struct lte_lc_cells_info cell_data = {
 struct location_metrics current_metrics;
 
 #if defined(CONFIG_MEMFAULT)
+BUILD_ASSERT(
+	!IS_ENABLED(CONFIG_MEMFAULT_LOGGING_ENABLE),
+	"CONFIG_MEMFAULT_LOGGING_ENABLE cannnot be enabled with lib metrics");
+
+#if !defined(CONFIG_MEMFAULT_LOGGING_ENABLE)
+/* Static RAM storage where logs will be stored. */
+static uint8_t log_buf_storage[512];
+#endif
+
 #define MEMFAULT_THREAD_STACK_SIZE 1024
 
 static K_SEM_DEFINE(mflt_internal_send_sem, 0, 1);
@@ -67,6 +79,8 @@ static void metrics_memfault_internal_send(void)
 		k_sem_take(&mflt_internal_send_sem, K_FOREVER);
 
 		LOG_ERR("Starting to send memfault data");
+
+		memfault_log_trigger_collection();
 
 		/* Because memfault_zephyr_port_post_data() can block for a long time we cannot
 		 * call it from the system workqueue.
@@ -191,17 +205,33 @@ static void metrics_location_event_handler(const struct location_event_data *eve
 #endif
 	switch (event_data->id) {
 	case LOCATION_EVT_LOCATION:
+		LOG_INF("LOCATION_EVT_LOCATION");
+
 #if defined(CONFIG_MEMFAULT)
 		err = memfault_metrics_heartbeat_add(MEMFAULT_METRICS_KEY(LocationAcquiredCount),
 						     1);
 		if (err) {
 			LOG_ERR("Failed to increment LocationAcquiredCount");
 		}
+		/* Using logging to store location data in cloud */
+		MEMFAULT_SDK_LOG_SAVE(kMemfaultPlatformLogLevel_Info,
+						"imei: %s,"
+						"method: %s,"
+						"latitude: %.06f,"
+						"longitude: %.06f,"
+						"accuracy: %.01f",
+							current_metrics.device_imei_str,
+							location_method_str(
+								event_data->location.method),
+							event_data->location.latitude,
+							event_data->location.longitude,
+							event_data->location.accuracy);
 #endif
 
-		LOG_INF("LOCATION_EVT_LOCATION");
 
 #if RM_JH
+/* This would be good but isn't suitable as shown as error in memfault */
+
 		MEMFAULT_TRACE_EVENT_WITH_LOG(LocationAcquired,
 						"imei: %s,"
 						"method: %s,"
@@ -271,6 +301,11 @@ static int metrics_init(const struct device *unused)
 		.name = "metrics_workq",
 	};
 	int err;
+
+#if defined(CONFIG_MEMFAULT) && !defined(CONFIG_MEMFAULT_LOGGING_ENABLE)
+	memfault_log_boot(log_buf_storage, sizeof(log_buf_storage));
+	memfault_log_set_min_save_level(kMemfaultPlatformLogLevel_Debug);
+#endif
 
 	k_work_queue_start(&metrics_work_q, metrics_stack, K_THREAD_STACK_SIZEOF(metrics_stack),
 			   METRICS_THREAD_PRIORITY, &cfg);
