@@ -66,7 +66,7 @@ BUILD_ASSERT(
 
 #if !defined(CONFIG_MEMFAULT_LOGGING_ENABLE)
 /* Static RAM storage where logs will be stored. */
-static uint8_t log_buf_storage[512];
+static uint8_t log_buf_storage[MEMFAULT_DEBUG_LOG_BUFFER_SIZE_BYTES];
 #endif
 
 #define MEMFAULT_THREAD_STACK_SIZE 1024
@@ -78,7 +78,7 @@ static void metrics_memfault_internal_send(void)
 	while (true) {
 		k_sem_take(&mflt_internal_send_sem, K_FOREVER);
 
-		LOG_ERR("Starting to send memfault data");
+		LOG_DBG("Starting to send memfault data");
 
 		memfault_log_trigger_collection();
 
@@ -213,13 +213,15 @@ static void metrics_location_event_handler(const struct location_event_data *eve
 		if (err) {
 			LOG_ERR("Failed to increment LocationAcquiredCount");
 		}
+		memset(log_buf_storage, 0, sizeof(log_buf_storage));
+
 		/* Using logging to store location data in cloud */
 		MEMFAULT_SDK_LOG_SAVE(kMemfaultPlatformLogLevel_Info,
-						"imei: %s,"
-						"method: %s,"
-						"latitude: %.06f,"
-						"longitude: %.06f,"
-						"accuracy: %.01f",
+						"Location acquired: device imei: %s,"
+						" location method: %s,"
+						" latitude: %.06f,"
+						" longitude: %.06f,"
+						" accuracy: %.01f",
 							current_metrics.device_imei_str,
 							location_method_str(
 								event_data->location.method),

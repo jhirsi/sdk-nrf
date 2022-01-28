@@ -13,8 +13,12 @@
 /*
  * #define MEMFAULT_METRICS_HEARTBEAT_INTERVAL_SECS 1800
  */
+
 /* We want to have our own logs to memfault */
 #ifdef MEMFAULT_SDK_LOG_SAVE_DISABLE
 #undef MEMFAULT_SDK_LOG_SAVE_DISABLE
 #define MEMFAULT_SDK_LOG_SAVE_DISABLE 0
 #endif
+
+/* We need to have our own because we don't want _MEMFAULT_LOG_IMPL to log to cloud */
+#define MEMFAULT_PLATFORM_HAS_LOG_CONFIG 1
