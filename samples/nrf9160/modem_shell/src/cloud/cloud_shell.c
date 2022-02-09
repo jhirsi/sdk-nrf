@@ -25,6 +25,8 @@ BUILD_ASSERT(
 	IS_ENABLED(CONFIG_NRF_CLOUD_MQTT) &&
 	IS_ENABLED(CONFIG_NRF_CLOUD_CONNECTION_POLL_THREAD));
 
+extern struct k_work_q mosh_common_work_q;
+
 static struct k_work_delayable cloud_reconnect_work;
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 static struct k_work notify_pgps_work;
@@ -89,6 +91,9 @@ static bool cloud_shell_parse_mosh_cmd(const char *buf_in)
 
 	cJSON *cloud_cmd_json = cJSON_Parse(buf_in);
 
+	/* A format example expected from nrf cloud:
+	 * {"appId":"MODEM_SHELL", "data":"location get"}
+	 */
 	if (cloud_cmd_json == NULL) {
 		const char *error_ptr = cJSON_GetErrorPtr();
 
@@ -146,7 +151,8 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 		mosh_print("NRF_CLOUD_EVT_TRANSPORT_DISCONNECTED");
 		if (!nfsm_get_disconnect_requested()) {
 			mosh_print("Reconnecting in %d seconds...", reconnection_delay);
-			k_work_reschedule(&cloud_reconnect_work, K_SECONDS(reconnection_delay));
+			k_work_reschedule_for_queue(&mosh_common_work_q, &cloud_reconnect_work,
+						    K_SECONDS(reconnection_delay));
 		}
 		break;
 	case NRF_CLOUD_EVT_ERROR:
@@ -165,7 +171,7 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 			bool cmd_found = cloud_shell_parse_mosh_cmd(evt->data.ptr);
 
 			if (cmd_found) {
-				k_work_submit(&cloud_cmd_work);
+				k_work_submit_to_queue(&mosh_common_work_q, &cloud_cmd_work);
 			}
 			break;
 		}
@@ -175,7 +181,7 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 			mosh_print("A-GPS data processed");
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 			/* call us back when prediction is ready */
-			k_work_submit(&notify_pgps_work);
+			k_work_submit_to_queue(&mosh_common_work_q, &notify_pgps_work);
 #endif
 			/* data was valid; no need to pass to other handlers */
 			break;
@@ -232,7 +238,7 @@ static void cmd_cloud_connect(const struct shell *shell, size_t argc, char **arg
 		k_work_init_delayable(&cloud_reconnect_work, cloud_reconnect_work_fn);
 	}
 
-	k_work_reschedule(&cloud_reconnect_work, K_NO_WAIT);
+	k_work_reschedule_for_queue(&mosh_common_work_q, &cloud_reconnect_work, K_NO_WAIT);
 
 	mosh_print("Endpoint: %s", CONFIG_NRF_CLOUD_HOST_NAME);
 }
