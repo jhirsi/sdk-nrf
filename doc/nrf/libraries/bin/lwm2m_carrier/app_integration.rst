@@ -7,6 +7,11 @@ Application integration
    :local:
    :depth: 2
 
+.. figure:: /libraries/bin/lwm2m_carrier/images/lwm2m_carrier_os_abstraction.svg
+    :alt: LwM2M library OS abstraction overview
+
+    LwM2M library OS abstraction overview
+
 The LwM2M carrier library has an OS abstraction layer.
 See :file:`lwm2m_os.h`.
 This abstraction layer makes the LwM2M carrier library independent of the |NCS| modules and underlying implementation of primitives such as timers, non-volatile storage, and heap allocation.
@@ -31,6 +36,8 @@ It provides an abstraction of the following modules:
   * :ref:`zephyr:nvs_api`
 
 The OS abstraction layer is fully implemented for the |NCS|, and it would have to be ported if used with other RTOS or on other systems.
+
+.. _lwm2m_configuration:
 
 LwM2M carrier library configuration
 ***********************************

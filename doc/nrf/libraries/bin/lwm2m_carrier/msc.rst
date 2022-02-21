@@ -13,8 +13,7 @@ The following message sequence chart shows the initialization of the LwM2M carri
     Application<<="LwM2M carrier Library"            [label="LWM2M_CARRIER_EVENT_CARRIER_INIT"];
     Application rbox Application                     [label="Application can now attach to network"];
     "LTE link controller"<<= "Application"           [label="lte_lc_init_and_connect()"];
-    Application=>"LwM2M carrier Library"             [label="lwm2m_carrier_run()"];
-    |||;
+    Application=>"LwM2M carrier Library"             [label="lwm2m_carrier_run()"];    |||;
     "LwM2M carrier Library" :> "LwM2M carrier Library" [label="(no return)"];
     ...;
 
