@@ -4,6 +4,7 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <string.h>
 #include <stdlib.h>
 
 #include <shell/shell.h>
@@ -29,12 +30,27 @@ enum term_modes {
 };
 static enum term_modes term_mode;
 
-#define AT_MAX_CMD_LEN 4096
-static uint8_t at_buf[AT_MAX_CMD_LEN];
+#define AT_CMD_MODE_AT_CMD_MAX_LEN CONFIG_SHELL_CMD_BUFF_SIZE
+#define AT_CMD_MODE_PIPELINED_AT_CMD_MAX_LEN 1023
+
+static uint8_t at_buf[AT_CMD_MODE_AT_CMD_MAX_LEN + 1];
+static uint8_t at_buf_pipelined[AT_CMD_MODE_PIPELINED_AT_CMD_MAX_LEN + 1];
 
 AT_MONITOR(mosh_at_cmd_mode_handler, ANY, at_cmd_mode_event_handler, PAUSED);
 
-static struct k_work at_cmd_mode_work;
+
+struct at_cmd_mode_pipelining_info {
+	uint8_t *pipelined_cmd_start; /* Pointers to at_buf with pipelining */
+	int pipelined_cmd_len;
+};
+
+#define AT_MAX_CMD_PIPELINED 10
+struct at_cmd_mode_work_data {
+	struct k_work work;
+	int pipe_cnt;
+	struct at_cmd_mode_pipelining_info pipe_infos[AT_MAX_CMD_PIPELINED];
+};
+static struct at_cmd_mode_work_data at_cmd_mode_work;
 
 static bool at_cmd_mode_active;
 static bool inside_quotes;
@@ -65,31 +81,58 @@ static void at_cmd_mode_event_handler(const char *response)
 	}
 }
 
-static void at_cmd_mode_worker(struct k_work *work)
+static void at_cmd_mode_send_at_cmd(const char *at_str, char *rsp_buf, int rsp_buf_len)
 {
 	int err;
 
-	ARG_UNUSED(work);
-
 	/* 1st: handle MoSh specific AT commands */
-	err = at_cmd_mosh_parse(at_buf);
+	err = at_cmd_mosh_parse(at_str);
 	if (err == 0) {
-		sprintf(at_buf, "OK\n");
+		sprintf(rsp_buf, "OK\n");
 		goto done;
 	} else if (err != -ENOENT) {
-		sprintf(at_buf, "ERROR\n");
+		sprintf(rsp_buf, "ERROR\n");
 		goto done;
 	}
 
 	/* 2nd: modem at commands */
-	err = nrf_modem_at_cmd(at_buf, sizeof(at_buf), "%s", at_buf);
+	err = nrf_modem_at_cmd(rsp_buf, rsp_buf_len, "%s", at_str);
 	if (err < 0) {
-		sprintf(at_buf, "ERROR: AT command failed: %d\n", err);
+		sprintf(rsp_buf, "ERROR: AT command failed: %d\n", err);
 	} /* else if (err > 0): print error from modem */
 done:
 	/* Response */
-	printk("%s", at_buf);
+	printk("%s", rsp_buf);
 	return;
+}
+
+static void at_cmd_mode_send_at_cmd_from_at_buf(void)
+{
+	at_cmd_mode_send_at_cmd(at_buf, at_buf, sizeof(at_buf));
+}
+
+static void at_cmd_mode_worker(struct k_work *item)
+{
+	int i;
+	struct at_cmd_mode_work_data *data = CONTAINER_OF(item, struct at_cmd_mode_work_data, work);
+	struct at_cmd_mode_pipelining_info *pipes = data->pipe_infos;
+
+	if (data->pipe_cnt) {
+		for (i = 0; i < AT_MAX_CMD_PIPELINED; i++) {
+			if (pipes[i].pipelined_cmd_len) {
+				strncpy(at_buf_pipelined, pipes[i].pipelined_cmd_start,
+					pipes[i].pipelined_cmd_len);
+				at_buf_pipelined[pipes[i].pipelined_cmd_len] = '\0';
+
+				at_cmd_mode_send_at_cmd(at_buf_pipelined, at_buf_pipelined,
+							sizeof(at_buf_pipelined));
+				pipes[i].pipelined_cmd_len = 0;
+			}
+		}
+	} else {
+		at_cmd_mode_send_at_cmd_from_at_buf();
+	}
+	data->pipe_cnt = 0;
 }
 
 static void at_cmd_mode_cmd_rx_handler(uint8_t character)
@@ -165,7 +208,6 @@ send:
 
 	k_mutex_lock(&at_buf_mutex, K_FOREVER);
 	at_buf[at_cmd_len] = '\0'; /* Terminate the command string */
-
 	inside_quotes = false;
 	at_cmd_len = 0;
 	k_mutex_unlock(&at_buf_mutex);
@@ -179,12 +221,46 @@ send:
 		}
 	}
 
+	/* Scan AT command buffer for possible pipelined at commands */
+	at_cmd_mode_work.pipe_cnt = 0;
+
+	if (strchr(at_buf, '|')) {
+		struct at_cmd_mode_pipelining_info *pipes = at_cmd_mode_work.pipe_infos;
+		char *next_char;
+		char *tmp;
+		int pipelined_at_cmd_len;
+
+		next_char = at_buf;
+		tmp = strtok(next_char, "|");
+
+		while (tmp != NULL) {
+			if (at_cmd_mode_work.pipe_cnt >= AT_MAX_CMD_PIPELINED) {
+				printk("\nMax %d pipelined at commands supported, dropping: \"%s\"",
+				       AT_MAX_CMD_PIPELINED, tmp);
+			} else {
+				pipelined_at_cmd_len = strlen(tmp);
+				if (pipelined_at_cmd_len > AT_CMD_MODE_PIPELINED_AT_CMD_MAX_LEN) {
+					printk("\nPipelined AT cmd max len is %d,"
+					       " too long %d bytes AT cmd dropped",
+					       AT_CMD_MODE_PIPELINED_AT_CMD_MAX_LEN,
+					       pipelined_at_cmd_len);
+				} else {
+					pipes[at_cmd_mode_work.pipe_cnt].pipelined_cmd_start = tmp;
+					pipes[at_cmd_mode_work.pipe_cnt].pipelined_cmd_len =
+						pipelined_at_cmd_len;
+					at_cmd_mode_work.pipe_cnt++;
+				}
+			}
+			tmp = strtok(NULL, "|");
+		}
+	}
+
 	/* Echo a line feed */
 	printk("\n");
 
 	writing = false;
 
-	k_work_submit_to_queue(&mosh_common_work_q, &at_cmd_mode_work);
+	k_work_submit_to_queue(&mosh_common_work_q, &at_cmd_mode_work.work);
 }
 
 #define CHAR_CAN 0x18
@@ -238,7 +314,9 @@ int at_cmd_mode_start(const struct shell *sh)
 		return -EBUSY;
 	}
 
-	k_work_init(&at_cmd_mode_work, at_cmd_mode_worker);
+	k_work_init(&at_cmd_mode_work.work, at_cmd_mode_worker);
+	at_cmd_mode_work.pipe_cnt = 0;
+
 	at_monitor_resume(mosh_at_cmd_mode_handler);
 
 	term_mode = CONFIG_MOSH_AT_CMD_MODE_TERMINATION;
@@ -252,6 +330,9 @@ int at_cmd_mode_start(const struct shell *sh)
 		printk("AT+NPING=<addr>[,<payload_length>,<timeout_msecs>,<count>"
 		       "[,<interval_msecs>[,<cid>]]]\n");
 #endif
+		printk("Other custom functionalities:\n");
+		printk("  AT command pipelining, for example:\n"
+		       "    at+cgmr|at+cfun?|at+nping=\"example.com\"\n");
 		printk("===========================================================\n");
 		at_cmd_mode_active = true;
 		at_cmd_mode_dont_print = true;
