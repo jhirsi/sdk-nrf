@@ -7,7 +7,7 @@ menuconfig NRF_MODEM_LIB
 	bool "Enable Modem library"
 	depends on SOC_NRF9160_SICA
 	imply NRFX_IPC
-	imply NET_SOCKETS_OFFLOAD
+	imply NET_SOCKETS_OFFLOAD if !MOSH_NRF91_NON_OFFLOADING_DEV
 	imply NET_SOCKETS_POSIX_NAMES if !POSIX_API
 	select NRF_MODEM
 	# The modem must be turned on to achieve low power consumption.
