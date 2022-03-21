@@ -802,6 +802,18 @@ For example:
 
    west build -p -b nrf9160dk_nrf9160_ns -d build -- -DOVERLAY_CONFIG=overlay-cloud_mqtt.conf
 
+nRF91 non-offloading device driver
+==================================
+
+To build the MoSh sample with nRF91 non-offloading device driver support, use the ``-DOVERLAY_CONFIG=overlay-non-offloading.conf`` option.
+When running this configuration, the configured MoSh commands, for example iperf3, are using Zephyr native TCP/IP stack.
+
+For example:
+
+.. code-block:: console
+
+   west build -p -b nrf9160dk_nrf9160_ns -- -DOVERLAY_CONFIG=overlay-non-offloading.conf
+
 References
 **********
 
