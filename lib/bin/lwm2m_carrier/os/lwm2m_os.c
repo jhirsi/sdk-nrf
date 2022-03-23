@@ -45,7 +45,10 @@ static struct nvs_fs fs = {
 };
 
 K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_work_q_client_stack, LWM2M_OS_MAX_WORK_QS, 4096);
-struct k_work_q lwm2m_os_work_qs[LWM2M_OS_MAX_WORK_QS];
+static struct k_work_q lwm2m_os_work_qs[LWM2M_OS_MAX_WORK_QS];
+
+K_THREAD_STACK_ARRAY_DEFINE(lwm2m_os_thread_stack, LWM2M_OS_MAX_THREAD_COUNT, 512);
+static struct k_thread lwm2m_os_threads[LWM2M_OS_MAX_THREAD_COUNT];
 
 static struct k_sem lwm2m_os_sems[LWM2M_OS_MAX_SEM_COUNT];
 static uint8_t lwm2m_os_sems_used;
@@ -53,8 +56,16 @@ static uint8_t lwm2m_os_sems_used;
 /* AT monitor for notifications used by the library */
 AT_MONITOR(lwm2m_carrier_at_handler, ANY, lwm2m_os_at_handler);
 
+/* LwM2M carrier OS logs. */
+LOG_MODULE_REGISTER(lwm2m_os, LOG_LEVEL_DBG);
+
 int lwm2m_os_init(void)
 {
+#if defined CONFIG_LOG_RUNTIME_FILTERING
+	log_filter_set(NULL, CONFIG_LOG_DOMAIN_ID, LOG_CURRENT_MODULE_ID(),
+		       CONFIG_LOG_DEFAULT_LEVEL);
+#endif /* CONFIG_LOG_RUNTIME_FILTERING */
+
 	/* Initialize storage */
 	return nvs_init(&fs, DT_CHOSEN_ZEPHYR_FLASH_CONTROLLER_LABEL);
 }
@@ -105,18 +116,16 @@ uint32_t lwm2m_os_rand_get(void)
 
 int lwm2m_os_sem_init(lwm2m_os_sem_t **sem, unsigned int initial_count, unsigned int limit)
 {
-	if (PART_OF_ARRAY(lwm2m_os_sems, (struct k_sem *)*sem)) {
-		goto reinit;
+	if (*sem == NULL) {
+		__ASSERT(lwm2m_os_sems_used < LWM2M_OS_MAX_SEM_COUNT,
+			 "Not enough semaphores in glue layer");
+
+		*sem = (lwm2m_os_sem_t *)&lwm2m_os_sems[lwm2m_os_sems_used++];
+	} else {
+		__ASSERT(PART_OF_ARRAY(lwm2m_os_sems, (struct k_sem *)sem),
+			 "Uninitialised semaphore");
 	}
 
-	__ASSERT(lwm2m_os_sems_used < LWM2M_OS_MAX_SEM_COUNT,
-		 "Not enough semaphores in glue layer");
-
-	*sem = (lwm2m_os_sem_t *)&lwm2m_os_sems[lwm2m_os_sems_used];
-
-	lwm2m_os_sems_used++;
-
-reinit:
 	return k_sem_init((struct k_sem *)*sem, initial_count, limit);
 }
 
@@ -194,6 +203,7 @@ lwm2m_os_work_q_t *lwm2m_os_work_q_start(int index, const char *name)
 	if (index >= LWM2M_OS_MAX_WORK_QS) {
 		return NULL;
 	}
+
 	lwm2m_os_work_q_t *work_q = (lwm2m_os_work_q_t *)&lwm2m_os_work_qs[index];
 
 	k_work_queue_start(&lwm2m_os_work_qs[index], lwm2m_os_work_q_client_stack[index],
@@ -315,23 +325,33 @@ bool lwm2m_os_timer_is_pending(lwm2m_os_timer_t *timer)
 	return k_work_delayable_is_pending(&work->work_item);
 }
 
-/* LWM2M logs. */
+/* Thread functions */
 
-LOG_MODULE_REGISTER(lwm2m_os, LOG_LEVEL_DBG);
+int lwm2m_os_thread_start(int index, lwm2m_os_thread_entry_t entry, const char *name)
+{
+	__ASSERT(index < LWM2M_OS_MAX_THREAD_COUNT, "Not enough threads in glue layer");
+
+	if (index >= LWM2M_OS_MAX_THREAD_COUNT) {
+		return -EINVAL;
+	}
+
+	k_tid_t thread = k_thread_create(&lwm2m_os_threads[index], lwm2m_os_thread_stack[index],
+					 K_THREAD_STACK_SIZEOF(lwm2m_os_thread_stack[index]),
+					 entry, NULL, NULL, NULL, K_LOWEST_APPLICATION_THREAD_PRIO,
+					 0, K_NO_WAIT);
+
+	k_thread_name_set(thread, name);
+	k_thread_start(thread);
+
+	return 0;
+}
 
 int lwm2m_os_nrf_modem_init(void)
 {
-	int nrf_err;
-
-#if defined CONFIG_LOG_RUNTIME_FILTERING
-	log_filter_set(NULL, CONFIG_LOG_DOMAIN_ID, LOG_CURRENT_MODULE_ID(),
-		       CONFIG_LOG_DEFAULT_LEVEL);
-#endif /* CONFIG_LOG_RUNTIME_FILTERING */
-
 #if defined CONFIG_NRF_MODEM_LIB_SYS_INIT
-	nrf_err = nrf_modem_lib_get_init_ret();
+	int nrf_err = nrf_modem_lib_get_init_ret();
 #else
-	nrf_err = nrf_modem_lib_init(NORMAL_MODE);
+	int nrf_err = nrf_modem_lib_init(NORMAL_MODE);
 #endif /* CONFIG_NRF_MODEM_LIB_SYS_INIT */
 
 	switch (nrf_err) {

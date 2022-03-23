@@ -71,9 +71,16 @@ config LWM2M_CARRIER_SERVER_LIFETIME
 	int "Server lifetime"
 	default 60
 	help
-	  Default server lifetime.
+	  Default server lifetime (seconds).
 
 endif # !LWM2M_CARRIER_IS_SERVER_BOOTSTRAP
+
+config LWM2M_CARRIER_SESSION_IDLE_TIMEOUT
+	int "Session Idle Timeout"
+	default 60
+	help
+	  Session Idle Timeout (seconds).
+	  Setting this to 0 will use the default value (60 seconds).
 
 endif # LWM2M_CARRIER_USE_CUSTOM_URI
 

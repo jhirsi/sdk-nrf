@@ -140,6 +140,8 @@ typedef struct {
 #define LWM2M_CARRIER_ERROR_CONFIGURATION	9
 /** LwM2M carrier init failed. */
 #define LWM2M_CARRIER_ERROR_INIT		10
+/** Internal error detected. */
+#define LWM2M_CARRIER_ERROR_INTERNAL		11
 /** @} */
 
 /**
@@ -219,15 +221,20 @@ typedef struct {
  * @brief Structure holding LwM2M carrier library initialization parameters.
  */
 typedef struct {
-	/** URI of the LwM2M Bootstrap-Server or LwM2M Server, null-terminated string. */
+	/** Optional URI of the LwM2M Bootstrap-Server or LwM2M Server. Null-terminated string. */
 	const char *server_uri;
-	/** Configure if server_uri is a LwM2M Bootstrap-Server or a standard LwM2M Server. */
+	/** Denotes whether @c server_uri is an LwM2M Bootstrap-Server or an LwM2M Server. */
 	bool is_bootstrap_server;
-	/** Default server lifetime (in seconds), used when server_uri is a LwM2M Server. */
+	/** Default server lifetime (in seconds), used only for an LwM2M Server. */
 	int32_t server_lifetime;
-	/** Pre-Shared Key for the LwM2M Server, null-terminated hexadecimal string. */
+	/** Default DTLS session idle timeout (in seconds). */
+	int32_t session_idle_timeout;
+	/**
+	 * Optional Pre-Shared Key, required if @c server_uri is secure (uses "coaps://" scheme).
+	 * Null-terminated string of at most 64 hexadecimal digits (32 bytes).
+	 */
 	const char *psk;
-	/** Optional custom APN, null-terminated string. */
+	/** Optional custom APN. Null-terminated string of at most 63 characters. */
 	const char *apn;
 	/** Connect to certification servers if true, connect to production servers otherwise. */
 	bool certification_mode;
@@ -238,7 +245,7 @@ typedef struct {
 /**
  * @brief Initialize the LwM2M carrier library.
  *
- * @param[in] config Configuration parameters for the library.
+ * @param[in] config Configuration parameters for the library. Optional.
  *
  * @note The library does not copy the contents of pointers in the config parameters. The
  *       application has to make sure that the provided parameters are valid throughout the
@@ -247,9 +254,12 @@ typedef struct {
  * @note The first time this function is called after a modem firmware update, (FOTA) it may take
  *       several seconds to return in order to complete the procedure.
  *
- * @retval  0      If success.
- * @retval -EIO    Failed to initialize modem library or unable to read IMEI.
- * @retval -E2BIG  The provided PSK is too large to be stored in the modem.
+ * @retval  0      If initialization was successful.
+ * @retval -EINVAL If the configuration parameters are invalid. See @c lwm2m_carrier_config_t
+ * @retval -EACCES If initialization failed due to an error in the OS integration layer.
+ * @retval -ENOMEM If initialization failed due to insufficient OS resources.
+ * @retval -EIO    If initialization failed due to a modem or AT command error.
+ * @retval -EFAULT If initialization failed due to an internal error.
  */
 int lwm2m_carrier_init(const lwm2m_carrier_config_t *config);
 

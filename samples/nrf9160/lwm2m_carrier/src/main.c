@@ -51,6 +51,8 @@ void print_err(const lwm2m_carrier_event_t *evt)
 			"Illegal object configuration detected",
 		[LWM2M_CARRIER_ERROR_INIT] =
 			"Initialization failure",
+		[LWM2M_CARRIER_ERROR_INTERNAL] =
+			"Internal failure",
 	};
 
 	__ASSERT(PART_OF_ARRAY(strerr[err->code]),
