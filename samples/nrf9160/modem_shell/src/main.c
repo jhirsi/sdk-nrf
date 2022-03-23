@@ -144,7 +144,6 @@ void main(void)
 	k_sem_take(&nrf_carrier_lib_initialized, K_FOREVER);
 #endif
 	lte_lc_init();
-	k_sleep(K_SECONDS(5));
 #if defined(CONFIG_MOSH_PPP)
 	ppp_ctrl_init();
 #endif

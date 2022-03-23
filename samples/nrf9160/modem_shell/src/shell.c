@@ -26,6 +26,11 @@
 #include <iperf_api.h>
 #endif
 #if defined(CONFIG_MOSH_LINK)
+#if defined(CONFIG_LWM2M_CARRIER)
+#include "link.h"
+#include <modem/pdn.h>
+#include "link_settings.h"
+#endif
 #include "link_shell.h"
 #endif
 #if defined(CONFIG_MOSH_CURL)
@@ -132,15 +137,28 @@ int lwm2m_carrier_event_handler(const lwm2m_carrier_event_t *event)
 		break;
 	case LWM2M_CARRIER_EVENT_LTE_LINK_UP:
 		mosh_print("LwM2M carrier event: request LTE Link up");
+#if defined(CONFIG_LTE_LINK_CONTROL) && defined(CONFIG_MOSH_LINK)
+		link_func_mode_set(LTE_LC_FUNC_MODE_NORMAL,
+				   link_sett_is_normal_mode_autoconn_rel14_used());
+#else
 		err = lte_lc_connect_async(NULL);
+#endif
 		break;
 	case LWM2M_CARRIER_EVENT_LTE_LINK_DOWN:
 		mosh_print("LwM2M carrier event: request LTE Link down");
-		err = lte_lc_offline();
+#if defined(CONFIG_LTE_LINK_CONTROL) && defined(CONFIG_MOSH_LINK)
+		link_func_mode_set(LTE_LC_FUNC_MODE_OFFLINE, false);
+#else
+		err = lte_lc_offline(NULL);
+#endif
 		break;
 	case LWM2M_CARRIER_EVENT_LTE_POWER_OFF:
 		mosh_print("LwM2M carrier event: request LTE Power off");
-		err = lte_lc_power_off();
+#if defined(CONFIG_LTE_LINK_CONTROL) && defined(CONFIG_MOSH_LINK)
+		link_func_mode_set(LTE_LC_FUNC_MODE_POWER_OFF, false);
+#else
+		err = lte_lc_power_off(NULL);
+#endif
 		break;
 	case LWM2M_CARRIER_EVENT_BOOTSTRAPPED:
 		mosh_print("LwM2M carrier event: bootstrapped");
