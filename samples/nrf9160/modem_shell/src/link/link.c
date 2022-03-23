@@ -246,15 +246,10 @@ void link_init(void)
 
 	lte_lc_register_handler(link_ind_handler);
 
-/* With CONFIG_LWM2M_CARRIER, MoSH auto connect must be disabled
- * because LwM2M carrier lib handles that.
- */
-#if !defined(CONFIG_LWM2M_CARRIER)
 	if (link_sett_is_normal_mode_autoconn_enabled() == true) {
 		link_func_mode_set(LTE_LC_FUNC_MODE_NORMAL,
 				   link_sett_is_normal_mode_autoconn_rel14_used());
 	}
-#endif
 }
 
 void link_ind_handler(const struct lte_lc_evt *const evt)
