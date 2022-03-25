@@ -91,6 +91,10 @@ config MOSH_CLOUD
 	help
 	  MQTT connection to nRFCloud.
 
+config MOSH_BT
+	bool "MoSh BT features"
+	default n
+
 config MOSH_PRINT_BUFFER_SIZE
 	int "Buffer size used when printing modem shell output"
 	default 1024
