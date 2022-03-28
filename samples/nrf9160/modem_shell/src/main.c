@@ -27,6 +27,10 @@
 #include <dk_buttons_and_leds.h>
 #include "uart/uart_shell.h"
 
+#if defined(CONFIG_MOSH_BT)
+#include "bt_ctrl.h"
+#endif
+
 #if defined(CONFIG_MOSH_PPP)
 #include "ppp_ctrl.h"
 #endif
@@ -57,6 +61,9 @@ struct modem_param_info modem_param;
 struct k_poll_signal mosh_signal;
 
 K_SEM_DEFINE(nrf_modem_lib_initialized, 0, 1);
+#if defined(CONFIG_MOSH_BT)
+K_SEM_DEFINE(bt_initialized, 0, 1);
+#endif
 
 static void mosh_print_version_info(void)
 {
@@ -145,6 +152,12 @@ void main(void)
 	/* Wait until modemlib has been initialized. */
 	k_sem_take(&nrf_modem_lib_initialized, K_FOREVER);
 
+#endif
+#if defined(CONFIG_MOSH_BT)
+	bt_ctrl_init();
+
+	/* Wait until BT has been initialized. */
+	k_sem_take(&bt_initialized, K_FOREVER);
 #endif
 #if defined(CONFIG_MOSH_PPP)
 	ppp_ctrl_init();
