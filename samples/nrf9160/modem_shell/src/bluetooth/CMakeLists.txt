@@ -6,4 +6,5 @@
 
 target_include_directories(app PRIVATE .)
 
+target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bt_ctrl.c)
 target_sources(app PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/bt_shell.c)
