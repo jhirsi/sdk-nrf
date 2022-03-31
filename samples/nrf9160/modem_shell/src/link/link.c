@@ -341,7 +341,9 @@ void link_ind_handler(const struct lte_lc_evt *const evt)
 		link_shell_print_modem_sleep_notif(evt);
 
 		if (uart_disable_during_sleep_requested) {
+#if defined(CONFIG_PM_DEVICE)
 			uart_toggle_power_state_at_event(evt);
+#endif
 		}
 		break;
 	case LTE_LC_EVT_LTE_MODE_UPDATE:

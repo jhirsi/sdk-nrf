@@ -12,9 +12,12 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/hci.h>
+
 #if defined(CONFIG_BT_SCAN)
 #include <bluetooth/scan.h>
 #endif
+
+#include "bt_ctrl.h"
 
 static uint8_t mfg_data[] = { 0xff, 0xff, 0x00 };
 
@@ -80,8 +83,14 @@ static int cmd_bt(const struct shell *shell, size_t argc, char **argv)
 }
 
 #if defined(CONFIG_BT_SCAN)
-BT_SCAN_CB_INIT(scan_cb, scan_filter_match, scan_filter_no_match, scan_connecting_error, NULL);
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL, NULL, NULL);
 #endif
+
+static int cmd_bt_init(const struct shell *shell, size_t argc, char **argv)
+{
+	bt_ctrl_init();
+	return 0;
+}
 
 static int cmd_bt_scan_start(const struct shell *shell, size_t argc, char **argv)
 {
@@ -98,11 +107,10 @@ static int cmd_bt_scan_start(const struct shell *shell, size_t argc, char **argv
 	};
 #else
 	struct bt_le_scan_param scan_param = {
-		.type       = BT_LE_SCAN_TYPE_ACTIVE,
-		.options    = BT_LE_SCAN_OPT_NONE,
-		.interval   = BT_GAP_SCAN_FAST_INTERVAL,
-		.window     = BT_GAP_SCAN_FAST_WINDOW,
-	};
+			.type       = BT_LE_SCAN_TYPE_ACTIVE,
+			.options    = BT_LE_SCAN_OPT_NONE,
+			.interval   = BT_GAP_SCAN_FAST_INTERVAL,
+			.window     = BT_GAP_SCAN_FAST_WINDOW, };
 #endif
 
 #if defined(CONFIG_BT_SCAN)
@@ -115,7 +123,6 @@ static int cmd_bt_scan_start(const struct shell *shell, size_t argc, char **argv
 		return err;
 	}
 #else
-
 	err = bt_le_scan_start(&scan_param, scan_cb);
 	if (err) {
 		mosh_error("Starting scanning failed (err %d)\n", err);
@@ -154,11 +161,6 @@ static int cmd_bt_adv_start(const struct shell *shell, size_t argc, char **argv)
 {
 	int err;
 
-	err = bt_enable(NULL);
-	if (err) {
-		mosh_warn("Bluetooth init failed (err %d)", err);
-	}
-
 	err = bt_le_adv_start(BT_LE_ADV_NCONN, ad, ARRAY_SIZE(ad), NULL, 0);
 	if (err) {
 		mosh_error("Advertising failed to start (err %d)", err);
@@ -181,6 +183,7 @@ static int cmd_bt_adv_stop(const struct shell *shell, size_t argc, char **argv)
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_bt,
+	SHELL_CMD_ARG(init, NULL, "Init BT.", cmd_bt_init, 1, 0),
 	SHELL_CMD_ARG(scan_start, NULL, "Start BT scanning.", cmd_bt_scan_start, 1, 0),
 	SHELL_CMD_ARG(scan_stop, NULL, "Stop BT scanning.", cmd_bt_scan_stop, 1, 0),
 	SHELL_CMD_ARG(adv_start, NULL, "Start advertising.", cmd_bt_adv_start, 1, 0),
