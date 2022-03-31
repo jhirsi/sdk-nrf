@@ -67,6 +67,7 @@ static int cmd_uart_disable(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
+#if defined(CONFIG_PM_DEVICE)
 void uart_toggle_power_state_at_event(const struct lte_lc_evt *const evt)
 {
 	if (evt->type == LTE_LC_EVT_MODEM_SLEEP_ENTER) {
@@ -129,6 +130,7 @@ void uart_toggle_power_state(void)
 		mosh_print("Failed to change UART power state");
 	}
 }
+#endif
 
 static int cmd_uart_disable_when_sleep(void)
 {

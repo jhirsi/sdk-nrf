@@ -20,7 +20,7 @@ target_sources(app PRIVATE src/at/at_shell.c)
 
 add_subdirectory(src/print)
 add_subdirectory(src/utils)
-add_subdirectory(src/uart)
+add_subdirectory_ifdef(CONFIG_PM_DEVICE src/uart)
 add_subdirectory_ifdef(CONFIG_MOSH_WORKER_THREADS src/th)
 add_subdirectory_ifdef(CONFIG_MOSH_BT src/bluetooth)
 add_subdirectory_ifdef(CONFIG_MOSH_SOCK src/sock)

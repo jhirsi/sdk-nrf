@@ -103,10 +103,12 @@ static void button_handler(uint32_t button_states, uint32_t has_changed)
 		k_poll_signal_reset(&mosh_signal);
 	}
 
+#if defined(CONFIG_PM_DEVICE)
 	if (has_changed & button_states & DK_BTN2_MSK) {
 		mosh_print("Button 2 pressed, toggling UART power state");
 		uart_toggle_power_state();
 	}
+#endif
 }
 
 void main(void)
@@ -126,19 +128,20 @@ void main(void)
 	case MODEM_DFU_RESULT_OK:
 		printk("Modem firmware update successful!\n");
 		printk("Modem will run the new firmware after reboot\n");
-		sys_reboot(SYS_REBOOT_WARM);
+//		sys_reboot(SYS_REBOOT_WARM);
 		return;
 	case MODEM_DFU_RESULT_UUID_ERROR:
 	case MODEM_DFU_RESULT_AUTH_ERROR:
 		printk("Modem firmware update failed!\n");
 		printk("Modem will run non-updated firmware on reboot.\n");
-		sys_reboot(SYS_REBOOT_WARM);
+		//TODO: flag with MOSH_FOTA?
+		//sys_reboot(SYS_REBOOT_WARM);
 		return;
 	case MODEM_DFU_RESULT_HARDWARE_ERROR:
 	case MODEM_DFU_RESULT_INTERNAL_ERROR:
 		printk("Modem firmware update failed!\n");
 		printk("Fatal error.\n");
-		sys_reboot(SYS_REBOOT_WARM);
+//		sys_reboot(SYS_REBOOT_WARM);
 		return;
 	default:
 		/* Modem library initialization failed. */
