@@ -170,7 +170,7 @@ void scan_connecting_error(struct bt_scan_device_info *device_info)
 	LOG_ERR("Connection to peer failed!");
 }
 
-BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL, scan_connecting_error, NULL);
+BT_SCAN_CB_INIT(scan_cb, scan_filter_match, NULL, NULL, NULL);
 
 static void scan_start(void)
 {
@@ -191,7 +191,7 @@ static void scan_start(void)
 
 	bt_scan_init(&scan_init);
 	bt_scan_cb_register(&scan_cb);
-
+#if RM_JH
 	err = bt_scan_filter_add(BT_SCAN_FILTER_TYPE_UUID, BT_UUID_THINGY);
 	if (err) {
 		LOG_ERR("Scanning filters cannot be set");
@@ -202,7 +202,7 @@ static void scan_start(void)
 	if (err) {
 		LOG_ERR("Filters cannot be turned on");
 	}
-
+#endif
 	err = bt_scan_start(BT_SCAN_TYPE_SCAN_ACTIVE);
 	if (err) {
 		LOG_ERR("Scanning failed to start, err %d", err);
