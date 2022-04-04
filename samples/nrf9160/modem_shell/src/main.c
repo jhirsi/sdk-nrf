@@ -228,10 +228,13 @@ void main(void)
 
 #endif
 #if defined(CONFIG_MOSH_BT)
+#if RM_JH
 	bt_ctrl_init();
 
 	/* Wait until BT has been initialized. */
 	k_sem_take(&bt_initialized, K_FOREVER);
+#endif
+
 #endif
 #if defined(CONFIG_MOSH_PPP)
 	ppp_ctrl_init();
