@@ -9,7 +9,9 @@
 
 #include <zephyr.h>
 #include <sys/reboot.h>
+#if defined(CONFIG_MODEM_KEY_MGMT)
 #include <modem/modem_key_mgmt.h>
+#endif
 #include <net/fota_download.h>
 
 #include "fota.h"

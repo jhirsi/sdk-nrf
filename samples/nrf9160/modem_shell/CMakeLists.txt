@@ -19,7 +19,7 @@ target_sources(app PRIVATE src/shell.c)
 
 add_subdirectory(src/print)
 add_subdirectory(src/utils)
-add_subdirectory(src/at)
+add_subdirectory_ifdef(CONFIG_NRF_MODEM_LIB src/at)
 add_subdirectory_ifdef(CONFIG_PM_DEVICE src/uart)
 add_subdirectory_ifdef(CONFIG_MOSH_NRF91_NON_OFFLOADING_DEV src/drivers)
 add_subdirectory_ifdef(CONFIG_MOSH_WORKER_THREADS src/th)

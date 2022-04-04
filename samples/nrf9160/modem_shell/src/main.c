@@ -9,8 +9,9 @@
 
 #include <zephyr.h>
 #include <init.h>
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <nrf_modem.h>
-
+#endif
 #include <sys/types.h>
 #include <logging/log_ctrl.h>
 #include <sys/reboot.h>
@@ -19,7 +20,9 @@
 #include <shell/shell.h>
 #include <shell/shell_uart.h>
 
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <modem/nrf_modem_lib.h>
+#endif
 #include <modem/at_monitor.h>
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
@@ -186,7 +189,7 @@ void main(void)
 		MOSH_COMMON_WORKQ_PRIORITY,
 		&cfg);
 
-#if !defined(CONFIG_LWM2M_CARRIER)
+#if !defined(CONFIG_LWM2M_CARRIER) && defined(CONFIG_NRF_MODEM_LIB)
 	/* Get Modem library initialization return value. */
 	err = nrf_modem_lib_get_init_ret();
 	switch (err) {
