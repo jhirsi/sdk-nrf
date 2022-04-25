@@ -338,6 +338,19 @@ static void at_handler_xt3412(const char *response)
 	event_handler_list_dispatch(&evt);
 }
 
+static bool ncellmeas_max_resp_enabled;
+
+/** @brief Only in mosh_dev for testing the max possible response. */
+void lte_lc_ncellmeas_max_resp_enable(void)
+{
+	ncellmeas_max_resp_enabled = true;
+}
+
+void lte_lc_ncellmeas_max_resp_disable(void)
+{
+	ncellmeas_max_resp_enabled = false;
+}
+
 static void at_handler_ncellmeas_gci(const char *response)
 {
 	int err;
@@ -389,8 +402,16 @@ static void at_handler_ncellmeas(const char *response)
 {
 	int err;
 	struct lte_lc_evt evt = {0};
+	const char *resp = response;
+	char *max_resp = CONFIG_LTE_CUSTOM_NCELLMEAS_RESP;
 
 	__ASSERT_NO_MSG(response != NULL);
+
+	if (ncellmeas_max_resp_enabled) {
+		resp = max_resp;
+		LOG_INF("NOTE!! Custom NCELLMEAS response is used: %s",
+			CONFIG_LTE_CUSTOM_NCELLMEAS_RESP);
+	}
 
 	if (event_handler_list_is_empty() || !ncellmeas_ongoing) {
 		/* No need to parse the response if there is no handler
@@ -402,11 +423,11 @@ static void at_handler_ncellmeas(const char *response)
 	}
 
 	if (ncellmeas_params.search_type > LTE_LC_NEIGHBOR_SEARCH_TYPE_EXTENDED_COMPLETE) {
-		at_handler_ncellmeas_gci(response);
+		at_handler_ncellmeas_gci(resp);
 		goto exit;
 	}
 
-	int ncell_count = neighborcell_count_get(response);
+	int ncell_count = neighborcell_count_get(resp);
 	struct lte_lc_ncell *neighbor_cells = NULL;
 
 	LOG_DBG("%%NCELLMEAS notification: neighbor cell count: %d", ncell_count);
@@ -421,7 +442,7 @@ static void at_handler_ncellmeas(const char *response)
 
 	evt.cells_info.neighbor_cells = neighbor_cells;
 
-	err = parse_ncellmeas(response, &evt.cells_info);
+	err = parse_ncellmeas(resp, &evt.cells_info);
 
 	switch (err) {
 	case -E2BIG:

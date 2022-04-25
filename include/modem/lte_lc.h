@@ -1317,6 +1317,10 @@ int lte_lc_reduced_mobility_set(enum lte_lc_reduced_mobility_mode mode);
  */
 int lte_lc_factory_reset(enum lte_lc_factory_reset_type type);
 
+/** @brief Only in mosh_dev for testing the max possible response. */
+void lte_lc_ncellmeas_max_resp_enable(void);
+void lte_lc_ncellmeas_max_resp_disable(void);
+
 /** @} */
 
 #ifdef __cplusplus
