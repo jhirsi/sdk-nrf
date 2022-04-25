@@ -15,7 +15,7 @@
 #include <net/nrf_cloud_rest.h>
 #endif
 #include <modem/location.h>
-
+#include <modem/lte_lc.h>
 #include "mosh_print.h"
 #include "location_cmd_utils.h"
 
@@ -72,7 +72,10 @@ static const char location_get_usage_str[] =
 	"                      'any' (default), 'nrf' or 'here'\n"
 	"  --wifi_timeout,     Wi-Fi timeout in milliseconds. Zero means timeout is disabled.\n"
 	"  --wifi_service,     Used Wi-Fi positioning service:\n"
-	"                      'any' (default), 'nrf' or 'here'\n";
+	"                      'any' (default), 'nrf' or 'here'\n"
+	"  --custom_ncellmeas  Only in mosh_dev temporarily for cellular method: if set,\n"
+	"                      custom NCELLMEAS resp is used from\n"
+	"                      CONFIG_LTE_CUSTOM_NCELLMEAS_RESP\n";
 
 /******************************************************************************/
 
@@ -90,6 +93,7 @@ enum {
 	LOCATION_SHELL_OPT_CELLULAR_SERVICE,
 	LOCATION_SHELL_OPT_WIFI_TIMEOUT,
 	LOCATION_SHELL_OPT_WIFI_SERVICE,
+	LOCATION_SHELL_OPT_CELLULAR_CUSTOM_NCELLMEAS,
 };
 
 /* Specifying the expected options */
@@ -107,6 +111,7 @@ static struct option long_options[] = {
 	{ "cellular_service", required_argument, 0, LOCATION_SHELL_OPT_CELLULAR_SERVICE },
 	{ "wifi_timeout", required_argument, 0, LOCATION_SHELL_OPT_WIFI_TIMEOUT },
 	{ "wifi_service", required_argument, 0, LOCATION_SHELL_OPT_WIFI_SERVICE },
+	{ "custom_ncellmeas", no_argument, 0, LOCATION_SHELL_OPT_CELLULAR_CUSTOM_NCELLMEAS },
 	{ 0, 0, 0, 0 }
 };
 
@@ -330,6 +335,7 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 	int opt;
 	int ret = 0;
 	int long_index = 0;
+	bool use_custom_ncellmeas_resp = false;
 
 	gnss_location_to_cloud_format = NRF_CLOUD_GNSS_TYPE_PVT;
 
@@ -383,6 +389,11 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 			if (cellular_timeout == 0) {
 				cellular_timeout = SYS_FOREVER_MS;
 			}
+			break;
+
+		/* Only in mosh_dev for enabling testing the max response: */
+		case LOCATION_SHELL_OPT_CELLULAR_CUSTOM_NCELLMEAS:
+			use_custom_ncellmeas_resp = true;
 			break;
 
 		case LOCATION_SHELL_OPT_CELLULAR_SERVICE:
@@ -497,6 +508,12 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 		}
 
 		location_config_defaults_set(&config, method_count, method_list);
+
+		if (use_custom_ncellmeas_resp) {
+			lte_lc_ncellmeas_max_resp_enable();
+		} else {
+			lte_lc_ncellmeas_max_resp_disable();
+		}
 
 		for (uint8_t i = 0; i < method_count; i++) {
 			if (config.methods[i].method == LOCATION_METHOD_GNSS) {
