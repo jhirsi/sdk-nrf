@@ -1068,19 +1068,19 @@ BT shell support
 To build the MoSh sample with Zephyr BT shell command support, use the :file:`-DDTC_OVERLAY_FILE=bt.overlay` and :file:`-DOVERLAY_CONFIG=overlay-bt.conf` options.
 When running this configuration, you can perform BT scanning and advertising using the ``bt`` command.
 
-Compile as follows:
+Compile as follows for example for 1.0.2 DK:
 
 .. code-block:: console
 
-   west build -p -b nrf9160dk_nrf9160_ns -- -DDTC_OVERLAY_FILE="bt.overlay" -DOVERLAY_CONFIG="overlay-bt.conf"
+   west build -p -b nrf9160dk_nrf9160_ns@1.0.2 -- -DDTC_OVERLAY_FILE="bt.overlay;bt-0_14_0.overlay" -DOVERLAY_CONFIG="overlay-bt.conf"
 
 Additionally, you need to program the nRF52840 side of the nRF9160 DK as instructed in :ref:`lte_sensor_gateway`.
 
-Compile the :ref:`bluetooth-hci-lpuart-sample` sample as follows:
+Compile the :ref:`bluetooth-hci-lpuart-sample` as follows for 1.0.2 DK:
 
 .. code-block:: console
 
-   west build -p -b nrf9160dk_nrf52840
+   west build -p -b nrf9160dk_nrf52840@1.0.2
 
 The following example demonstrates how to use MoSh with two development kits, where one acts as a broadcaster and the other one as an observer.
 
