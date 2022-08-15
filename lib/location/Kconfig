@@ -6,8 +6,6 @@
 
 menuconfig LOCATION
 	bool "Location"
-	depends on NRF_MODEM_LIB
-	depends on LTE_LINK_CONTROL
 
 if LOCATION
 

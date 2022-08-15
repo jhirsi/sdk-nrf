@@ -50,7 +50,64 @@ struct wpa_ssid *ssid_0;
 
 #define MAX_SSID_LEN 32
 
+static char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad)
+{
+	int i, val;
 
+	for (i = 0, val = (byte & 0xf0) >> 4; i < 2; i++, val = byte & 0x0f) {
+		if (i == 0 && !pad && !val) {
+			continue;
+		}
+		if (val < 10) {
+			*ptr++ = (char) (val + '0');
+		} else {
+			*ptr++ = (char) (val - 10 + base);
+		}
+	}
+
+	*ptr = '\0';
+
+	return ptr;
+}
+
+static char *net_sprint_ll_addr_buf(const uint8_t *ll, uint8_t ll_len,
+			     char *buf, int buflen)
+{
+	uint8_t i, len, blen;
+	char *ptr = buf;
+
+	if (ll == NULL) {
+		return "<unknown>";
+	}
+
+	switch (ll_len) {
+	case 8:
+		len = 8U;
+		break;
+	case 6:
+		len = 6U;
+		break;
+	case 2:
+		len = 2U;
+		break;
+	default:
+		len = 6U;
+		break;
+	}
+
+	for (i = 0U, blen = buflen; i < len && blen > 0; i++) {
+		ptr = net_byte_to_hex(ptr, (char)ll[i], 'A', true);
+		*ptr++ = ':';
+		blen -= 3U;
+	}
+
+	if (!(ptr - buf)) {
+		return NULL;
+	}
+
+	*(ptr - 1) = '\0';
+	return buf;
+}
 static void scan_result_cb(struct net_if *iface,
 			   int status,
 			   struct wifi_scan_result *entry)
@@ -79,19 +136,23 @@ static void scan_result_cb(struct net_if *iface,
 	if (scan_result == 1U) {
 		shell_fprintf(context.shell,
 			      SHELL_NORMAL,
-			      "\n%-4s | %-32s %-5s | %-4s | %-4s | %-5s\n", "Num", "SSID",
-			      "(len)", "Chan", "RSSI", "Sec");
+			      "\n%-4s | %-32s %-5s | %-4s | %-4s | %-5s    | %s\n", "Num", "SSID",
+			      "(len)", "Chan", "RSSI", "Sec", "MAC");
 	}
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
 
 	shell_fprintf(context.shell,
 		      SHELL_NORMAL,
-		      "%-4d | %-32s %-5u | %-4u | %-4d | %-5s\n",
+		      "%-4d | %-32s %-5u | %-4u | %-4d | %-5s | %s\n",
 		      scan_result,
 		      entry->ssid,
 		      entry->ssid_length,
 		      entry->channel,
 		      entry->rssi,
-		      (entry->security == WIFI_SECURITY_TYPE_PSK ? "WPA/WPA2" : "Open"));
+		      (entry->security == WIFI_SECURITY_TYPE_PSK ? "WPA/WPA2" : "Open"),
+		      ((entry->mac_length) ?
+			      net_sprint_ll_addr_buf(entry->mac, WIFI_MAC_ADDR_LEN, mac_string_buf,
+					     sizeof(mac_string_buf)) : ""));
 }
 
 

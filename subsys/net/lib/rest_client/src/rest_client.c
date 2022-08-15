@@ -133,13 +133,13 @@ static int rest_client_sckt_timeouts_set(int fd, int32_t timeout_ms)
 		err = setsockopt(fd, SOL_SOCKET, SO_SNDTIMEO, &timeout, sizeof(timeout));
 		if (err) {
 			LOG_ERR("Failed to set socket send timeout, error: %d", errno);
-			return err;
+		//	return err;
 		}
 
 		err = setsockopt(fd, SOL_SOCKET, SO_RCVTIMEO, &timeout, sizeof(timeout));
 		if (err) {
 			LOG_ERR("Failed to set socket recv timeout, error: %d", errno);
-			return err;
+		//	return err;
 		}
 	}
 	return 0;
@@ -186,8 +186,11 @@ static int rest_client_sckt_connect(int *const fd,
 		  peer_addr,
 		  INET6_ADDRSTRLEN);
 	LOG_DBG("getaddrinfo() %s", log_strdup(peer_addr));
-
+//TODO: TLS cert storage differently when no libmodem, see CONFIG_SAMPLE_TFM_MBEDTLS
+#if RM_JH
 	proto = (sec_tag == REST_CLIENT_SEC_TAG_NO_SEC) ? IPPROTO_TCP : IPPROTO_TLS_1_2;
+#endif
+	proto = IPPROTO_TCP;
 	*fd = socket(addr_info->ai_family, SOCK_STREAM, proto);
 	if (*fd == -1) {
 		LOG_ERR("Failed to open socket, error: %d", errno);
@@ -195,6 +198,7 @@ static int rest_client_sckt_connect(int *const fd,
 		goto clean_up;
 	}
 
+#if RM_JH
 	if (sec_tag >= 0) {
 		ret = rest_client_sckt_tls_setup(*fd, hostname, sec_tag, tls_peer_verify);
 		if (ret) {
@@ -202,7 +206,7 @@ static int rest_client_sckt_connect(int *const fd,
 			goto clean_up;
 		}
 	}
-
+#endif
 	ret = rest_client_sckt_timeouts_set(*fd, timeout_ms);
 	if (ret) {
 		LOG_ERR("Failed to set socket timeouts, error: %d", errno);
@@ -380,6 +384,11 @@ int rest_client_request(struct rest_client_req_context *req_ctx,
 		goto clean_up;
 	}
 
+	LOG_DBG("API call response len: http status: %d, %u bytes, total %u bytes, data %s",
+		resp_ctx->http_status_code,
+		resp_ctx->response_len, resp_ctx->total_response_len,
+		log_strdup(req_ctx->resp_buff));
+
 	if (!resp_ctx->response || !resp_ctx->response_len) {
 		char *end_ptr = &req_ctx->resp_buff[resp_ctx->total_response_len];
 
@@ -389,8 +398,6 @@ int rest_client_request(struct rest_client_req_context *req_ctx,
 		resp_ctx->response = end_ptr;
 		resp_ctx->response_len = 0;
 	}
-	LOG_DBG("API call response len: http status: %d, %u bytes", resp_ctx->http_status_code,
-		resp_ctx->response_len);
 
 clean_up:
 	if (req_ctx->connect_socket != REST_CLIENT_SCKT_CONNECT) {

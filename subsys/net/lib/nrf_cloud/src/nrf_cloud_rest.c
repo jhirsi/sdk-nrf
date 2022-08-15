@@ -14,7 +14,9 @@
 #else
 #include <zephyr/net/socket.h>
 #endif
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <modem/nrf_modem_lib.h>
+#endif
 #include <modem/modem_key_mgmt.h>
 #include <net/nrf_cloud_rest.h>
 #include <net/rest_client.h>

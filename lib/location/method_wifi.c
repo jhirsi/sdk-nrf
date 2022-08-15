@@ -5,19 +5,31 @@
  */
 
 #include <stdio.h>
+
+#if defined(CONFIG_WIFI_NRF700X)
+#include <stdlib.h>
+#include <ctype.h>
+#include <zephyr/init.h>
+#endif
+
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/logging/log.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_event.h>
 #include <zephyr/net/wifi_mgmt.h>
-#include <modem/location.h>
 
+#if defined(CONFIG_WIFI_NRF700X)
+#include <zephyr_fmac_main.h>
+#endif
+#include <modem/location.h>
 #include "location_core.h"
 #include "location_utils.h"
 #include "wifi/wifi_service.h"
 
+#if !defined(CONFIG_WIFI_NRF700X)
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
+#endif
 
 BUILD_ASSERT(
 	IS_ENABLED(CONFIG_LOCATION_METHOD_WIFI_SERVICE_NRF_CLOUD) ||
@@ -31,12 +43,15 @@ struct method_wifi_start_work_args {
 };
 
 static struct net_if *wifi_iface;
+static struct device *wifi_dev;
 
 static struct method_wifi_start_work_args method_wifi_start_work;
 
 static bool running;
 
 static uint32_t current_scan_result_count;
+static uint32_t current_scan_result_with_mac_count;
+
 static uint32_t latest_scan_result_count;
 
 struct method_wifi_scan_result {
@@ -52,25 +67,134 @@ static K_SEM_DEFINE(wifi_scanning_ready, 0, 1);
 
 /******************************************************************************/
 
-static int method_wifi_scanning_start(void)
+#if defined(CONFIG_WIFI_NRF700X)
+//TODO: these 2 should be in zephyr networking utils that should be commonly accessible?
+static char *net_byte_to_hex(char *ptr, uint8_t byte, char base, bool pad)
 {
-	int ret;
+	int i, val;
 
-	LOG_DBG("Triggering start of Wi-Fi scanning");
-
-	latest_scan_result_count = 0;
-	current_scan_result_count = 0;
-
-	__ASSERT_NO_MSG(wifi_iface != NULL);
-	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, wifi_iface, NULL, 0);
-	if (ret) {
-		LOG_ERR("Failed to initiate Wi-Fi scanning: %d", ret);
-		ret = -EFAULT;
+	for (i = 0, val = (byte & 0xf0) >> 4; i < 2; i++, val = byte & 0x0f) {
+		if (i == 0 && !pad && !val) {
+			continue;
+		}
+		if (val < 10) {
+			*ptr++ = (char) (val + '0');
+		} else {
+			*ptr++ = (char) (val - 10 + base);
+		}
 	}
-	return ret;
+
+	*ptr = '\0';
+
+	return ptr;
 }
 
-/******************************************************************************/
+static char *net_sprint_ll_addr_buf(const uint8_t *ll, uint8_t ll_len,
+			     char *buf, int buflen)
+{
+	uint8_t i, len, blen;
+	char *ptr = buf;
+
+	if (ll == NULL) {
+		return "<unknown>";
+	}
+
+	switch (ll_len) {
+	case 8:
+		len = 8U;
+		break;
+	case 6:
+		len = 6U;
+		break;
+	case 2:
+		len = 2U;
+		break;
+	default:
+		len = 6U;
+		break;
+	}
+
+	for (i = 0U, blen = buflen; i < len && blen > 0; i++) {
+		ptr = net_byte_to_hex(ptr, (char)ll[i], 'A', true);
+		*ptr++ = ':';
+		blen -= 3U;
+	}
+
+	if (!(ptr - buf)) {
+		return NULL;
+	}
+
+	*(ptr - 1) = '\0';
+	return buf;
+}
+
+static void scan_result_cb(struct net_if *iface,
+			   int status,
+			   struct wifi_scan_result *entry)
+{
+	if (!iface) {
+		return;
+	}
+
+	if (!entry) {
+		if (status) {
+			printk("Scan request failed (%d)\n", status);
+		} else {
+			printk("Scan request done\n");
+			latest_scan_result_count =
+				(current_scan_result_with_mac_count >
+				 CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT) ?
+					CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT :
+					current_scan_result_with_mac_count;
+			current_scan_result_count = 0;
+			current_scan_result_with_mac_count = 0;
+			k_sem_give(&wifi_scanning_ready);
+		}
+		return;
+	}
+
+	current_scan_result_count++;
+
+	if (current_scan_result_count == 1U) {
+		printk("\n%-4s | %-32s %-5s | %-4s | %-4s | %-5s    | %s\n", "Num", "SSID",
+		       "(len)", "Chan", "RSSI", "Sec", "MAC");
+	}
+	uint8_t mac_string_buf[sizeof("xx:xx:xx:xx:xx:xx")];
+	struct method_wifi_scan_result *current;
+
+	printk("%-4d | %-32s %-5u | %-4u | %-4d | %-5s | %s\n",
+		      current_scan_result_count,
+		      entry->ssid,
+		      entry->ssid_length,
+		      entry->channel,
+		      entry->rssi,
+		      (entry->security == WIFI_SECURITY_TYPE_PSK ? "WPA/WPA2" : "Open"),
+		      ((entry->mac_length) ?
+			      net_sprint_ll_addr_buf(entry->mac, WIFI_MAC_ADDR_LEN, mac_string_buf,
+					     sizeof(mac_string_buf)) : ""));
+
+	if (1) { //to be: if (entry->mac_length) but now scan is returning mac addresses
+		current_scan_result_with_mac_count++;
+
+		if (current_scan_result_with_mac_count <=
+		    CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT) {
+			current = &latest_scan_results[current_scan_result_with_mac_count - 1];
+
+			sprintf(current->mac_addr_str, "%02x:%02x:%02x:%02x:%02x:%02x",
+				entry->mac[0], entry->mac[1], entry->mac[2], entry->mac[3],
+				entry->mac[4], entry->mac[5]);
+			snprintf(current->ssid_str, entry->ssid_length + 1, "%s", entry->ssid);
+
+			current->channel = entry->channel;
+			current->rssi = entry->rssi;
+
+			LOG_DBG("scan result #%d stored: ssid %s, mac address: %s, channel %d,",
+				current_scan_result_with_mac_count, log_strdup(current->ssid_str),
+				log_strdup(current->mac_addr_str), current->channel);
+		}
+	}
+}
+#else
 
 static void method_wifi_scan_result_handle(struct net_mgmt_event_callback *cb)
 {
@@ -112,6 +236,7 @@ static void method_wifi_scan_done_handle(struct net_mgmt_event_callback *cb)
 	} else {
 		LOG_DBG("Scan request done.");
 	}
+	EINVAL
 
 	latest_scan_result_count =
 		(current_scan_result_count > CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT) ?
@@ -140,6 +265,34 @@ void method_wifi_net_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint
 			break;
 		}
 	}
+}
+#endif
+
+/******************************************************************************/
+
+static int method_wifi_scanning_start(void)
+{
+	int ret;
+
+	LOG_DBG("Triggering start of Wi-Fi scanning");
+
+	latest_scan_result_count = 0;
+	current_scan_result_count = 0;
+
+	__ASSERT_NO_MSG(wifi_iface != NULL);
+#if defined(CONFIG_WIFI_NRF700X)
+	const struct wifi_nrf_dev_ops *dev_ops = wifi_dev->api;
+
+	return dev_ops->off_api.disp_scan(wifi_dev,
+					  scan_result_cb);
+#else
+	ret = net_mgmt(NET_REQUEST_WIFI_SCAN, wifi_iface, NULL, 0);
+	if (ret) {
+		LOG_ERR("Failed to initiate Wi-Fi scanning: %d", ret);
+		ret = -EFAULT;
+	}
+#endif
+	return ret;
 }
 
 /******************************************************************************/
@@ -173,6 +326,7 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 	/* Scanning done at this point of time. Store current time to response. */
 	location_utils_systime_to_location_datetime(&location_result.datetime);
 
+#if defined(CONFIG_NRF_MODEM_LIB)
 	if (!location_utils_is_default_pdn_active()) {
 		/* Not worth to start trying to fetch with the REST api over cellular.
 		 * Thus, fail faster in this case and save the trying "costs".
@@ -181,6 +335,7 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 		err = -EFAULT;
 		goto end;
 	}
+#endif
 	if (latest_scan_result_count > 1) {
 
 		request.timeout_ms = wifi_config.timeout;
@@ -275,7 +430,18 @@ int method_wifi_init(void)
 	running = false;
 	current_scan_result_count = 0;
 	latest_scan_result_count = 0;
-	const struct device *wifi_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_location_wifi));
+
+	wifi_iface = NULL;
+
+#if defined(CONFIG_WIFI_NRF700X)
+	wifi_iface = net_if_get_default(); /* TODO: not default always */
+	wifi_dev = net_if_get_device(wifi_iface);
+	if (wifi_iface == NULL) {
+		LOG_ERR("Could not get the Wi-Fi net interface");
+		return -EFAULT;
+	}
+#else
+	wifi_dev = DEVICE_DT_GET(DT_CHOSEN(ncs_location_wifi));
 
 	wifi_iface = NULL;
 	if (!device_is_ready(wifi_dev)) {
@@ -292,5 +458,6 @@ int method_wifi_init(void)
 	net_mgmt_init_event_callback(&method_wifi_net_mgmt_cb, method_wifi_net_mgmt_event_handler,
 				     (NET_EVENT_WIFI_SCAN_RESULT | NET_EVENT_WIFI_SCAN_DONE));
 	net_mgmt_add_event_callback(&method_wifi_net_mgmt_cb);
+#endif
 	return 0;
 }
