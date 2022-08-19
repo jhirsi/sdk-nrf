@@ -6,6 +6,8 @@
 
 #include <stdlib.h>
 #include <zephyr/shell/shell.h>
+#include <cJSON.h>
+#include <net/nrf_cloud.h>
 
 #include "mosh_print.h"
 
@@ -35,6 +37,12 @@ static int cmd_timestamps_disable(const struct shell *shell, size_t argc, char *
 	return 0;
 }
 
+SHELL_STATIC_SUBCMD_SET_CREATE(
+	sub_timestamps,
+	SHELL_CMD(enable, NULL, "Enable timestamps in shell output.", cmd_timestamps_enable),
+	SHELL_CMD(disable, NULL, "Disable timestamps in shell output.", cmd_timestamps_disable),
+SHELL_SUBCMD_SET_END);
+
 #if defined(CONFIG_MOSH_CLOUD_MQTT)
 static int cmd_cloud_echo_enable(const struct shell *shell, size_t argc, char **argv)
 {
@@ -57,10 +65,67 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 SHELL_SUBCMD_SET_END);
 #endif
 
+static int cmd_buffer_enable(const struct shell *shell, size_t argc, char **argv)
+{
+	bool enabled = mosh_print_output_buf_enable();
+
+	if (enabled) {
+		mosh_print("Enable shell output to internal output buffer");
+	} else {
+		mosh_error("Not enough memory to enable shell output to internal output buffer");
+	}
+	return 0;
+}
+
+static int cmd_buffer_disable(const struct shell *shell, size_t argc, char **argv)
+{
+	mosh_print_output_buf_disable();
+	mosh_print("Disable shell output to internal output buffer");
+	return 0;
+}
+
+static int cmd_buffer_show(const struct shell *shell, size_t argc, char **argv)
+{
+	if (mosh_print_output_buf_get() == NULL) {
+		mosh_warn("Cannot show internal shell output buffer because it's disabled");
+		return -EINVAL;
+	}
+
+	/* Use printf for a large string that wouldn't print properly with
+	 * mosh_print due to size limitation
+	 */
+	printf("Internal output buffer:\n%s", mosh_print_output_buf_get());
+	return 0;
+}
+
+#if defined(CONFIG_MOSH_CLOUD_MQTT)
+static int cmd_buffer_send(const struct shell *shell, size_t argc, char **argv)
+{
+	if (mosh_print_output_buf_get() == NULL) {
+		mosh_warn("Cannot send internal shell output buffer because it's disabled");
+		return -EINVAL;
+	}
+
+	return mosh_print_output_buf_send();
+}
+#endif
+
 SHELL_STATIC_SUBCMD_SET_CREATE(
-	sub_timestamps,
-	SHELL_CMD(enable, NULL, "Enable timestamps in shell output.", cmd_timestamps_enable),
-	SHELL_CMD(disable, NULL, "Disable timestamps in shell output.", cmd_timestamps_disable),
+	sub_buffer,
+	SHELL_CMD(
+		enable, NULL,
+		"Enable shell output to an internal output buffer.", cmd_buffer_enable),
+	SHELL_CMD(
+		disable, NULL,
+		"Disable shell output to an internal output buffer.", cmd_buffer_disable),
+	SHELL_CMD(
+		show, NULL,
+		"Show internal shell output buffer in the shell.", cmd_buffer_show),
+#if defined(CONFIG_MOSH_CLOUD_MQTT)
+	SHELL_CMD(
+		send, NULL,
+		"Send internal shell output buffer to cloud.", cmd_buffer_send),
+#endif
 SHELL_SUBCMD_SET_END);
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
@@ -73,6 +138,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		cloud, &sub_cloud_echo,
 		"Enable/disable echoing shell output to cloud over MQTT.", print_help),
 #endif
+	SHELL_CMD(
+		buffer, &sub_buffer,
+		"Enable/disable echoing shell output to internal output buffer "
+		"which can be used later for various purposes.", print_help),
 SHELL_SUBCMD_SET_END);
 
 SHELL_CMD_REGISTER(print, &sub_print, "Commands for shell output formatting.", print_help);

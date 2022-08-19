@@ -31,6 +31,10 @@ bool mosh_print_timestamp_use;
 bool mosh_print_cloud_echo;
 #endif
 
+#define MOSH_PRINT_OUTPUT_BUF_SIZE 2048
+char *mosh_print_output_buf;
+static uint32_t mosh_print_output_buf_index;
+
 /** Buffer used for printing the timestamp. */
 static char timestamp_str[30];
 /** Buffer used for generating the text to be printed. */
@@ -127,17 +131,31 @@ void mosh_fprintf_valist(enum mosh_print_level print_level, const char *fmt, va_
 		break;
 	}
 
+	uint32_t mosh_print_buf_len = strlen(mosh_print_buf);
+
 #if defined(CONFIG_MOSH_CLOUD_MQTT)
 	if (mosh_print_cloud_echo) {
 		struct nrf_cloud_sensor_data mosh_cloud_print = {
 			.type = NRF_CLOUD_DEVICE_INFO,
 			.data.ptr = mosh_print_buf,
-			.data.len = strlen(mosh_print_buf),
+			.data.len = mosh_print_buf_len,
 		};
 
 		nrf_cloud_sensor_data_stream(&mosh_cloud_print);
 	}
 #endif
+
+	if (mosh_print_output_buf != NULL) {
+		if (MOSH_PRINT_OUTPUT_BUF_SIZE - mosh_print_output_buf_index < mosh_print_buf_len) {
+			mosh_print_output_buf_index = 0;
+		}
+		mosh_print_output_buf[mosh_print_output_buf_index] = '\n';
+		mosh_print_output_buf_index++;
+		strncpy(mosh_print_output_buf + mosh_print_output_buf_index,
+			mosh_print_buf,
+			MOSH_PRINT_OUTPUT_BUF_SIZE - mosh_print_output_buf_index);
+		mosh_print_output_buf_index += mosh_print_buf_len;
+	}
 
 	k_mutex_unlock(&mosh_print_buf_mutex);
 }
@@ -155,3 +173,61 @@ void mosh_print_no_format(const char *usage)
 {
 	shell_print(mosh_shell, "%s", usage);
 }
+
+char *mosh_print_output_buf_get(void)
+{
+	return mosh_print_output_buf;
+}
+
+bool mosh_print_output_buf_enable(void)
+{
+	mosh_print_output_buf_index = 0;
+	mosh_print_output_buf = k_malloc(MOSH_PRINT_OUTPUT_BUF_SIZE);
+	return mosh_print_output_buf != NULL;
+}
+
+void mosh_print_output_buf_disable(void)
+{
+	mosh_print_output_buf_index = 0;
+	k_free(mosh_print_output_buf);
+	mosh_print_output_buf = NULL;
+}
+
+#if defined(CONFIG_MOSH_CLOUD_MQTT)
+int mosh_print_output_buf_send(void)
+{
+#if 1
+	cJSON * const print_buf_obj = cJSON_CreateObject();
+	/* TODO: error handling missing */
+	cJSON_AddStringToObjectCS(print_buf_obj, "appId", "MOSH_CMD_OUTPUT");
+	cJSON_AddStringToObjectCS(print_buf_obj, "messageType", "DATA");
+	cJSON_AddStringToObjectCS(print_buf_obj, "data", mosh_print_output_buf);
+	cJSON_AddNumberToObjectCS(print_buf_obj, "ts", 1);
+	char *body = cJSON_PrintUnformatted(print_buf_obj);
+
+	cJSON_Delete(print_buf_obj);
+
+	struct nrf_cloud_tx_data mqtt_msg = {
+		.data.ptr = body,
+		.data.len = strlen(body),
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.topic_type = NRF_CLOUD_TOPIC_MESSAGE,
+	};
+	int ret = nrf_cloud_send(&mqtt_msg);
+#else
+	/* THIS CRASHES */
+	struct nrf_cloud_sensor_data mqtt_msg = {
+		.type = NRF_CLOUD_DEVICE_INFO,
+		.data.ptr = mosh_print_output_buf,
+		.data.len = strlen(mosh_print_output_buf),
+	};
+	int ret = nrf_cloud_sensor_data_stream(&mqtt_msg);
+#endif
+	//printf("Sending print buffer to nRF Cloud via MQTT, body: %s\n", body);
+
+	if (ret) {
+		mosh_error("MQTT: location sending failed");
+	}
+	return 0;
+}
+#endif
