@@ -84,6 +84,20 @@ out:
 	return status;
 }
 
+static inline enum wifi_security_type drv_to_wifi_mgmt(int drv_security_type)
+{
+	switch(drv_security_type) {
+		case IMG_OPEN:
+			return WIFI_SECURITY_TYPE_NONE;
+		case IMG_WPA2:
+			return WIFI_SECURITY_TYPE_PSK;
+		case IMG_WPA3:
+			return WIFI_SECURITY_TYPE_SAE;
+		default:
+			return WIFI_SECURITY_TYPE_UNKNOWN;
+	}
+}
+
 void wifi_nrf_event_proc_disp_scan_res_zep(void *vif_ctx,
 					   struct img_umac_event_new_scan_display_results *scan_res,
 					   unsigned int event_len,
@@ -104,12 +118,8 @@ void wifi_nrf_event_proc_disp_scan_res_zep(void *vif_ctx,
 		res.ssid_length = MIN(sizeof(res.ssid), r->ssid.img_ssid_len);
 
 		res.channel = r->nwk_channel;
-		res.security = WIFI_SECURITY_TYPE_NONE;
 
-		/* TODO : show other security modes as PSK */
-		if (r->security_type != IMG_OPEN) {
-			res.security = WIFI_SECURITY_TYPE_PSK;
-		}
+		res.security = drv_to_wifi_mgmt(r->security_type);
 
 		memcpy(res.ssid,
 		       r->ssid.img_ssid,
