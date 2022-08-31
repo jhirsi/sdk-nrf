@@ -5,6 +5,7 @@
 #
 
 zephyr_library()
+set(WIFI_NRF_DRV_BASE ${WEST_TOPDIR}/nrf/drivers/wifi/nrf700x)
 zephyr_library_sources(location.c)
 zephyr_library_sources(location_core.c)
 zephyr_library_sources(location_utils.c)

@@ -105,12 +105,13 @@ static int rest_client_sckt_tls_setup(int fd, const char *const tls_hostname,
 		cache = TLS_SESSION_CACHE_DISABLED;
 	}
 
+#if defined(CONFIG_NRF_MODEM_LIB)
 	err = setsockopt(fd, SOL_TLS, TLS_SESSION_CACHE, &cache, sizeof(cache));
 	if (err) {
 		LOG_ERR("Unable to set session cache, errno %d", errno);
 		return err;
 	}
-
+#endif
 	if (tls_hostname) {
 		err = setsockopt(fd, SOL_TLS, TLS_HOSTNAME, tls_hostname, strlen(tls_hostname));
 		if (err) {
@@ -121,6 +122,7 @@ static int rest_client_sckt_tls_setup(int fd, const char *const tls_hostname,
 	return 0;
 }
 
+#if defined(CONFIG_NRF_MODEM_LIB)
 static int rest_client_sckt_timeouts_set(int fd, int32_t timeout_ms)
 {
 	int err;
@@ -144,6 +146,7 @@ static int rest_client_sckt_timeouts_set(int fd, int32_t timeout_ms)
 	}
 	return 0;
 }
+#endif
 
 static int rest_client_sckt_connect(int *const fd,
 				    const char *const hostname,
@@ -200,14 +203,14 @@ static int rest_client_sckt_connect(int *const fd,
 			goto clean_up;
 		}
 	}
-
+#if defined(CONFIG_NRF_MODEM_LIB)
 	ret = rest_client_sckt_timeouts_set(*fd, timeout_ms);
 	if (ret) {
 		LOG_ERR("Failed to set socket timeouts, error: %d", errno);
 		ret = -EINVAL;
 		goto clean_up;
 	}
-
+#endif
 	LOG_DBG("Connecting to %s port %s", hostname, portstr);
 
 	ret = connect(*fd, addr_info->ai_addr, addr_info->ai_addrlen);

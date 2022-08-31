@@ -23,3 +23,5 @@ target_include_directories(mbedcrypto_common
 target_sources(app PRIVATE
 	src/wifi_main.c
 )
+
+add_subdirectory_ifdef(CONFIG_LOCATION src/location)
