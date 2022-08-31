@@ -24,3 +24,5 @@ target_sources(app PRIVATE
 	src/wifi_main.c
 	src/wifi_shell.c
 )
+
+add_subdirectory_ifdef(CONFIG_LOCATION src/location)

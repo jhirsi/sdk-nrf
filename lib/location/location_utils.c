@@ -12,7 +12,9 @@
 
 #include <zephyr/posix/time.h>
 
+#if defined(CONFIG_NRF_MODEM_LIB)
 #include <nrf_modem_at.h>
+#endif
 #include <modem/at_cmd_parser.h>
 #include <modem/at_params.h>
 #include <net/nrf_cloud.h>
@@ -21,6 +23,8 @@
 #include "location_utils.h"
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
+
+#if defined(CONFIG_NRF_MODEM_LIB)
 
 #define AT_CMD_PDP_ACT_READ "AT+CGACT?"
 #define MODEM_PARAM_STR_MAX_LEN 16
@@ -118,7 +122,7 @@ const char *location_utils_nrf_cloud_jwt_generate(void)
 
 	return jwt_buf;
 }
-
+#endif
 void location_utils_systime_to_location_datetime(struct location_datetime *datetime)
 {
 	struct timespec tp;
