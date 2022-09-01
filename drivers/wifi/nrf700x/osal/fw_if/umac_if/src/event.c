@@ -16,7 +16,7 @@
 #include "fmac_cmd.h"
 #include "fmac_ap.h"
 
-#ifndef CONFIG_NRF700X_RADIO_TEST
+#ifdef CONFIG_WPA_SUPP
 static enum wifi_nrf_status
 wifi_nrf_fmac_if_state_chg_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 					 unsigned char *umac_head,
@@ -126,7 +126,7 @@ static void umac_event_connect(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 	return;
 
 }
-
+#endif /* CONFIG_WPA_SUPP */
 
 static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 						    void *event_data,
@@ -136,7 +136,9 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 	struct img_umac_hdr *umac_hdr = NULL;
 	struct wifi_nrf_fmac_vif_ctx *vif_ctx = NULL;
 	struct wifi_nrf_fmac_callbk_fns *callbk_fns = NULL;
+#ifdef CONFIG_WPA_SUPP
 	struct img_umac_event_vif_state *evnt_vif_state = NULL;
+#endif /* CONFIG_WPA_SUPP */
 	unsigned char if_id = 0;
 	unsigned int event_num = 0;
 	bool more_res = false;
@@ -191,21 +193,6 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      __func__,
 					      umac_hdr->cmd_evnt);
 		break;
-	case IMG_UMAC_EVENT_SCAN_RESULT:
-		if (umac_hdr->seq != 0)
-			more_res = true;
-
-		if (callbk_fns->scan_res_callbk_fn)
-			callbk_fns->scan_res_callbk_fn(vif_ctx->os_vif_ctx,
-						       event_data,
-						       event_len,
-						       more_res);
-		else
-			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
-					      "%s: No callback registered for event %d\n",
-					      __func__,
-					      umac_hdr->cmd_evnt);
-		break;
 	case IMG_UMAC_EVENT_SCAN_DISPLAY_RESULT:
 		if (umac_hdr->seq != 0)
 			more_res = true;
@@ -215,6 +202,22 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 							    event_data,
 							    event_len,
 							    more_res);
+		else
+			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
+					      "%s: No callback registered for event %d\n",
+					      __func__,
+					      umac_hdr->cmd_evnt);
+		break;
+#ifdef CONFIG_WPA_SUPP
+	case IMG_UMAC_EVENT_SCAN_RESULT:
+		if (umac_hdr->seq != 0)
+			more_res = true;
+
+		if (callbk_fns->scan_res_callbk_fn)
+			callbk_fns->scan_res_callbk_fn(vif_ctx->os_vif_ctx,
+						       event_data,
+						       event_len,
+						       more_res);
 		else
 			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
 					      "%s: No callback registered for event %d\n",
@@ -379,17 +382,13 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 	case IMG_UMAC_EVENT_DISCONNECT:
 		/* Nothing to be done */
 		break;
-#ifdef CONFIG_AP_MODE
 	case IMG_UMAC_EVENT_NEW_STATION:
 	case IMG_UMAC_EVENT_DEL_STATION:
 		umac_event_connect(fmac_dev_ctx,
 				   event_data);
 		break;
-#endif /* CONFIG_AP_MODE */
-	case IMG_UMAC_EVENT_REMAIN_ON_CHANNEL:
-		if (callbk_fns->roc_callbk_fn)
+#ifdef CONFIG_NRF700X_P2P_MODE
 			callbk_fns->roc_callbk_fn(vif_ctx->os_vif_ctx,
-						  event_data,
 						  event_len);
 		else
 			wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
@@ -408,6 +407,7 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      __func__,
 					      umac_hdr->cmd_evnt);
 		break;
+#endif /* CONFIG_WPA_SUPP */
 	default:
 		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
 				      "%s: No callback registered for event %d\n",
@@ -450,6 +450,7 @@ wifi_nrf_fmac_data_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 		status = wifi_nrf_fmac_tx_done_event_process(fmac_dev_ctx,
 							     umac_head);
 		break;
+#ifdef CONFIG_WPA_SUPP
 	case IMG_CMD_CARRIER_ON:
 		status = wifi_nrf_fmac_if_state_chg_event_process(fmac_dev_ctx,
 								  umac_head,
@@ -460,6 +461,7 @@ wifi_nrf_fmac_data_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 								  umac_head,
 								  WIFI_NRF_FMAC_IF_STATE_DOWN);
 		break;
+#endif /* CONFIG_WPA_SUPP */
 #ifdef CONFIG_NRF700X_AP_MODE
 	case IMG_CMD_PM_MODE:
 		status = sap_client_update_pmmode(fmac_dev_ctx,
