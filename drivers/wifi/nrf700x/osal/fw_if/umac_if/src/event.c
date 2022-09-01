@@ -388,6 +388,8 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 				   event_data);
 		break;
 #ifdef CONFIG_NRF700X_P2P_MODE
+	case IMG_UMAC_EVENT_REMAIN_ON_CHANNEL:
+		if (callbk_fns->roc_callbk_fn)
 			callbk_fns->roc_callbk_fn(vif_ctx->os_vif_ctx,
 						  event_len);
 		else
@@ -407,6 +409,7 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 					      __func__,
 					      umac_hdr->cmd_evnt);
 		break;
+#endif /* CONFIG_NRF700X_P2P_MODE */
 #endif /* CONFIG_WPA_SUPP */
 	default:
 		wifi_nrf_osal_log_err(fmac_dev_ctx->fpriv->opriv,
