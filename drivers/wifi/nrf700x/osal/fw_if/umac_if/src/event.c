@@ -379,11 +379,13 @@ static enum wifi_nrf_status umac_event_ctrl_process(struct wifi_nrf_fmac_dev_ctx
 	case IMG_UMAC_EVENT_DISCONNECT:
 		/* Nothing to be done */
 		break;
+#ifdef CONFIG_AP_MODE
 	case IMG_UMAC_EVENT_NEW_STATION:
 	case IMG_UMAC_EVENT_DEL_STATION:
 		umac_event_connect(fmac_dev_ctx,
 				   event_data);
 		break;
+#endif /* CONFIG_AP_MODE */
 	case IMG_UMAC_EVENT_REMAIN_ON_CHANNEL:
 		if (callbk_fns->roc_callbk_fn)
 			callbk_fns->roc_callbk_fn(vif_ctx->os_vif_ctx,
@@ -458,6 +460,7 @@ wifi_nrf_fmac_data_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 								  umac_head,
 								  WIFI_NRF_FMAC_IF_STATE_DOWN);
 		break;
+#ifdef CONFIG_NRF700X_AP_MODE
 	case IMG_CMD_PM_MODE:
 		status = sap_client_update_pmmode(fmac_dev_ctx,
 						  umac_head);
@@ -466,6 +469,7 @@ wifi_nrf_fmac_data_event_process(struct wifi_nrf_fmac_dev_ctx *fmac_dev_ctx,
 		status = sap_client_ps_get_frames(fmac_dev_ctx,
 						  umac_head);
 		break;
+#endif
 	default:
 		break;
 	}
