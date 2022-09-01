@@ -26,3 +26,9 @@ target_sources(app PRIVATE
 )
 
 add_subdirectory_ifdef(CONFIG_LOCATION src/location)
+
+if (CONFIG_NRF_CLOUD_MQTT)
+        # Make folder containing certificates global so that it can be located by the configured
+        # cloud library.
+        zephyr_include_directories(src/cloud-certs)
+endif()

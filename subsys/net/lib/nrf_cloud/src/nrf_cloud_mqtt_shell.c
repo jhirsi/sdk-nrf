@@ -297,6 +297,90 @@ static void cmd_cloud_connect(const struct shell *shell, size_t argc, char **arg
 		} else if (err) {
 			shell_error(shell, "nrf_cloud_init, error: %d", err);
 			return;
+		} else {
+#if !defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
+			static const char ca_certificate[] =
+				"-----BEGIN CERTIFICATE-----\n"
+				"MIIDQTCCAimgAwIBAgITBmyfz5m/jAo54vB4ikPmljZbyjANBgkqhkiG9w0BAQsF\n"
+				"ADA5MQswCQYDVQQGEwJVUzEPMA0GA1UEChMGQW1hem9uMRkwFwYDVQQDExBBbWF6\n"
+				"b24gUm9vdCBDQSAxMB4XDTE1MDUyNjAwMDAwMFoXDTM4MDExNzAwMDAwMFowOTEL\n"
+				"MAkGA1UEBhMCVVMxDzANBgNVBAoTBkFtYXpvbjEZMBcGA1UEAxMQQW1hem9uIFJv\n"
+				"b3QgQ0EgMTCCASIwDQYJKoZIhvcNAQEBBQADggEPADCCAQoCggEBALJ4gHHKeNXj\n"
+				"ca9HgFB0fW7Y14h29Jlo91ghYPl0hAEvrAIthtOgQ3pOsqTQNroBvo3bSMgHFzZM\n"
+				"9O6II8c+6zf1tRn4SWiw3te5djgdYZ6k/oI2peVKVuRF4fn9tBb6dNqcmzU5L/qw\n"
+				"IFAGbHrQgLKm+a/sRxmPUDgH3KKHOVj4utWp+UhnMJbulHheb4mjUcAwhmahRWa6\n"
+				"VOujw5H5SNz/0egwLX0tdHA114gk957EWW67c4cX8jJGKLhD+rcdqsq08p8kDi1L\n"
+				"93FcXmn/6pUCyziKrlA4b9v7LWIbxcceVOF34GfID5yHI9Y/QCB/IIDEgEw+OyQm\n"
+				"jgSubJrIqg0CAwEAAaNCMEAwDwYDVR0TAQH/BAUwAwEB/zAOBgNVHQ8BAf8EBAMC\n"
+				"AYYwHQYDVR0OBBYEFIQYzIU07LwMlJQuCFmcx7IQTgoIMA0GCSqGSIb3DQEBCwUA\n"
+				"A4IBAQCY8jdaQZChGsV2USggNiMOruYou6r4lK5IpDB/G/wkjUu0yKGX9rbxenDI\n"
+				"U5PMCCjjmCXPI6T53iHTfIUJrU6adTrCC2qJeHZERxhlbI1Bjjt/msv0tadQ1wUs\n"
+				"N+gDS63pYaACbvXy8MWy7Vu33PqUXHeeE6V/Uq2V8viTO96LXFvKWlJbYK8U90vv\n"
+				"o/ufQJVtMVT8QtPHRh8jrdkPSHCa2XV4cdFyQzR1bldZwgJcJmApzyMZFo6IQ6XU\n"
+				"5MsI+yMRQ+hDKXJioaldXgjUkK642M4UwtBV8ob2xJNDd2ZhwLnoQdeXeGADbkpy\n"
+				"rqXRfboQnoZsG4q5WTP468SQvvG5\n"
+				"-----END CERTIFICATE-----\n";
+			static const char client_certificate[] =
+				"-----BEGIN CERTIFICATE-----\n"
+				"MIIBxTCCAWwCFGJ5F5aDoO1cvcakhUZz/NUQk1s3MAoGCCqGSM49BAMCMH0xCzAJ\n"
+				"BgNVBAYTAkZJMRAwDgYDVQQIDAdGaW5sYW5kMRAwDgYDVQQHDAdUYW1wZXJlMR0w\n"
+				"GwYDVQQKDBROb3JkaWMgU2VtaWNvbmR1Y3RvcjELMAkGA1UECwwCUkQxHjAcBgNV\n"
+				"BAMMFW5yZi13aWZpLWY0Y2UzNjAwMDA4YzAeFw0yMjA5MDEwNjI1NDFaFw0yODAy\n"
+				"MjIwNjI1NDFaME4xCzAJBgNVBAYTAkZJMQ8wDQYDVQQKDAZOb3JkaWMxDjAMBgNV\n"
+				"BAsMBUNsb3VkMR4wHAYDVQQDDBVucmYtd2lmaS1mNGNlMzYwMDAwOGMwWTATBgcq\n"
+				"hkjOPQIBBggqhkjOPQMBBwNCAASVOrnR2esENZZw9cURyL6V/L9xwjqDqe2rbmDY\n"
+				"0TKWGuL7ix+uJIyL8eddDd9C8ABqIG0IgddJJ5OssLTDoQxDMAoGCCqGSM49BAMC\n"
+				"A0cAMEQCIFrm9DbMoC56fhp6IPKzo4fISPWImVokYciUSBbMxJFqAiArOQAatoGb\n"
+				"Ad0AEestDgjCdUb9sv5NYmzRQJEBtcMPzA==\n"
+				"-----END CERTIFICATE-----\n";
+			static const char private_key[] =
+				"-----BEGIN PRIVATE KEY-----\n"
+				"MIGHAgEAMBMGByqGSM49AgEGCCqGSM49AwEHBG0wawIBAQQgzIwsIQm3foaoDcM0\n"
+				"yachwAtnpeN5zIFVQz5dqyNFYFmhRANCAASVOrnR2esENZZw9cURyL6V/L9xwjqD\n"
+				"qe2rbmDY0TKWGuL7ix+uJIyL8eddDd9C8ABqIG0IgddJJ5OssLTDoQxD\n"
+				"-----END PRIVATE KEY-----\n";
+			int ret;
+
+			/* Load CA certificate */
+			ret = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+						 TLS_CREDENTIAL_CA_CERTIFICATE,
+						 ca_certificate, sizeof(ca_certificate));
+			if (ret != 0) {
+				shell_error(shell, "Failed to register CA certificate: %d", ret);
+			} else {
+				shell_print(shell, "CA cert OK");
+			}
+
+			/* Load server/client certificate */
+			ret = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+						 TLS_CREDENTIAL_SERVER_CERTIFICATE,
+						 client_certificate, sizeof(client_certificate));
+			if (ret < 0) {
+				shell_error(shell, "Failed to register public cert: %d", ret);
+			} else {
+				shell_print(shell, "client cert OK");
+			}
+
+			/* Load private key */
+			ret = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
+						 TLS_CREDENTIAL_PRIVATE_KEY,
+						 private_key, sizeof(private_key));
+			if (ret < 0) {
+				shell_error(shell, "Failed to register private key: %d", ret);
+			} else {
+				shell_print(shell, "priv key ok");
+			}
+#endif
+		}
+
+		/* look up our configured device id */
+		char client_id[NRF_CLOUD_CLIENT_ID_MAX_LEN];
+
+		err = nrf_cloud_client_id_get(client_id, sizeof(client_id));
+		if (err) {
+			shell_error(shell, "Error getting client id: %d", err);
+		} else {
+			shell_print(shell, "Client id: %s", client_id);
 		}
 
 		initialized = true;

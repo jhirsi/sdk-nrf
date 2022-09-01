@@ -613,6 +613,8 @@ static int nct_provision(void)
 		if (err < 0) {
 			LOG_ERR("Failed to register ca certificate: %d", err);
 			return err;
+		} else {
+			LOG_WRN("CA cert OK");
 		}
 		err = tls_credential_add(CONFIG_NRF_CLOUD_SEC_TAG,
 					 TLS_CREDENTIAL_PRIVATE_KEY,
@@ -621,6 +623,8 @@ static int nct_provision(void)
 		if (err < 0) {
 			LOG_ERR("Failed to register private key: %d", err);
 			return err;
+		} else {
+			LOG_WRN("Priv key OK");
 		}
 		err = tls_credential_add(
 			CONFIG_NRF_CLOUD_SEC_TAG,
@@ -631,6 +635,8 @@ static int nct_provision(void)
 			LOG_ERR("Failed to register public certificate: %d",
 				err);
 			return err;
+		} else {
+			LOG_WRN("Device cert OK");
 		}
 	}
 #endif /* defined(CONFIG_NRF_MODEM_LIB) */
@@ -804,7 +810,7 @@ int nct_mqtt_connect(void)
 
 	err = mqtt_connect(&nct.client);
 	if (err != 0) {
-		LOG_DBG("mqtt_connect failed %d", err);
+		LOG_ERR("mqtt_connect failed %d", err);
 		return err;
 	}
 
