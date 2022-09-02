@@ -28,11 +28,19 @@ int rest_services_wifi_location_get(enum location_service service,
 			   struct location_data *result)
 {
 #if defined(CONFIG_LOCATION_METHOD_WIFI_SERVICE_NRF_CLOUD)
+#if defined(CONFIG_NRF_CLOUD_MQTT)
+	if (service == LOCATION_SERVICE_NRF_CLOUD || service == LOCATION_SERVICE_ANY) {
+		return wifi_nrf_cloud_mqtt_pos_get(location_wifi_receive_buffer,
+						CONFIG_LOCATION_METHOD_WIFI_REST_RECV_BUF_SIZE,
+						request, result);
+	}
+#elif defined(CONFIG_NRF_CLOUD_REST)
 	if (service == LOCATION_SERVICE_NRF_CLOUD || service == LOCATION_SERVICE_ANY) {
 		return wifi_nrf_cloud_rest_pos_get(location_wifi_receive_buffer,
 						CONFIG_LOCATION_METHOD_WIFI_REST_RECV_BUF_SIZE,
 						request, result);
 	}
+#endif
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI_SERVICE_HERE)
 	if (service == LOCATION_SERVICE_HERE || service == LOCATION_SERVICE_ANY) {
@@ -41,6 +49,6 @@ int rest_services_wifi_location_get(enum location_service service,
 					     request, result);
 	}
 #endif
-	LOG_ERR("Requested Wi-Fi positioning service not configured on.");
+	LOG_ERR("Requested Wi-Fi positioning service not configured on. Service %d", service);
 	return -ENOTSUP;
 }
