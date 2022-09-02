@@ -35,4 +35,7 @@ zephyr_library_sources_ifdef(
 zephyr_library_sources_ifdef(
 	CONFIG_NRF_CLOUD_REST
 	src/nrf_cloud_rest.c)
+zephyr_library_sources_ifdef(
+	CONFIG_NRF_CLOUD_MQTT_SHELL
+	src/nrf_cloud_mqtt_shell.c)
 zephyr_include_directories(./include)
