@@ -17,6 +17,10 @@ menuconfig $(module)
 
 if NRF_CLOUD_MQTT
 
+config NRF_CLOUD_MQTT_SHELL
+	bool "Cloud shell commands"
+	default n
+
 config NRF_CLOUD_STATIC_IPV4
 	bool "Enable use of static IPv4"
 	default n
