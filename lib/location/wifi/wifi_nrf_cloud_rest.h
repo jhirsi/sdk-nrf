@@ -32,4 +32,8 @@ int wifi_nrf_cloud_rest_pos_get(
 	const struct rest_wifi_pos_request *request,
 	struct location_data *result);
 
+int wifi_nrf_cloud_mqtt_pos_get(char *rcv_buf, size_t rcv_buf_len,
+				const struct rest_wifi_pos_request *request,
+				struct location_data *result);
+
 #endif /* WIFI_NRF_CLOUD_REST_H */

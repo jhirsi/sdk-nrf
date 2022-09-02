@@ -176,7 +176,6 @@ static void method_wifi_scan_done_handle(struct net_mgmt_event_callback *cb)
 	} else {
 		LOG_DBG("Scan request done.");
 	}
-	EINVAL
 
 	latest_scan_result_count =
 		(current_scan_result_count > CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT) ?
