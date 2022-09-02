@@ -85,6 +85,7 @@ static int cmd_loc_cancel(const struct shell *shell, size_t argc, char **argv)
 		shell_error(shell, "Canceling location request failed, err: %d", err);
 		return -1;
 	}
+	shell_print(shell, "Location request cancelled");
 	return 0;
 }
 
