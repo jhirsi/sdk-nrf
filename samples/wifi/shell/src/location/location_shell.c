@@ -4,24 +4,85 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <stdio.h>
 #include <stdlib.h>
 
 #include <zephyr/kernel.h>
+
 #include <zephyr/shell/shell.h>
+#include <zephyr/shell/shell_uart.h>
+
 #include <modem/location.h>
+
+#include <zephyr/posix/time.h>
+#include <zephyr/sys/timeutil.h>
+
+#include <zephyr/net/net_event.h>
+#include <zephyr/net/wifi_mgmt.h>
 
 static const struct shell *used_shell;
 static bool only_scan;
 
+/**************************************************************************************************/
+
+/** Buffer used for printing the timestamp. */
+static char datetime_str[128];
+
+static void date_get_str_create(void)
+{
+	struct timespec tp;
+	struct tm tm;
+
+	clock_gettime(CLOCK_REALTIME, &tp);
+
+	gmtime_r(&tp.tv_sec, &tm);
+
+	sprintf(datetime_str,
+		    "[%d-%02u-%02u "
+		    "%02u:%02u:%02u UTC]",
+		    tm.tm_year + 1900,
+		    tm.tm_mon + 1,
+		    tm.tm_mday,
+		    tm.tm_hour,
+		    tm.tm_min,
+		    tm.tm_sec);
+}
+
+static char *date_time_str_get(void)
+{
+	date_get_str_create();
+	return datetime_str;
+}
+
+/**************************************************************************************************/
+
+#define WIFI_SHELL_LOCATION_MGMT_EVENTS (NET_EVENT_WIFI_SCAN_DONE)
+
+static struct net_mgmt_event_callback cmd_loc_wifi_net_mgmt_cb;
+
+void cmd_loc_wifi_net_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint32_t mgmt_event,
+					struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+
+	switch (mgmt_event) {
+	case NET_EVENT_WIFI_SCAN_DONE:
+		shell_print(used_shell, "%s: NET_EVENT_WIFI_SCAN_DONE event.", date_time_str_get());
+		break;
+	default:
+		break;
+	}
+}
+
 static void location_lib_event_handler(const struct location_event_data *event_data)
 {
-	shell_print(used_shell, "Location event at:");
-	shell_execute_cmd(used_shell, "date get");
+	shell_print(used_shell, "%s: Location event received.", date_time_str_get());
 
 	switch (event_data->id) {
 	case LOCATION_EVT_LOCATION:
 		if (only_scan) {
-			shell_print(used_shell, "Scanning only DONE");
+			shell_print(used_shell, "%s: Location req scanning only DONE.",
+				date_time_str_get());
 			return;
 		}
 		shell_print(used_shell, "Location:");
@@ -64,6 +125,8 @@ static void location_lib_event_handler(const struct location_event_data *event_d
 	}
 }
 
+/**************************************************************************************************/
+
 static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 {
 	struct location_config config = { 0 };
@@ -87,11 +150,10 @@ static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 			shell_error(shell, "location get: invalid interval value %d", interval);
 			return -EINVAL;
 		}
-		config.interval = interval * 1000;
+		config.interval = interval;
 	}
 
-	shell_print(shell, "Starting at:");
-	shell_execute_cmd(shell, "date get");
+	shell_print(shell, "%s: Location request starting", date_time_str_get());
 
 	err = location_request(&config);
 	if (err) {
@@ -101,7 +163,7 @@ static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 	return 0;
 }
 
-static int cmd_loc_only_scan(const struct shell *shell, size_t argc, char **argv)
+static int cmd_loc_scan_only(const struct shell *shell, size_t argc, char **argv)
 {
 	struct location_config config = { 0 };
 	enum location_method methods[] = {LOCATION_METHOD_WIFI};
@@ -128,8 +190,8 @@ static int cmd_loc_only_scan(const struct shell *shell, size_t argc, char **argv
 		config.interval = interval;
 	}
 
-	shell_print(shell, "Starting at:");
-	shell_execute_cmd(shell, "date get");
+	shell_print(shell, "%s: Location request (only Wi-Fi scanning) starting.",
+		date_time_str_get());
 
 	err = location_request(&config);
 	if (err) {
@@ -148,9 +210,23 @@ static int cmd_loc_cancel(const struct shell *shell, size_t argc, char **argv)
 		shell_error(shell, "Canceling location request failed, err: %d", err);
 		return -1;
 	}
-	shell_print(shell, "Location request cancelled");
+	shell_print(shell, "%s: Location request cancelled.", date_time_str_get());
 	return 0;
 }
+
+/**************************************************************************************************/
+
+void cmd_loc_init(void)
+{
+	used_shell = shell_backend_uart_get_ptr();
+
+	net_mgmt_init_event_callback(&cmd_loc_wifi_net_mgmt_cb,
+				     cmd_loc_wifi_net_mgmt_event_handler,
+				     (WIFI_SHELL_LOCATION_MGMT_EVENTS));
+	net_mgmt_add_event_callback(&cmd_loc_wifi_net_mgmt_cb);
+}
+
+/**************************************************************************************************/
 
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_loc,
@@ -164,10 +240,10 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		"Cancel/stop on going request.",
 		cmd_loc_cancel),
 	SHELL_CMD(
-		only_scan, NULL,
+		scan_only, NULL,
 		"Perform only Wi-Fi scanning(s). Usage:\n"
-		"  location only_scan [interval_in_secs]\n",
-		cmd_loc_only_scan),
+		"  location scan_only [interval_in_secs]\n",
+		cmd_loc_scan_only),
 
 	SHELL_SUBCMD_SET_END);
 

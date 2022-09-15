@@ -6,6 +6,9 @@
 
 #include <zephyr/sys/printk.h>
 #include <nrfx_clock.h>
+#if defined(CONFIG_LOCATION)
+#include "location_shell.h"
+#endif
 
 void main(void)
 {
@@ -13,6 +16,9 @@ void main(void)
 	/* For now hardcode to 128MHz */
 	nrfx_clock_divider_set(NRF_CLOCK_DOMAIN_HFCLK,
 			       NRF_CLOCK_HFCLK_DIV_1);
+#endif
+#if defined(CONFIG_LOCATION)
+	cmd_loc_init();
 #endif
 	printk("Starting %s with CPU frequency: %d MHz\n", CONFIG_BOARD, SystemCoreClock/MHZ(1));
 }
