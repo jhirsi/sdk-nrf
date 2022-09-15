@@ -11,11 +11,19 @@
 #include <modem/location.h>
 
 static const struct shell *used_shell;
+static bool only_scan;
 
 static void location_lib_event_handler(const struct location_event_data *event_data)
 {
+	shell_print(used_shell, "Location event at:");
+	shell_execute_cmd(used_shell, "date get");
+
 	switch (event_data->id) {
 	case LOCATION_EVT_LOCATION:
+		if (only_scan) {
+			shell_print(used_shell, "Scanning only DONE");
+			return;
+		}
 		shell_print(used_shell, "Location:");
 		shell_print(used_shell,
 			"  used method: %s (%d)",
@@ -65,6 +73,7 @@ static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 
 	used_shell = shell;
 
+	only_scan = false;
 	err = location_init(location_lib_event_handler);
 	if (err) {
 		shell_error(shell, "Initializing the Location library failed, err: %d\n", err);
@@ -81,6 +90,47 @@ static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 		config.interval = interval * 1000;
 	}
 
+	shell_print(shell, "Starting at:");
+	shell_execute_cmd(shell, "date get");
+
+	err = location_request(&config);
+	if (err) {
+		shell_error(shell, "Requesting location failed, error: %d\n", err);
+		return err;
+	}
+	return 0;
+}
+
+static int cmd_loc_only_scan(const struct shell *shell, size_t argc, char **argv)
+{
+	struct location_config config = { 0 };
+	enum location_method methods[] = {LOCATION_METHOD_WIFI};
+	int err;
+	int interval;
+
+	used_shell = shell;
+
+	err = location_init(location_lib_event_handler);
+	if (err) {
+		shell_error(shell, "Initializing the Location library failed, err: %d\n", err);
+	}
+
+	location_config_defaults_set(&config, 1, methods);
+	config.methods[0].wifi.only_scan = true;
+	only_scan = true;
+
+	if (argc > 1) {
+		interval = atoi(argv[1]);
+		if (interval < 0) {
+			shell_error(shell, "location get: invalid interval value %d", interval);
+			return -EINVAL;
+		}
+		config.interval = interval;
+	}
+
+	shell_print(shell, "Starting at:");
+	shell_execute_cmd(shell, "date get");
+
 	err = location_request(&config);
 	if (err) {
 		shell_error(shell, "Requesting location failed, error: %d\n", err);
@@ -93,6 +143,7 @@ static int cmd_loc_cancel(const struct shell *shell, size_t argc, char **argv)
 {
 	int err = location_request_cancel();
 
+	only_scan = false;
 	if (err) {
 		shell_error(shell, "Canceling location request failed, err: %d", err);
 		return -1;
@@ -106,12 +157,18 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	SHELL_CMD(
 		get, NULL,
 		"Requests the current position. Usage:\n"
-		"location get [interval_in_secs]\n",
+		"  location get [interval_in_secs]\n",
 		cmd_loc_get),
 	SHELL_CMD(
 		cancel, NULL,
 		"Cancel/stop on going request.",
 		cmd_loc_cancel),
+	SHELL_CMD(
+		only_scan, NULL,
+		"Perform only Wi-Fi scanning(s). Usage:\n"
+		"  location only_scan [interval_in_secs]\n",
+		cmd_loc_only_scan),
+
 	SHELL_SUBCMD_SET_END);
 
 static const char location_usage_str[] =
