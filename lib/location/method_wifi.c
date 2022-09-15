@@ -176,6 +176,11 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 	/* Scanning done at this point of time. Store current time to response. */
 	location_utils_systime_to_location_datetime(&location_result.datetime);
 
+	if (wifi_config.only_scan) {
+		/* Only Wi-Fi scanning requested */
+		goto end;
+	}
+
 #if defined(CONFIG_NRF_MODEM_LIB)
 	if (!location_utils_is_default_pdn_active()) {
 		/* Not worth to start trying to fetch with the REST api over cellular.
@@ -248,6 +253,14 @@ end:
 		running = false;
 	} else if (err) {
 		location_core_event_cb_error();
+		running = false;
+	} else if (wifi_config.only_scan) {
+		/* Empty result */
+		location_result.method = LOCATION_METHOD_WIFI;
+		location_result.latitude = 0;
+		location_result.longitude = 0;
+		location_result.accuracy = 666;
+		location_core_event_cb(&location_result);
 		running = false;
 	}
 }

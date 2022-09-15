@@ -211,6 +211,7 @@ struct location_cellular_config {
 
 /** Wi-Fi positioning configuration. */
 struct location_wifi_config {
+	bool only_scan;
 	/**
 	 * @brief Timeout (in milliseconds) of how long the Wi-Fi positioning procedure can take.
 	 * SYS_FOREVER_MS means that the timer is disabled.
