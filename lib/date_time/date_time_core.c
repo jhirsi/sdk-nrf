@@ -10,6 +10,11 @@
 #include <modem/at_monitor.h>
 #include <modem/lte_lc.h>
 
+#if defined(CONFIG_WIFI)
+#include <zephyr/net/net_event.h>
+#include <zephyr/net/wifi_mgmt.h>
+#endif
+
 #include "date_time_core.h"
 #include "date_time_modem.h"
 #include "date_time_ntp.h"
@@ -115,6 +120,26 @@ static void date_time_handler(struct k_work *work)
 	k_sem_give(&time_fetch_sem);
 }
 
+#if defined(CONFIG_WIFI)
+#define WIFI_SHELL_LOCATION_MGMT_EVENTS (NET_EVENT_WIFI_CONNECT_RESULT)
+
+static struct net_mgmt_event_callback date_time_core_wifi_net_mgmt_cb;
+
+void date_time_core_wifi_net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
+						uint32_t mgmt_event,
+						struct net_if *iface)
+{
+	ARG_UNUSED(iface);
+
+	if (mgmt_event == NET_EVENT_WIFI_CONNECT_RESULT) {
+		LOG_DBG("NET_EVENT_WIFI_CONNECT_RESULT");
+		if (!date_time_is_valid()) {
+			k_work_reschedule(&time_work, K_SECONDS(3));
+		}
+	}
+}
+#endif
+
 void date_time_lte_ind_handler(const struct lte_lc_evt *const evt)
 {
 #if defined(CONFIG_DATE_TIME_AUTO_UPDATE) && defined(CONFIG_LTE_LINK_CONTROL)
@@ -153,6 +178,12 @@ void date_time_core_init(void)
 	if (!IS_ENABLED(CONFIG_DATE_TIME_AUTO_UPDATE)) {
 		date_time_core_schedule_update(false);
 	}
+#if defined(CONFIG_WIFI)
+	net_mgmt_init_event_callback(&date_time_core_wifi_net_mgmt_cb,
+				     date_time_core_wifi_net_mgmt_event_handler,
+				     (WIFI_SHELL_LOCATION_MGMT_EVENTS));
+	net_mgmt_add_event_callback(&date_time_core_wifi_net_mgmt_cb);
+#endif
 }
 
 int date_time_core_now(int64_t *unix_time_ms)
