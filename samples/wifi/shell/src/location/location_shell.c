@@ -61,14 +61,26 @@ static int cmd_loc_get(const struct shell *shell, size_t argc, char **argv)
 	struct location_config config = { 0 };
 	enum location_method methods[] = {LOCATION_METHOD_WIFI};
 	int err;
+	int interval;
 
 	used_shell = shell;
+
 	err = location_init(location_lib_event_handler);
 	if (err) {
 		shell_error(shell, "Initializing the Location library failed, err: %d\n", err);
 	}
 
 	location_config_defaults_set(&config, 1, methods);
+
+	if (argc > 1) {
+		interval = atoi(argv[1]);
+		if (interval < 0) {
+			shell_error(shell, "location get: invalid interval value %d", interval);
+			return -EINVAL;
+		}
+		config.interval = interval * 1000;
+	}
+
 	err = location_request(&config);
 	if (err) {
 		shell_error(shell, "Requesting location failed, error: %d\n", err);
@@ -93,7 +105,8 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_loc,
 	SHELL_CMD(
 		get, NULL,
-		"Requests the current position.",
+		"Requests the current position. Usage:\n"
+		"location get [interval_in_secs]\n",
 		cmd_loc_get),
 	SHELL_CMD(
 		cancel, NULL,
