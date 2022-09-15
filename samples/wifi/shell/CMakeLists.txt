@@ -15,7 +15,8 @@ set(WPA_SUPP_BASE ${WEST_TOPDIR}/modules/lib/hostap)
 endif()
 
 # TODO: MbedTLS Remove this workaround
-target_include_directories(mbedcrypto_common
+target_include_directories_ifdef(CONFIG_MBEDTLS
+	mbedcrypto_common
 	INTERFACE
 	${CMAKE_SOURCE_DIR}
 )
