@@ -31,6 +31,7 @@
 
 #include "uart/uart_shell.h"
 #include "mosh_print.h"
+#include "mosh_defines.h"
 
 #if defined(CONFIG_MOSH_SMS)
 #include "sms.h"
@@ -51,7 +52,6 @@ struct pdn_activation_status_info {
 	uint8_t cid;
 };
 
-#define REGISTERED_STATUS_LED          DK_LED3
 
 static bool link_subscribe_for_rsrp;
 

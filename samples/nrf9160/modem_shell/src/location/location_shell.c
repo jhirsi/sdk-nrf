@@ -16,6 +16,8 @@
 #endif
 #include <modem/location.h>
 #include <modem/lte_lc.h>
+#include <dk_buttons_and_leds.h>
+
 #include <date_time.h>
 
 #include "mosh_print.h"
@@ -23,6 +25,7 @@
 #if defined(CONFIG_MOSH_METRICS)
 #include "location_metrics.h"
 #endif
+#include "mosh_defines.h"
 
 enum location_shell_command {
 	LOCATION_CMD_NONE = 0,
@@ -54,6 +57,9 @@ struct metrics_work_data {
 
 static struct metrics_work_data metrics_work_data;
 #endif
+
+static struct k_work_delayable location_fix_led_work;
+
 /******************************************************************************/
 static const char location_usage_str[] =
 	"Usage: location <subcommand> [options]\n"
@@ -241,6 +247,11 @@ clean_up:
 	}
 }
 
+static void location_fix_led_worker(struct k_work *work_item)
+{
+	dk_set_led_off(LOCATION_FIX_STATUS_LED);
+}
+
 /******************************************************************************/
 
 #if defined(CONFIG_MOSH_METRICS)
@@ -353,6 +364,11 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 			gnss_location_work_data.format = gnss_location_to_cloud_format;
 			k_work_submit_to_queue(&mosh_common_work_q, &gnss_location_work_data.work);
 		}
+
+		dk_set_led_on(LOCATION_FIX_STATUS_LED);
+		k_work_init_delayable(&location_fix_led_work, location_fix_led_worker);
+		k_work_reschedule_for_queue(&mosh_common_work_q, &location_fix_led_work,
+			K_SECONDS(5));
 		break;
 
 	case LOCATION_EVT_TIMEOUT:
