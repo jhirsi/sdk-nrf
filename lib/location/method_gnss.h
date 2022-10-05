@@ -13,4 +13,7 @@ int method_gnss_location_get(const struct location_method_config *config);
 
 int method_gnss_cancel(void);
 
+#if defined(CONFIG_LOCATION_METRICS)
+bool method_gnss_metrics_get(struct location_event_data_metrics *metrics);
+#endif
 #endif /* METHOD_GNSS_H */

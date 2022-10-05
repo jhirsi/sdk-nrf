@@ -36,6 +36,10 @@ config LOCATION_METHODS_LIST_SIZE
 	help
 	  Maximum number of location methods within location_config structure.
 
+config LOCATION_METRICS
+	bool "Gather and include metrics within the location_data"
+	default n
+
 if LOCATION_METHOD_GNSS
 
 config LOCATION_METHOD_GNSS_AGPS_EXTERNAL

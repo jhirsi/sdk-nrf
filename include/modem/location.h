@@ -9,7 +9,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#if defined(CONFIG_LOCATION_METHOD_GNSS_AGPS_EXTERNAL)
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
 #include <nrf_modem_gnss.h>
 #endif
 #if defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
@@ -109,10 +109,29 @@ struct location_datetime {
 	uint16_t ms;
 };
 
+#if defined(CONFIG_LOCATION_METRICS)
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
+struct location_data_gnss_metrics {
+	uint8_t tracked_satellites;
+	struct nrf_modem_gnss_pvt_data_frame pvt_data;
+};
+#endif
+
+struct location_event_data_metrics {
+	enum location_method used_method;
+	uint32_t used_time_ms; /* Time used for processing a location request */
+	char error_cause_str[256]; /* Only for timeout/error events */
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
+	struct location_data_gnss_metrics gnss; /* TODO: union when metrics from other methods? */
+#endif
+};
+
+#endif
+
 /** Location data. */
 struct location_data {
 	/** Used location method. */
-	enum location_method method;
+	enum location_method method; /* TODO: to be on event level? */
 	/** Geodetic latitude (deg) in WGS-84. */
 	double latitude;
 	/** Geodetic longitude (deg) in WGS-84. */
@@ -128,6 +147,9 @@ struct location_event_data {
 	/** Event ID. */
 	enum location_event_id id;
 
+#if defined(CONFIG_LOCATION_METRICS)
+	struct location_event_data_metrics metrics;
+#endif
 	union {
 		/** Current location, used with event LOCATION_EVT_LOCATION. */
 		struct location_data location;

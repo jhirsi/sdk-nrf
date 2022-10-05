@@ -36,6 +36,10 @@ static struct location_config current_config;
 /** Index to the current_config.methods for the currently used method. */
 static int current_method_index;
 
+#if defined(CONFIG_LOCATION_METRICS)
+/**  */
+static uint64_t current_ttf_start_timestamp;
+#endif
 /***** Work queue and work item definitions *****/
 
 #define LOCATION_CORE_STACK_SIZE 4096
@@ -70,6 +74,9 @@ static const struct location_method_api method_gnss_api = {
 	.init             = method_gnss_init,
 	.location_get     = method_gnss_location_get,
 	.cancel           = method_gnss_cancel,
+#if defined(CONFIG_LOCATION_METRICS)
+	.metrics_get      = method_gnss_metrics_get,
+#endif
 };
 #endif
 #if defined(CONFIG_LOCATION_METHOD_CELLULAR)
@@ -80,6 +87,9 @@ static const struct location_method_api method_cellular_api = {
 	.init             = method_cellular_init,
 	.location_get     = method_cellular_location_get,
 	.cancel           = method_cellular_cancel,
+#if defined(CONFIG_LOCATION_METRICS)
+	.metrics_get      = method_cellular_metrics_get,
+#endif
 };
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
@@ -90,6 +100,9 @@ static const struct location_method_api method_wifi_api = {
 	.init             = method_wifi_init,
 	.location_get     = method_wifi_location_get,
 	.cancel           = method_wifi_cancel,
+#if defined(CONFIG_LOCATION_METRICS)
+	.metrics_get      = method_wifi_metrics_get,
+#endif
 };
 #endif
 
@@ -327,6 +340,9 @@ static int location_core_location_get_pos(const struct location_config *config)
 	LOG_DBG("Requesting location with '%s' method",
 		(char *)location_method_api_get(requested_method)->method_string);
 	location_core_current_event_data_init(requested_method);
+#if defined(CONFIG_LOCATION_METRICS)
+	current_ttf_start_timestamp = k_uptime_get();
+#endif
 	err = location_method_api_get(requested_method)->location_get(
 		&config->methods[current_method_index]);
 
@@ -347,9 +363,15 @@ int location_core_location_get(const struct location_config *config)
 	return location_core_location_get_pos(config);
 }
 
-void location_core_event_cb_error(void)
+void location_core_event_cb_error(const char *error_cause_str)
 {
+	LOG_ERR("%s", error_cause_str);
+
 	current_event_data.id = LOCATION_EVT_ERROR;
+#if defined(CONFIG_LOCATION_METRICS)
+	strncpy(current_event_data.metrics.error_cause_str, error_cause_str,
+		sizeof(current_event_data.metrics.error_cause_str));
+#endif
 
 	location_core_event_cb(NULL);
 }
@@ -394,6 +416,17 @@ void location_core_event_cb(const struct location_data *location)
 
 	k_work_cancel_delayable(&location_timeout_work);
 
+#if defined(CONFIG_LOCATION_METRICS)
+	requested_method = current_config.methods[current_method_index].method;
+	if (!location_method_api_get(requested_method)->metrics_get(&current_event_data.metrics)) {
+		LOG_WRN("Cannot get method specific location metrics");
+	}
+
+	current_event_data.metrics.used_time_ms = k_uptime_get() - current_ttf_start_timestamp;
+	current_event_data.metrics.used_method = requested_method;
+	LOG_DBG("  TTF: %d msecs", current_event_data.metrics.used_time_ms);
+#endif
+
 	if (location != NULL) {
 		/* Location was acquired properly */
 		current_event_data.id = LOCATION_EVT_LOCATION;
@@ -423,6 +456,9 @@ void location_core_event_cb(const struct location_data *location)
 				current_event_data.location.datetime.second,
 				current_event_data.location.datetime.ms);
 		}
+#if defined(CONFIG_LOCATION_METRICS)
+		LOG_DBG("  TTF: %d msecs", current_event_data.metrics.used_time_ms);
+#endif
 		LOG_DBG("  Google maps URL: https://maps.google.com/?q=%s,%s",
 			latitude_str, longitude_str);
 		if (current_config.mode == LOCATION_REQ_MODE_ALL) {

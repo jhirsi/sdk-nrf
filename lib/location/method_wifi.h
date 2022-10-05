@@ -11,4 +11,7 @@ int method_wifi_location_get(const struct location_method_config *config);
 int method_wifi_init(void);
 int method_wifi_cancel(void);
 
+#if defined(CONFIG_LOCATION_METRICS)
+bool method_wifi_metrics_get(struct location_event_data_metrics *metrics);
+#endif
 #endif /* METHOD_WIFI_H */

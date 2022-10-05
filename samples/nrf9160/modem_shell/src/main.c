@@ -143,7 +143,9 @@ void nrf_modem_fault_handler(struct nrf_modem_fault_info *fault_info)
 		fault_info->reason,
 		modem_crash_reason_get(fault_info->reason),
 		fault_info->program_counter);
-
+#if defined(CONFIG_MOSH_METRICS)
+/* TODO: store crash info & last acquired location into settings */
+#endif
 	__ASSERT(false, "Modem crash detected, halting application execution");
 }
 

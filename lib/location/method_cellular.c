@@ -119,8 +119,7 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	LOG_DBG("Triggering neighbor cell measurements");
 	ret = method_cellular_ncellmeas_start();
 	if (ret) {
-		LOG_WRN("Cannot start neighbor cell measurements");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Cannot start neighbor cell measurements");
 		running = false;
 		return;
 	}
@@ -134,8 +133,7 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	location_core_timer_stop();
 
 	if (cell_data.current_cell.id == LTE_LC_CELL_EUTRAN_ID_INVALID) {
-		LOG_WRN("Current cell ID not valid");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Current cell ID not valid");
 		running = false;
 		return;
 	}
@@ -169,7 +167,8 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 		if (ret == -ETIMEDOUT) {
 			location_core_event_cb_timeout();
 		} else {
-			location_core_event_cb_error();
+			location_core_event_cb_error(
+				"Failed to acquire location from multicell_location lib");
 		}
 	} else {
 		location_result.method = LOCATION_METHOD_CELLULAR;
@@ -209,6 +208,13 @@ int method_cellular_cancel(void)
 
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_METRICS)
+bool method_cellular_metrics_get(struct location_event_data_metrics *metrics)
+{
+	return false;
+}
+#endif
 
 int method_cellular_init(void)
 {

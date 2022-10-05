@@ -109,6 +109,11 @@ static void method_gnss_pgps_ext_work_fn(struct k_work *item);
 
 static int fixes_remaining;
 
+
+#if defined(CONFIG_LOCATION_METRICS)
+static struct location_data_gnss_metrics current_metrics;
+#endif
+
 #if defined(CONFIG_NRF_CLOUD_PGPS)
 static void method_gnss_manage_pgps(struct k_work *work)
 {
@@ -634,13 +639,16 @@ static void method_gnss_pvt_work_fn(struct k_work *item)
 	}
 
 	if (nrf_modem_gnss_read(&pvt_data, sizeof(pvt_data), NRF_MODEM_GNSS_DATA_PVT) != 0) {
-		LOG_ERR("Failed to read PVT data from GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to read PVT data from GNSS");
 		return;
 	}
 
 	method_gnss_print_pvt(&pvt_data);
 
+#if defined(CONFIG_LOCATION_METRICS)
+	current_metrics.pvt_data = pvt_data;
+	current_metrics.tracked_satellites = method_gnss_tracked_satellites(&pvt_data);
+#endif
 	/* Store fix data only if we get a valid fix. Thus, the last valid data is always kept
 	 * in memory and it is not overwritten in case we get an invalid fix.
 	 */
@@ -669,9 +677,8 @@ static void method_gnss_pvt_work_fn(struct k_work *item)
 		if (pvt_data.execution_time >= VISIBILITY_DETECTION_EXEC_TIME &&
 		    pvt_data.execution_time < (VISIBILITY_DETECTION_EXEC_TIME + MSEC_PER_SEC) &&
 		    method_gnss_tracked_satellites(&pvt_data) < VISIBILITY_DETECTION_SAT_LIMIT) {
-			LOG_DBG("GNSS visibility obstructed, canceling");
 			method_gnss_cancel();
-			location_core_event_cb_error();
+			location_core_event_cb_error("GNSS visibility obstructed, canceling");
 		}
 	}
 }
@@ -727,16 +734,14 @@ static void method_gnss_positioning_work_fn(struct k_work *work)
 	err |= nrf_modem_gnss_use_case_set(use_case);
 
 	if (err) {
-		LOG_ERR("Failed to configure GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to configure GNSS");
 		running = false;
 		return;
 	}
 
 	err = nrf_modem_gnss_start();
 	if (err) {
-		LOG_ERR("Failed to start GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to start GNSS");
 		running = false;
 		return;
 	}
@@ -795,6 +800,15 @@ int method_gnss_location_get(const struct location_method_config *config)
 
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_METRICS)
+bool method_gnss_metrics_get(struct location_event_data_metrics *metrics)
+{
+	metrics->gnss = current_metrics;
+	memset(&current_metrics, 0, sizeof(current_metrics));
+	return true;
+}
+#endif
 
 int method_gnss_init(void)
 {

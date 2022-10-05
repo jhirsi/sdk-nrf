@@ -154,12 +154,13 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 	const struct location_wifi_config wifi_config = work_data->wifi_config;
 	int64_t starting_uptime_ms = work_data->starting_uptime_ms;
 	int err;
+	char err_str[256];
 
 	location_core_timer_start(wifi_config.timeout);
 
 	err = method_wifi_scanning_start();
 	if (err) {
-		LOG_WRN("Cannot start Wi-Fi scanning, err %d", err);
+		sprintf(err_str, "Cannot start Wi-Fi scanning, err %d", err);
 		goto end;
 	}
 
@@ -177,8 +178,9 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 		/* Not worth to start trying to fetch with the REST api over cellular.
 		 * Thus, fail faster in this case and save the trying "costs".
 		 */
-		LOG_WRN("Default PDN context is NOT active, cannot retrieve a location");
 		err = -EFAULT;
+		sprintf(err_str,
+			"Default PDN context is NOT active, cannot retrieve a location, %d", err);
 		goto end;
 	}
 	if (latest_scan_result_count > 1) {
@@ -190,8 +192,10 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 				(k_uptime_get() - starting_uptime_ms));
 			if (request.timeout_ms < 0) {
 				/* No remaining time at all */
-				LOG_WRN("No remaining time left for requesting a position");
 				err = -ETIMEDOUT;
+				sprintf(err_str,
+					"No remaining time left for requesting a position, %d",
+						err);
 				goto end;
 			}
 		}
@@ -210,9 +214,9 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 		}
 		err = rest_services_wifi_location_get(wifi_config.service, &request, &result);
 		if (err) {
-			LOG_ERR("Failed to acquire a location by using "
+			sprintf(err_str, "Failed to acquire a location by using "
 				"Wi-Fi positioning, err: %d",
-				err);
+					err);
 			err = -ENODATA;
 		} else {
 			location_result.method = LOCATION_METHOD_WIFI;
@@ -230,10 +234,10 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 			 * (400: bad request).
 			 * Thus, fail faster in this case and save the data transfer costs.
 			 */
-			LOG_WRN("Retrieving a location based on a single Wi-Fi "
+			sprintf(err_str, "Retrieving a location based on a single Wi-Fi "
 				"access point is not possible");
 		} else {
-			LOG_WRN("No Wi-Fi scanning results");
+			sprintf(err_str, "No Wi-Fi scanning results");
 		}
 		err = -EFAULT;
 	}
@@ -242,7 +246,7 @@ end:
 		location_core_event_cb_timeout();
 		running = false;
 	} else if (err) {
-		location_core_event_cb_error();
+		location_core_event_cb_error(err_str);
 		running = false;
 	}
 }
@@ -257,6 +261,13 @@ int method_wifi_cancel(void)
 	k_sem_reset(&wifi_scanning_ready);
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_METRICS)
+bool method_wifi_metrics_get(struct location_event_data_metrics *metrics)
+{
+	return false;
+}
+#endif
 
 int method_wifi_location_get(const struct location_method_config *config)
 {
