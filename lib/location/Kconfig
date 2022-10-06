@@ -28,7 +28,7 @@ config LOCATION_METHOD_WIFI
 	select NET_MGMT
 	select NET_MGMT_EVENT
 	select NET_MGMT_EVENT_INFO
-	select NET_L2_WIFI_MGMT
+	select NET_L2_WIFI_MGMT if !WIFI_NRF700X
 
 config LOCATION_METHODS_LIST_SIZE
 	int "Maximum number of location methods in configuration"
