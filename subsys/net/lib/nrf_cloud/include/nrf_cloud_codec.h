@@ -131,6 +131,9 @@ extern "C" {
 /**@brief Initialize the codec used encoding the data to the cloud. */
 int nrf_cloud_codec_init(void);
 
+/**@brief Initialize of the codec is not needed. */
+void nrf_cloud_codec_init_not_needed(void);
+
 /**@brief Encode the sensor data based on the indicated type. */
 int nrf_cloud_encode_sensor_data(const struct nrf_cloud_sensor_data *input,
 				 struct nrf_cloud_data *output);

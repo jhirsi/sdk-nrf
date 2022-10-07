@@ -383,6 +383,16 @@ int nrf_cloud_rest_send_device_message(struct nrf_cloud_rest_context *const rest
 int nrf_cloud_rest_send_location(struct nrf_cloud_rest_context *const rest_ctx,
 	const char *const device_id, const struct nrf_cloud_gnss_data * const gnss);
 
+/**
+ * @brief Initialize the codec if needed.
+ *
+ * @note This API must be called prior to using nRF Cloud.
+ *
+ * @param[in] init true if initialization is needed to be done by nRF Cloud lib,
+ *                 false if initialization by nRF Cloud lib is not needed to be done.
+ */
+void nrf_cloud_rest_codec_init(bool init);
+
 /** @} */
 
 #ifdef __cplusplus

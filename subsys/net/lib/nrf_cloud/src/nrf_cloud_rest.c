@@ -1432,3 +1432,12 @@ clean_up:
 
 	return ret;
 }
+
+void nrf_cloud_rest_codec_init(bool init)
+{
+	if (init) {
+		nrf_cloud_codec_init();
+	} else {
+		nrf_cloud_codec_init_not_needed();
+	}
+}

@@ -72,6 +72,11 @@ static const char *const sensor_type_str[] = {
 #define JSON_KEY_CLOUD_TO_DEVICE "c2g"
 #endif
 
+void nrf_cloud_codec_init_not_needed(void)
+{
+	initialized = true;
+}
+
 int nrf_cloud_codec_init(void)
 {
 	if (!initialized) {
