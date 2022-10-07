@@ -38,7 +38,7 @@ static int current_method_index;
 
 /***** Work queue and work item definitions *****/
 
-#define LOCATION_CORE_STACK_SIZE 4096
+#define LOCATION_CORE_STACK_SIZE CONFIG_LOCATION_WORKER_STACK_SIZE
 #define LOCATION_CORE_PRIORITY  5
 K_THREAD_STACK_DEFINE(location_core_stack, LOCATION_CORE_STACK_SIZE);
 
