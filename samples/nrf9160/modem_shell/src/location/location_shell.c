@@ -58,7 +58,9 @@ struct metrics_work_data {
 static struct metrics_work_data metrics_work_data;
 #endif
 
+#if defined(CONFIG_DK_LIBRARY)
 static struct k_work_delayable location_fix_led_work;
+#endif
 
 /******************************************************************************/
 static const char location_usage_str[] =
@@ -247,10 +249,12 @@ clean_up:
 	}
 }
 
+#if defined(CONFIG_DK_LIBRARY)
 static void location_fix_led_worker(struct k_work *work_item)
 {
 	dk_set_led_off(LOCATION_FIX_STATUS_LED);
 }
+#endif
 
 /******************************************************************************/
 
@@ -365,10 +369,12 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 			k_work_submit_to_queue(&mosh_common_work_q, &gnss_location_work_data.work);
 		}
 
+#if defined(CONFIG_DK_LIBRARY)
 		dk_set_led_on(LOCATION_FIX_STATUS_LED);
 		k_work_init_delayable(&location_fix_led_work, location_fix_led_worker);
 		k_work_reschedule_for_queue(&mosh_common_work_q, &location_fix_led_work,
 			K_SECONDS(5));
+#endif
 		break;
 
 	case LOCATION_EVT_TIMEOUT:
