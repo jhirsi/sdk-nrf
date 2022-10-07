@@ -28,6 +28,11 @@
 #include <modem/modem_info.h>
 #include <modem/lte_lc.h>
 
+#if defined(CONFIG_NRF_CLOUD_REST) && defined(CONFIG_CJSON_LIB)
+#include <cJSON_os.h>
+#include <net/nrf_cloud_rest.h>
+#endif
+
 #include <dk_buttons_and_leds.h>
 #include "uart/uart_shell.h"
 
@@ -268,6 +273,16 @@ void main(void)
 	__ASSERT(mosh_shell != NULL, "Failed to get shell backend");
 
 	mosh_print_version_info();
+
+#if defined(CONFIG_NRF_CLOUD_REST) && defined(CONFIG_CJSON_LIB)
+	/* Due to iperf3, we cannot let nrf cloud lib to initialize cJSON lib to be
+	 * using kernel allocations (i.e. k_ prepending functions).
+	 * Thus, we use default cJSON hooks.
+	 */
+	cJSON_InitHooks(NULL);
+
+	nrf_cloud_rest_codec_init(false);
+#endif
 
 	k_work_queue_start(
 		&mosh_common_work_q,
