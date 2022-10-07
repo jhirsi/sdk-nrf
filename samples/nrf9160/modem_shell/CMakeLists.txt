@@ -40,3 +40,7 @@ if(NOT ENV{PROJECT_NAME})
     PROJECT_NAME=${CMAKE_PROJECT_NAME}
   )
 endif()
+
+if(CONFIG_WIFI_NRF700X)
+  set(WIFI_NRF_DRV_BASE ${WEST_TOPDIR}/nrf/drivers/wifi/nrf700x)
+endif()
