@@ -70,10 +70,16 @@ static int method_cellular_ncellmeas_start(void)
 {
 	struct location_utils_modem_params_info modem_params = { 0 };
 	int err;
+	struct lte_lc_ncellmeas_params ncellmeas_params = {
+		.gci_count = 10,
+		.search_type = LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT
+	};
 
 	LOG_DBG("Triggering cell measurements");
 
-	err = lte_lc_neighbor_cell_measurement(LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT);
+	/* TODO: ncellmeas parameters as loc api params */
+
+	err = lte_lc_neighbor_cell_measurement(ncellmeas_params);
 	if (err) {
 		LOG_WRN("Failed to initiate neighbor cell measurements: %d, "
 			"next: fallback to get modem parameters",
