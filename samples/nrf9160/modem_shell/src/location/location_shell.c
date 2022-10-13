@@ -25,6 +25,7 @@
 #include "location_cmd_utils.h"
 
 #include "mosh_defines.h"
+#include "link_shell.h"
 
 #if defined(CONFIG_MOSH_CLOUD_LWM2M)
 /* Location Assistance resource IDs */
@@ -94,6 +95,8 @@ static const char location_get_usage_str[] =
 	"  --cellular_timeout, Cellular timeout in milliseconds. Zero means timeout is disabled.\n"
 	"  --cellular_service, Used cellular positioning service:\n"
 	"                      'any' (default), 'nrf' or 'here'\n"
+	"  --cellular_search_type, See link ncellmeas for descriptions\n"
+	"  --cellular_gci_count,   See link ncellmeas for description\n"
 	"  --wifi_timeout,     Wi-Fi timeout in milliseconds. Zero means timeout is disabled.\n"
 	"  --wifi_service,     Used Wi-Fi positioning service:\n"
 	"                      'any' (default), 'nrf' or 'here'\n"
@@ -116,6 +119,8 @@ enum {
 	LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_PVT,
 	LOCATION_SHELL_OPT_CELLULAR_TIMEOUT,
 	LOCATION_SHELL_OPT_CELLULAR_SERVICE,
+	LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_SEARCH_TYPE,
+	LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_GCI_COUNT,
 	LOCATION_SHELL_OPT_WIFI_TIMEOUT,
 	LOCATION_SHELL_OPT_WIFI_SERVICE,
 	LOCATION_SHELL_OPT_CELLULAR_CUSTOM_NCELLMEAS,
@@ -136,6 +141,10 @@ static struct option long_options[] = {
 	{ "gnss_cloud_pvt", no_argument, 0, LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_PVT },
 	{ "cellular_timeout", required_argument, 0, LOCATION_SHELL_OPT_CELLULAR_TIMEOUT },
 	{ "cellular_service", required_argument, 0, LOCATION_SHELL_OPT_CELLULAR_SERVICE },
+	{ "cellular_search_type", required_argument, 0,
+		LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_SEARCH_TYPE },
+	{ "cellular_gci_count", required_argument, 0,
+		LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_GCI_COUNT },
 	{ "wifi_timeout", required_argument, 0, LOCATION_SHELL_OPT_WIFI_TIMEOUT },
 	{ "wifi_service", required_argument, 0, LOCATION_SHELL_OPT_WIFI_SERVICE },
 	{ "custom_ncellmeas", no_argument, 0, LOCATION_SHELL_OPT_CELLULAR_CUSTOM_NCELLMEAS },
@@ -561,6 +570,12 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 
 	enum location_req_mode req_mode = LOCATION_REQ_MODE_FALLBACK;
 
+	enum lte_lc_neighbor_search_type ncellmeas_search_type =
+		LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT;
+	bool ncellmeas_search_type_set = false;
+	int ncellmeas_gci_count;
+	bool ncellmeas_gci_count_set = false;
+
 	int opt;
 	int ret = 0;
 	int long_index = 0;
@@ -618,6 +633,23 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 			if (cellular_timeout == 0) {
 				cellular_timeout = SYS_FOREVER_MS;
 			}
+			break;
+
+		case LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_SEARCH_TYPE:
+			ncellmeas_search_type = link_shell_string_to_ncellmeas_search_type(optarg);
+			if (ncellmeas_search_type == MOSH_NCELLMEAS_SEARCH_TYPE_NONE) {
+				mosh_error("Unknown search_type.");
+				goto show_usage;
+			}
+			ncellmeas_search_type_set = true;
+			break;
+		case LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_GCI_COUNT:
+			ncellmeas_gci_count = atoi(optarg);
+			if (ncellmeas_gci_count < 2 || ncellmeas_gci_count > 15) {
+				mosh_error("Not a valid number for --gci_count.");
+				goto show_usage;
+			}
+			ncellmeas_gci_count_set = true;
 			break;
 
 		/* Only in mosh_dev for enabling testing the max response: */
@@ -775,6 +807,14 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 				config.methods[i].cellular.service = cellular_service;
 				if (cellular_timeout_set) {
 					config.methods[i].cellular.timeout = cellular_timeout;
+				}
+				if (ncellmeas_gci_count_set) {
+					config.methods[i].cellular.ncellmeas_params.gci_count =
+						ncellmeas_gci_count;
+				}
+				if (ncellmeas_search_type_set) {
+					config.methods[i].cellular.ncellmeas_params.search_type =
+						ncellmeas_search_type;
 				}
 			} else if (config.methods[i].method == LOCATION_METHOD_WIFI) {
 				config.methods[i].wifi.service = wifi_service;
