@@ -188,12 +188,15 @@ static int lte_connect(void)
 static void start_cell_measurements(void)
 {
 	int err;
+	struct lte_lc_ncellmeas_params ncellmeas_params = {
+		.search_type = LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT,
+	};
 
 	if (!atomic_get(&connected)) {
 		return;
 	}
 
-	err = lte_lc_neighbor_cell_measurement(LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT);
+	err = lte_lc_neighbor_cell_measurement(ncellmeas_params);
 	if (err) {
 		LOG_ERR("Failed to initiate neighbor cell measurements, error: %d",
 			err);

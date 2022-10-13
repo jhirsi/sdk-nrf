@@ -107,6 +107,12 @@
 	(AT_NCELLMEAS_PRE_NCELLS_PARAMS_COUNT +				\
 	 AT_NCELLMEAS_N_PARAMS_COUNT * CONFIG_LTE_NEIGHBOR_CELLS_MAX)
 
+#define AT_NCELLMEAS_GCI_CELL_PARAMS_COUNT	12
+
+#define AT_NCELLMEAS_CGI_PARAMS_COUNT_MAX					\
+	((AT_NCELLMEAS_GCI_CELL_PARAMS_COUNT * 15) +				\
+	 (AT_NCELLMEAS_N_PARAMS_COUNT * CONFIG_LTE_NEIGHBOR_CELLS_MAX))
+
 /* XMODEMSLEEP command parameters. */
 #define AT_XMODEMSLEEP_SUB			"AT%%XMODEMSLEEP=1,%d,%d"
 #define AT_XMODEMSLEEP_PARAMS_COUNT_MAX		4
@@ -242,6 +248,9 @@ uint32_t neighborcell_count_get(const char *at_response);
  * @return Zero on success or (negative) error code otherwise.
  */
 int parse_ncellmeas(const char *at_response, struct lte_lc_cells_info *cells);
+
+int parse_ncellmeas_gci(struct lte_lc_ncellmeas_params *params,
+	const char *at_response, struct lte_lc_cells_info *cells);
 
 /* @brief Parses an XMODEMSLEEP response and extracts the sleep type and time.
  *

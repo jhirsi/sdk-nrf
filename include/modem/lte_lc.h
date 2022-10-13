@@ -261,6 +261,29 @@ struct lte_lc_edrx_cfg {
 #define LTE_LC_CELL_EUTRAN_ID_INVALID		UINT32_MAX
 #define LTE_LC_CELL_EUTRAN_ID_MAX		268435455
 
+struct lte_lc_ncell {
+	/** EARFCN of the neighbour cell, per 3GPP TS 36.101. */
+	uint32_t earfcn;
+
+	/** Difference in milliseconds of serving cell and neighbor cell
+	 *  measurement, in the range -99999 ms < time_diff < 99999 ms.
+	 */
+	int time_diff;
+
+	/** Physical cell ID. */
+	uint16_t phys_cell_id;
+
+	/** RSRP of the neighbor cell. Format is the same as for RSRP member
+	 *  of struct lte_lc_cell.
+	 */
+	int16_t rsrp;
+
+	/** RSRQ of the neighbor cell. Format is the same as for RSRQ member
+	 *  of struct lte_lc_cell.
+	 */
+	int16_t rsrq;
+};
+
 struct lte_lc_cell {
 	/** Mobile Country Code. */
 	int mcc;
@@ -345,30 +368,12 @@ struct lte_lc_cell {
 	 *  255: not known or not detectable.
 	 */
 	int16_t rsrq;
+
+	/* Only with GCI type searches */
+	bool serving_cell;
+	uint8_t ncells_count;
 };
 
-struct lte_lc_ncell {
-	/** EARFCN of the neighbour cell, per 3GPP TS 36.101. */
-	uint32_t earfcn;
-
-	/** Difference in milliseconds of serving cell and neighbor cell
-	 *  measurement, in the range -99999 ms < time_diff < 99999 ms.
-	 */
-	int time_diff;
-
-	/** Physical cell ID. */
-	uint16_t phys_cell_id;
-
-	/** RSRP of the neighbor cell. Format is the same as for RSRP member
-	 *  of struct lte_lc_cell.
-	 */
-	int16_t rsrp;
-
-	/** RSRQ of the neighbor cell. Format is the same as for RSRQ member
-	 *  of struct lte_lc_cell.
-	 */
-	int16_t rsrq;
-};
 
 /** @brief Structure containing results of neighbor cell measurements.
  *	   The current cell information is valid if the current cell ID is not
@@ -381,6 +386,9 @@ struct lte_lc_cells_info {
 	struct lte_lc_cell current_cell;
 	uint8_t ncells_count;
 	struct lte_lc_ncell *neighbor_cells;
+
+	uint8_t gci_cells_count;
+	struct lte_lc_cell *gci_cells;
 };
 
 enum lte_lc_modem_sleep_type {
@@ -639,6 +647,32 @@ enum lte_lc_neighbor_search_type {
 	 *  and the search is performed for all supported bands.
 	 */
 	LTE_LC_NEIGHBOR_SEARCH_TYPE_EXTENDED_COMPLETE = 2,
+
+	/** GCI search, option 1. Modem searches EARFCNs based on previous cell history. */
+	LTE_LC_NEIGHBOR_SEARCH_TYPE_GCI_OPTION_1 = 3,
+
+	/** GCI search, option 2. Modem starts with the same search method than in
+	 * search_type 3. If less than <gci_count> cells were found, modem continues
+	 * by performing light search on bands that are valid for the area of the current
+	 * ITU-T region.
+	 */
+	LTE_LC_NEIGHBOR_SEARCH_TYPE_GCI_OPTION_2 = 4,
+
+	/** GCI search, option 3. Modem starts with the same search method than in
+	 * search_type 3. If less than <gci_count> cells were found, modem performs
+	 * complete search on all supported bands.
+	 */
+	LTE_LC_NEIGHBOR_SEARCH_TYPE_GCI_OPTION_3 = 5,
+};
+
+struct lte_lc_ncellmeas_params {
+	enum lte_lc_neighbor_search_type search_type;
+
+	/** Integer, range: 2-15: Maximum number of cells to be searched.
+	 * Mandatory with the GCI search types 3-5,
+	 * ignored with search types 0-2.
+	 */
+	uint8_t gci_count;
 };
 
 /** Configuration for periodic search of type LTE_LC_PERIODIC_SEARCH_PATTERN_RANGE.
@@ -1106,13 +1140,14 @@ int lte_lc_lte_mode_get(enum lte_lc_lte_mode *mode);
  *
  * @note For modem firmware versions < v1.3.1, LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT
  *	 is the only accepted type. Other types will result in an error being returned.
+ *	 For modem firmware versions >= v1.3.4, also GCI search types are accepted.
  *
- * @param type Search type, see @c enum lte_lc_neighbor_search_type for more information.
+ * @param type params, see @c enum lte_lc_ncellmeas_params for more information.
  *
  * @retval 0 if neighbor cell measurement was successfully initiated.
  * @retval -EFAULT if AT command failed.
  */
-int lte_lc_neighbor_cell_measurement(enum lte_lc_neighbor_search_type type);
+int lte_lc_neighbor_cell_measurement(struct lte_lc_ncellmeas_params params);
 
 /** @brief Cancel an ongoing neighbor cell measurement.
  *
