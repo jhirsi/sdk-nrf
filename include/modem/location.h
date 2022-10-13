@@ -15,9 +15,7 @@
 #if defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
 #include <net/nrf_cloud_pgps.h>
 #endif
-#if defined(CONFIG_LOCATION_METHOD_CELLULAR_EXTERNAL)
 #include <modem/lte_lc.h>
-#endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI_EXTERNAL)
 #include <net/wifi_location_common.h>
 #endif
@@ -313,6 +311,9 @@ struct location_cellular_config {
 
 	/** Used cellular positioning service. */
 	enum location_service service;
+
+	/** Neighbor cell measurement parameters. */
+	struct lte_lc_ncellmeas_params ncellmeas_params;
 };
 
 /** Wi-Fi positioning configuration. */

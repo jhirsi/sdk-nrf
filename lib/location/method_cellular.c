@@ -32,8 +32,11 @@ static struct method_cellular_positioning_work_args method_cellular_positioning_
 static K_SEM_DEFINE(cellmeas_data_ready, 0, 1);
 
 static struct lte_lc_ncell neighbor_cells[CONFIG_LTE_NEIGHBOR_CELLS_MAX];
+static struct lte_lc_cell gci_cells[15]; /* TODO: own config for max gci_count */
+
 static struct lte_lc_cells_info cell_data = {
 	.neighbor_cells = neighbor_cells,
+	.gci_cells = gci_cells,
 };
 static bool running;
 
@@ -62,6 +65,18 @@ void method_cellular_lte_ind_handler(const struct lte_lc_evt *const evt)
 			cell_data.ncells_count = 0;
 			LOG_DBG("No neighbor cell information from modem.");
 		}
+
+		/* Copy GCI neighbor cell information if present. */
+		if (evt->cells_info.gci_cells_count > 0 && evt->cells_info.gci_cells) {
+			memcpy(cell_data.gci_cells,
+			       evt->cells_info.gci_cells,
+			       sizeof(struct lte_lc_cell) * evt->cells_info.gci_cells_count);
+
+			cell_data.gci_cells_count = evt->cells_info.gci_cells_count;
+		} else {
+			cell_data.gci_cells_count = 0;
+			LOG_INF("No GCI neighbor cell information from modem.");
+		}
 		k_sem_give(&cellmeas_data_ready);
 	} break;
 	default:
@@ -69,15 +84,14 @@ void method_cellular_lte_ind_handler(const struct lte_lc_evt *const evt)
 	}
 }
 
-static int method_cellular_ncellmeas_start(void)
+static int method_cellular_ncellmeas_start(struct lte_lc_ncellmeas_params ncellmeas_params)
 {
 	struct location_utils_modem_params_info modem_params = { 0 };
 	int err;
 
 	LOG_DBG("Triggering cell measurements");
 
-	/* Starting measurements with lte_lc default parameters */
-	err = lte_lc_neighbor_cell_measurement(NULL);
+	err = lte_lc_neighbor_cell_measurement(&ncellmeas_params);
 	if (err) {
 		LOG_WRN("Failed to initiate neighbor cell measurements: %d, "
 			"next: fallback to get modem parameters",
@@ -117,7 +131,7 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	ncellmeas_start_time = k_uptime_get();
 
 	LOG_DBG("Triggering neighbor cell measurements");
-	ret = method_cellular_ncellmeas_start();
+	ret = method_cellular_ncellmeas_start(cellular_config.ncellmeas_params);
 	if (ret) {
 		LOG_WRN("Cannot start neighbor cell measurements");
 		location_core_event_cb_error();
@@ -141,6 +155,7 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	struct location_data location_result = { 0 };
 	int64_t ncellmeas_time;
 
+	/* TODO: is this needed with GCI? */
 	if (cell_data.current_cell.id == LTE_LC_CELL_EUTRAN_ID_INVALID) {
 		LOG_WRN("Current cell ID not valid");
 		location_core_event_cb_error();

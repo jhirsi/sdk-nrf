@@ -136,6 +136,8 @@ static void location_config_method_defaults_set(
 	} else if (method_type == LOCATION_METHOD_CELLULAR) {
 		method->cellular.timeout = 30 * MSEC_PER_SEC;
 		method->cellular.service = LOCATION_SERVICE_ANY;
+		method->cellular.ncellmeas_params.gci_count = 10;
+		method->cellular.ncellmeas_params.search_type = LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT;
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
 	} else if (method_type == LOCATION_METHOD_WIFI) {
 		method->wifi.timeout = 30 * MSEC_PER_SEC;
