@@ -21,6 +21,7 @@
 #include "link_shell_pdn.h"
 #include "link_settings.h"
 #include "net_utils.h"
+#include "link_shell.h"
 
 #define LINK_SHELL_EDRX_VALUE_STR_LENGTH 4
 #define LINK_SHELL_EDRX_PTW_STR_LENGTH 4
@@ -541,9 +542,7 @@ static void link_shell_sysmode_set(int sysmode, int lte_pref)
 
 /******************************************************************************/
 
-#define MOSH_NCELLMEAS_SEARCH_TYPE_NONE 0xFF
-
-static enum lte_lc_neighbor_search_type
+enum lte_lc_neighbor_search_type
 	link_shell_string_to_ncellmeas_search_type(const char *search_type_str)
 {
 	enum lte_lc_neighbor_search_type search_type = MOSH_NCELLMEAS_SEARCH_TYPE_NONE;
@@ -1245,7 +1244,7 @@ static int link_shell_ncellmeas(const struct shell *shell, size_t argc, char **a
 			break;
 		case LINK_SHELL_OPT_NCELLMEAS_GCI_COUNT:
 			gci_count = atoi(optarg);
-			if (gci_count <= 0) {
+			if (gci_count < 2 || gci_count > 15) {
 				mosh_error("Not a valid number for --gci_count.");
 				return -EINVAL;
 			}
