@@ -17,7 +17,7 @@
 #if defined(CONFIG_NRF_CLOUD_AGPS) || defined(CONFIG_NRF_CLOUD_PGPS)
 #include <net/nrf_cloud_agps.h>
 #endif
-#include <net/nrf_cloud_cell_pos.h>
+#include <net/nrf_cloud_ground_fix.h>
 #include "cJSON.h"
 #include "nrf_cloud_fsm.h"
 
@@ -31,7 +31,7 @@ extern "C" {
 #define NRF_CLOUD_JSON_APPID_VAL_PGPS		"PGPS"
 #define NRF_CLOUD_JSON_APPID_VAL_GNSS		"GNSS"
 #define NRF_CLOUD_JSON_APPID_VAL_GPS		"GPS"
-#define NRF_CLOUD_JSON_APPID_VAL_CELL_POS	"CELL_POS"
+#define NRF_CLOUD_JSON_APPID_VAL_GROUND_FIX	"GROUND_FIX"
 #define NRF_CLOUD_JSON_APPID_VAL_DEVICE		"DEVICE"
 #define NRF_CLOUD_JSON_APPID_VAL_FLIP		"FLIP"
 #define NRF_CLOUD_JSON_APPID_VAL_BTN		"BUTTON"
@@ -63,12 +63,9 @@ extern "C" {
 #define NRF_CLOUD_JSON_AREA_CODE_KEY		"tac"
 #define NRF_CLOUD_JSON_CELL_ID_KEY		"eci"
 #define NRF_CLOUD_JSON_PHYCID_KEY		"phycid"
+#define NRF_CLOUD_JSON_RSRP_KEY			"rsrp"
 
 /* Cellular positioning */
-#define NRF_CLOUD_CELL_POS_JSON_KEY_LAT		"lat"
-#define NRF_CLOUD_CELL_POS_JSON_KEY_LON		"lon"
-#define NRF_CLOUD_CELL_POS_JSON_KEY_UNCERT	"uncertainty"
-
 #define NRF_CLOUD_CELL_POS_JSON_KEY_LTE		"lte"
 #define NRF_CLOUD_CELL_POS_JSON_KEY_ECI		NRF_CLOUD_JSON_CELL_ID_KEY
 #define NRF_CLOUD_CELL_POS_JSON_KEY_MCC		NRF_CLOUD_JSON_MCC_KEY
@@ -76,15 +73,26 @@ extern "C" {
 #define NRF_CLOUD_CELL_POS_JSON_KEY_TAC		NRF_CLOUD_JSON_AREA_CODE_KEY
 #define NRF_CLOUD_CELL_POS_JSON_KEY_AGE		"age"
 #define NRF_CLOUD_CELL_POS_JSON_KEY_T_ADV	"adv"
-
 #define NRF_CLOUD_CELL_POS_JSON_KEY_EARFCN	"earfcn"
 #define NRF_CLOUD_CELL_POS_JSON_KEY_PCI		"pci"
 #define NRF_CLOUD_CELL_POS_JSON_KEY_NBORS	"nmr"
-#define NRF_CLOUD_CELL_POS_JSON_KEY_RSRP	"rsrp"
+#define NRF_CLOUD_CELL_POS_JSON_KEY_RSRP	NRF_CLOUD_JSON_RSRP_KEY
 #define NRF_CLOUD_CELL_POS_JSON_KEY_RSRQ	"rsrq"
 
-#define NRF_CLOUD_CELL_POS_TYPE_VAL_SCELL	"SCELL"
-#define NRF_CLOUD_CELL_POS_TYPE_VAL_MCELL	"MCELL"
+/* Ground fix */
+#define NRF_CLOUD_GROUND_FIX_KEY_DOREPLY	"doReply"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_WIFI	"wifi"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_APS	"accessPoints"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_WIFI_MAC	"macAddress"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_WIFI_CH	"channel"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_WIFI_RSSI	"signalStrength"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_WIFI_SSID	"ssid"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_LAT 	"lat"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_LON 	"lon"
+#define NRF_CLOUD_GROUND_FIX_JSON_KEY_UNCERT 	"uncertainty"
+#define NRF_CLOUD_GROUND_FIX_TYPE_VAL_MCELL	"MCELL"
+#define NRF_CLOUD_GROUND_FIX_TYPE_VAL_SCELL	"SCELL"
+#define NRF_CLOUD_GROUND_FIX_TYPE_VAL_WIFI	"WIFI"
 
 /* P-GPS */
 #define NRF_CLOUD_JSON_PGPS_PRED_COUNT		"predictionCount"
@@ -132,9 +140,9 @@ enum nrf_cloud_rcv_topic {
 	NRF_CLOUD_RCV_TOPIC_GENERAL,
 	NRF_CLOUD_RCV_TOPIC_AGPS,
 	NRF_CLOUD_RCV_TOPIC_PGPS,
-	NRF_CLOUD_RCV_TOPIC_CELL_POS,
-	/* Unknown/unhandled topic */
-	NRF_CLOUD_RCV_TOPIC_UNKNOWN
+	NRF_CLOUD_RCV_TOPIC_GROUND_FIX,
+	/* Unhandled or unable to be processed */
+	NRF_CLOUD_RCV_TOPIC_UNHANDLED
 };
 
 /**@brief Initialize the codec used encoding the data to the cloud. */
@@ -198,27 +206,37 @@ int nrf_cloud_parse_pgps_response(const char *const response,
 /** @brief Adds common [network] modem info to the provided cJSON object */
 int nrf_cloud_json_add_modem_info(cJSON * const data_obj);
 
-/** @brief Builds a cellular positioning request string using the provided cell info.
- * If successful, memory will be allocated for the output string and the user is
- * responsible for freeing it using @ref cJSON_free.
- */
-int nrf_cloud_format_cell_pos_req(struct lte_lc_cells_info const *const inf,
-				  size_t inf_cnt, char **string_out);
-
 /** @brief Builds a cellular positioning request in the provided cJSON object
  * using the provided cell info
  */
 int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf,
 				       size_t inf_cnt, cJSON * const req_obj_out);
 
-/** @brief Builds a [single-cell] cellular positioning request in the provided cJSON object.
+/** @brief Builds a single-cell cellular positioning request in the provided cJSON object.
  * Function obtains the necessary network info from the modem.
  */
 int nrf_cloud_format_single_cell_pos_req_json(cJSON * const req_obj_out);
 
-/** @brief Parses the cellular positioning response (REST and MQTT) from nRF Cloud. */
-int nrf_cloud_parse_cell_pos_response(const char *const buf,
-				      struct nrf_cloud_cell_pos_result *result);
+/** @brief Builds a ground fix location request string using the provided info.
+ * If successful, memory will be allocated for the output string and the user is
+ * responsible for freeing it using @ref cJSON_free.
+ */
+int nrf_cloud_format_ground_fix_req(struct lte_lc_cells_info const *const cell_info,
+				    struct wifi_scan_result const *const wifi_info,
+				    char **string_out);
+
+/** @brief Builds a WiFi positioning request in the provided cJSON object
+ * using the provided WiFi info
+ */
+int nrf_cloud_format_wifi_req_json(struct wifi_scan_result const *const wifi,
+				   cJSON *const req_obj_out);
+
+/** @brief Gets the required information from the modem for a single-cell location request. */
+int nrf_cloud_get_single_cell_modem_info(struct lte_lc_cell *const cell_inf);
+
+/** @brief Parses the ground fix response (REST and MQTT) from nRF Cloud. */
+int nrf_cloud_parse_ground_fix_response(const char *const buf,
+					struct nrf_cloud_ground_fix_result *result);
 
 /** @brief Checks whether the provided MQTT payload is an nRF Cloud disconnection request */
 bool nrf_cloud_detect_disconnection_request(const char *const buf);

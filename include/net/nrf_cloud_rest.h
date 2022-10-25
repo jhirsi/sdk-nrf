@@ -15,7 +15,7 @@
 #include <zephyr/types.h>
 #include <net/nrf_cloud.h>
 #include <net/nrf_cloud_pgps.h>
-#include <net/nrf_cloud_cell_pos.h>
+#include <net/nrf_cloud_ground_fix.h>
 #include <modem/lte_lc.h>
 
 #ifdef __cplusplus
@@ -113,10 +113,12 @@ struct nrf_cloud_rest_context {
 	enum nrf_cloud_error nrf_err;
 };
 
-/** @brief Data required for nRF Cloud cellular positioning request */
-struct nrf_cloud_rest_cell_pos_request {
-	/** Network information used in request */
-	struct lte_lc_cells_info *net_info;
+/** @brief Data required for nRF Cloud ground fix request */
+struct nrf_cloud_rest_ground_fix_request {
+	/** Cellular network information used in request */
+	struct lte_lc_cells_info *cell_info;
+	/** WiFi network information used in request */
+	struct wifi_scan_result *wifi_info;
 };
 
 /** @brief Data required for nRF Cloud Assisted GPS (A-GPS) request */
@@ -169,7 +171,7 @@ struct nrf_cloud_rest_pgps_request {
 };
 
 /**
- * @brief nRF Cloud location request.
+ * @brief nRF Cloud ground fix location request.
  *
  * @param[in,out] rest_ctx Context for communicating with nRF Cloud's REST API.
  * @param[in]     request Data to be provided in API call.
@@ -181,9 +183,9 @@ struct nrf_cloud_rest_pgps_request {
  *          Otherwise, a (negative) error code is returned.
  *          See @verbatim embed:rst:inline :ref:`nrf_cloud_rest_failure` @endverbatim for details.
  */
-int nrf_cloud_rest_cell_pos_get(struct nrf_cloud_rest_context *const rest_ctx,
-	struct nrf_cloud_rest_cell_pos_request const *const request,
-	struct nrf_cloud_cell_pos_result *const result);
+int nrf_cloud_rest_ground_fix_get(struct nrf_cloud_rest_context *const rest_ctx,
+	struct nrf_cloud_rest_ground_fix_request const *const request,
+	struct nrf_cloud_ground_fix_result *const result);
 
 /**
  * @brief nRF Cloud Assisted GPS (A-GPS) data request.

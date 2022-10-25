@@ -11,7 +11,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <date_time.h>
-#include <net/nrf_cloud_cell_pos.h>
+#include <net/nrf_cloud_ground_fix.h>
 #include <cloud_codec.h>
 
 #include "cJSON.h"
@@ -805,7 +805,7 @@ int cloud_codec_init(struct cloud_data_cfg *cfg, cloud_codec_evt_handler_t event
 int cloud_codec_encode_neighbor_cells(struct cloud_codec_data *output,
 				      struct cloud_data_neighbor_cells *neighbor_cells)
 {
- #if defined(CONFIG_NRF_CLOUD_CELL_POS)
+ #if defined(CONFIG_NRF_CLOUD_GROUND_FIX)
 	int err;
 	char *buffer;
 	cJSON *root_obj = NULL;
@@ -821,15 +821,9 @@ int cloud_codec_encode_neighbor_cells(struct cloud_codec_data *output,
 		return -ENODATA;
 	}
 
-	/* Set the request location flag when encoding the cellular position request.
-	 * In general, the application does not care about
-	 * getting the location back from cellular position requests. However, this is
-	 * needed to ensure that the cellular location of the application
-	 * is visualized in the nRF Cloud web UI.
-	 */
-	err = nrf_cloud_cell_pos_request_json_get(&info, true, &root_obj);
+	err = nrf_cloud_ground_fix_request_json_get(&info, NULL, true, &root_obj);
 	if (err) {
-		LOG_ERR("nrf_cloud_cell_pos_request_json_get, error: %d", err);
+		LOG_ERR("nrf_cloud_ground_fix_request_json_get, error: %d", err);
 		return -ENOMEM;
 	}
 
@@ -852,7 +846,7 @@ exit:
 	neighbor_cells->queued = false;
 	cJSON_Delete(root_obj);
 	return err;
-#endif /* CONFIG_NRF_CLOUD_CELL_POS */
+#endif /* CONFIG_NRF_CLOUD_GROUND_FIX */
 
 	return -ENOTSUP;
 }
