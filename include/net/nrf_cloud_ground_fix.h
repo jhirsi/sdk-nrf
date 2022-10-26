@@ -15,6 +15,7 @@
 #include <zephyr/net/wifi.h>
 #include <modem/lte_lc.h>
 #include <net/nrf_cloud.h>
+#include <net/wifi_defs.h>
 #include <cJSON.h>
 
 #ifdef __cplusplus
@@ -35,19 +36,8 @@ extern "C" {
 #define NRF_CLOUD_GROUND_FIX_WIFI_OMIT_CHAN	(0)
 /** @} */
 
-struct wifi_ap_info {
-	char mac_addr_str[WIFI_MAC_ADDR_STR_LEN + 1];
-	char ssid_str[WIFI_SSID_MAX_LEN + 1];
-	uint8_t channel;
-	int8_t rssi;
-};
-
 /* Minimum number of access points required by nRF Cloud */
 #define NRF_CLOUD_GROUND_FIX_WIFI_AP_CNT_MIN 2
-struct wifi_scan_result {
-	struct wifi_ap_info *ap_info;
-	uint8_t cnt;
-};
 
 /** @brief Ground fix request type */
 enum nrf_cloud_ground_fix_type {
@@ -115,7 +105,7 @@ typedef void (*nrf_cloud_ground_fix_response_t)
  * @return A negative value indicates an error.
  */
 int nrf_cloud_ground_fix_request(const struct lte_lc_cells_info *const cells_inf,
-				 const struct wifi_scan_result *const wifi_inf,
+				 const struct wifi_scan_info *const wifi_inf,
 				 const bool request_loc, nrf_cloud_ground_fix_response_t cb);
 #endif /* CONFIG_NRF_CLOUD_MQTT */
 
@@ -133,7 +123,7 @@ int nrf_cloud_ground_fix_request(const struct lte_lc_cells_info *const cells_inf
  * @return A negative value indicates an error.
  */
 int nrf_cloud_ground_fix_request_json_get(const struct lte_lc_cells_info *const cells_inf,
-					  const struct wifi_scan_result *const wifi_inf,
+					  const struct wifi_scan_info *const wifi_inf,
 					  const bool request_loc, cJSON **req_obj_out);
 
 /**@brief Processes ground fix data received from nRF Cloud via MQTT or REST.

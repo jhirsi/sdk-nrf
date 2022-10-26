@@ -1752,7 +1752,7 @@ cleanup:
 	return -ENOMEM;
 }
 
-int nrf_cloud_format_wifi_req_json(struct wifi_scan_result const *const wifi,
+int nrf_cloud_format_wifi_req_json(struct wifi_scan_info const *const wifi,
 	cJSON *const req_obj_out)
 {
 	if (!wifi || !req_obj_out || !wifi->ap_info || !wifi->cnt) {
@@ -1811,7 +1811,7 @@ cleanup:
 }
 
 int nrf_cloud_format_ground_fix_req(struct lte_lc_cells_info const *const cell_info,
-	struct wifi_scan_result const *const wifi_info, char **string_out)
+	struct wifi_scan_info const *const wifi_info, char **string_out)
 {
 	if ((!cell_info && !wifi_info) || !string_out) {
 		return -EINVAL;

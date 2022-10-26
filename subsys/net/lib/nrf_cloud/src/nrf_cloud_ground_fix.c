@@ -18,7 +18,7 @@
 LOG_MODULE_REGISTER(nrf_cloud_ground_fix, CONFIG_NRF_CLOUD_LOG_LEVEL);
 
 int nrf_cloud_ground_fix_request(const struct lte_lc_cells_info *const cells_inf,
-				 const struct wifi_scan_result *const wifi_inf,
+				 const struct wifi_scan_info *const wifi_inf,
 				 const bool request_loc, nrf_cloud_ground_fix_response_t cb)
 {
 	if (nfsm_get_current_state() != STATE_DC_CONNECTED) {
@@ -48,7 +48,7 @@ int nrf_cloud_ground_fix_scell_data_get(struct lte_lc_cell *const cell_inf)
 }
 
 int nrf_cloud_ground_fix_request_json_get(const struct lte_lc_cells_info *const cells_inf,
-					  const struct wifi_scan_result *const wifi_inf,
+					  const struct wifi_scan_info *const wifi_inf,
 					  const bool request_loc, cJSON **req_obj_out)
 {
 	if (!req_obj_out || (!cells_inf && !wifi_inf)) {

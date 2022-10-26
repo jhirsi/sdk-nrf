@@ -118,7 +118,7 @@ struct nrf_cloud_rest_ground_fix_request {
 	/** Cellular network information used in request */
 	struct lte_lc_cells_info *cell_info;
 	/** WiFi network information used in request */
-	struct wifi_scan_result *wifi_info;
+	struct wifi_scan_info *wifi_info;
 };
 
 /** @brief Data required for nRF Cloud Assisted GPS (A-GPS) request */

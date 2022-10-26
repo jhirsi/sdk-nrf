@@ -222,13 +222,13 @@ int nrf_cloud_format_single_cell_pos_req_json(cJSON * const req_obj_out);
  * responsible for freeing it using @ref cJSON_free.
  */
 int nrf_cloud_format_ground_fix_req(struct lte_lc_cells_info const *const cell_info,
-				    struct wifi_scan_result const *const wifi_info,
+				    struct wifi_scan_info const *const wifi_info,
 				    char **string_out);
 
 /** @brief Builds a WiFi positioning request in the provided cJSON object
  * using the provided WiFi info
  */
-int nrf_cloud_format_wifi_req_json(struct wifi_scan_result const *const wifi,
+int nrf_cloud_format_wifi_req_json(struct wifi_scan_info const *const wifi,
 				   cJSON *const req_obj_out);
 
 /** @brief Gets the required information from the modem for a single-cell location request. */
