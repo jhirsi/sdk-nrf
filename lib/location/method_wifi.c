@@ -39,15 +39,12 @@ static bool running;
 static uint32_t current_scan_result_count;
 static uint32_t latest_scan_result_count;
 
-struct method_wifi_scan_result {
-	char mac_addr_str[WIFI_MAC_ADDR_STR_LEN + 1];
-	char ssid_str[WIFI_SSID_MAX_LEN + 1];
-	uint8_t channel;
-	int8_t rssi;
+static struct wifi_ap_info
+	latest_scan_results[CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT];
+static struct wifi_scan_info latest_wifi_info = {
+	.ap_info = latest_scan_results,
 };
 
-static struct method_wifi_scan_result
-	latest_scan_results[CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT];
 static K_SEM_DEFINE(wifi_scanning_ready, 0, 1);
 
 /******************************************************************************/
@@ -75,7 +72,7 @@ static int method_wifi_scanning_start(void)
 static void method_wifi_scan_result_handle(struct net_mgmt_event_callback *cb)
 {
 	const struct wifi_scan_result *entry = (const struct wifi_scan_result *)cb->info;
-	struct method_wifi_scan_result *current;
+	struct wifi_ap_info *current;
 
 	current_scan_result_count++;
 
@@ -197,17 +194,9 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 		}
 
 		/* Fill scanning results: */
-		request.wifi_scanning_result_count = latest_scan_result_count;
-		for (int i = 0; i < latest_scan_result_count; i++) {
-			strcpy(request.scanning_results[i].mac_addr_str,
-			       latest_scan_results[i].mac_addr_str);
-			strcpy(request.scanning_results[i].ssid_str,
-			       latest_scan_results[i].ssid_str);
-			request.scanning_results[i].channel =
-				latest_scan_results[i].channel;
-			request.scanning_results[i].rssi =
-				latest_scan_results[i].rssi;
-		}
+		latest_wifi_info.cnt = latest_scan_result_count;
+		request.scanning_results = &latest_wifi_info;
+
 		err = rest_services_wifi_location_get(wifi_config.service, &request, &result);
 		if (err) {
 			LOG_ERR("Failed to acquire a location by using "

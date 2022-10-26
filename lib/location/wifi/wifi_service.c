@@ -15,7 +15,7 @@
 #include "wifi_here_rest.h"
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI_SERVICE_NRF_CLOUD)
-#include "wifi_nrf_cloud_rest.h"
+#include "wifi_nrf_cloud.h"
 #endif
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
@@ -29,9 +29,9 @@ int rest_services_wifi_location_get(enum location_service service,
 {
 #if defined(CONFIG_LOCATION_METHOD_WIFI_SERVICE_NRF_CLOUD)
 	if (service == LOCATION_SERVICE_NRF_CLOUD || service == LOCATION_SERVICE_ANY) {
-		return wifi_nrf_cloud_rest_pos_get(location_wifi_receive_buffer,
-						CONFIG_LOCATION_METHOD_WIFI_REST_RECV_BUF_SIZE,
-						request, result);
+		return wifi_nrf_cloud_pos_get(location_wifi_receive_buffer,
+					      CONFIG_LOCATION_METHOD_WIFI_REST_RECV_BUF_SIZE,
+					      request, result);
 	}
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI_SERVICE_HERE)

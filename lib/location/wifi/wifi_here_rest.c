@@ -41,14 +41,14 @@ BUILD_ASSERT(
  */
 
 static int wifi_here_rest_pos_req_json_format(
-	const struct wifi_scanning_result_info scanning_results[],
-	uint8_t wifi_scanning_result_count,
+	const struct wifi_ap_info wifi_aps[],
+	uint16_t wifi_ap_cnt,
 	cJSON * const req_obj_out)
 {
 	cJSON *wifi_array = NULL;
 	cJSON *wifi_info_obj = NULL;
 
-	if (!scanning_results || !wifi_scanning_result_count || !req_obj_out) {
+	if (!wifi_aps || !wifi_ap_cnt || !req_obj_out) {
 		return -EINVAL;
 	}
 	wifi_array = cJSON_AddArrayToObjectCS(req_obj_out, HERE_WIFI_POS_JSON_KEY_WLAN);
@@ -56,8 +56,8 @@ static int wifi_here_rest_pos_req_json_format(
 		goto cleanup;
 	}
 
-	for (size_t i = 0; i < wifi_scanning_result_count; ++i) {
-		const struct wifi_scanning_result_info current_result = scanning_results[i];
+	for (size_t i = 0; i < wifi_ap_cnt; ++i) {
+		const struct wifi_ap_info current_result = wifi_aps[i];
 
 		wifi_info_obj = cJSON_CreateObject();
 
@@ -84,19 +84,17 @@ cleanup:
 }
 
 static int wifi_here_rest_format_pos_req_body(
-	const struct wifi_scanning_result_info scanning_results[],
-	uint8_t wifi_scanning_result_count,
+	const struct wifi_scan_info *wifi_aps,
 	char **json_str_out)
 {
-	if (!scanning_results || !wifi_scanning_result_count || !json_str_out) {
+	if (!wifi_aps || !json_str_out) {
 		return -EINVAL;
 	}
 
 	int err = 0;
 	cJSON *req_obj = cJSON_CreateObject();
 
-	err = wifi_here_rest_pos_req_json_format(scanning_results, wifi_scanning_result_count,
-						 req_obj);
+	err = wifi_here_rest_pos_req_json_format(wifi_aps->ap_info, wifi_aps->cnt, req_obj);
 	if (err) {
 		goto cleanup;
 	}
@@ -207,7 +205,6 @@ int wifi_here_rest_pos_get(
 	/* Get the body/payload to request: */
 	ret = wifi_here_rest_format_pos_req_body(
 		request->scanning_results,
-		request->wifi_scanning_result_count,
 		&body);
 	if (ret) {
 		LOG_ERR("Failed to generate wifi positioning request, err: %d", ret);

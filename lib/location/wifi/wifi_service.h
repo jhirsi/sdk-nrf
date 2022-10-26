@@ -14,25 +14,13 @@
 #define WIFI_SERVICE_H
 
 #include <zephyr/types.h>
-#include <zephyr/net/wifi.h>
+#include <net/wifi_defs.h>
 #include <modem/location.h>
-
-#define WIFI_MAC_ADDR_STR_LEN 17
-
-/** @brief Item for passing a Wi-Fi scanning result */
-struct wifi_scanning_result_info {
-	char mac_addr_str[WIFI_MAC_ADDR_STR_LEN + 1];
-	char ssid_str[WIFI_SSID_MAX_LEN + 1];
-	uint8_t channel;
-	int8_t rssi;
-};
 
 /** @brief Data used for Wi-Fi positioning request */
 struct rest_wifi_pos_request {
 	/** Scanning results */
-	struct wifi_scanning_result_info
-		scanning_results[CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT];
-	uint8_t wifi_scanning_result_count; /* Count of wifi access points returned in scanning */
+	struct wifi_scan_info *scanning_results;
 	int32_t timeout_ms; /* REST request timeout (in mseconds) */
 };
 
