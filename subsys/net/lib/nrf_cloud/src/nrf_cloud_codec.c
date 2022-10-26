@@ -1622,10 +1622,10 @@ int nrf_cloud_format_single_cell_pos_req_json(cJSON *const req_obj_out)
 	return err;
 }
 
-int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf,
-	size_t inf_cnt, cJSON *const req_obj_out)
+int nrf_cloud_format_cell_pos_req_json(const struct lte_lc_cells_info *inf,
+	cJSON * const req_obj_out)
 {
-	if (!inf || !inf_cnt || !req_obj_out) {
+	if (!inf || !req_obj_out) {
 		return -EINVAL;
 	}
 
@@ -1633,15 +1633,41 @@ int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf
 	cJSON *ncell_obj = NULL;
 	cJSON *lte_array = NULL;
 	cJSON *nmr_array = NULL;
+	struct lte_lc_cell *tmp_cells = NULL;
+	struct lte_lc_cell *cur = NULL;
+	int lte_cell_count = 0; /* Current and GCI cells */
+
+	tmp_cells = k_calloc(inf->gci_cells_count + 1, sizeof(struct lte_lc_cell));
+	if (tmp_cells == NULL) {
+		LOG_ERR("Failed to allocate memory for the GCI cells");
+		return -ENOMEM;
+	}
+	if (inf->current_cell.id == LTE_LC_CELL_EUTRAN_ID_INVALID) {
+		/* No current cell info */
+		memcpy(tmp_cells,
+			&inf->gci_cells,
+			sizeof(struct lte_lc_cell) * inf->gci_cells_count);
+		lte_cell_count = inf->gci_cells_count;
+	} else {
+		/* Current cell info included,
+		 * put it as the 1st item in lte list for encoding.
+		 */
+		memcpy(&tmp_cells[0],
+			&inf->current_cell,
+			sizeof(struct lte_lc_cell));
+		memcpy(&tmp_cells[1],
+			inf->gci_cells,
+			sizeof(struct lte_lc_cell) * inf->gci_cells_count);
+		lte_cell_count = inf->gci_cells_count + 1;
+	}
 
 	lte_array = cJSON_AddArrayToObjectCS(req_obj_out, NRF_CLOUD_CELL_POS_JSON_KEY_LTE);
 	if (!lte_array) {
 		goto cleanup;
 	}
 
-	for (size_t i = 0; i < inf_cnt; ++i) {
-		struct lte_lc_cells_info const *const lte = (inf + i);
-		struct lte_lc_cell const *const cur = &lte->current_cell;
+	for (size_t i = 0; i < lte_cell_count; i++) {
+		cur = &tmp_cells[i];
 
 		lte_obj = cJSON_CreateObject();
 
@@ -1693,11 +1719,11 @@ int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf
 		}
 
 		/* Add an array for neighbor cell data if there are any */
-		if (lte->ncells_count) {
-			if (lte->neighbor_cells == NULL) {
+		if (i == 0 && inf->ncells_count) {
+			if (inf->neighbor_cells == NULL) {
 				LOG_WRN("Neighbor cell count is %u, but buffer is NULL",
-					lte->ncells_count);
-				return 0;
+					inf->ncells_count);
+				continue;
 			}
 
 			nmr_array = cJSON_AddArrayToObjectCS(lte_obj,
@@ -1707,8 +1733,8 @@ int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf
 			}
 		}
 
-		for (uint8_t j = 0; nmr_array && (j < lte->ncells_count); ++j) {
-			struct lte_lc_ncell *ncell = lte->neighbor_cells + j;
+		for (uint8_t j = 0; nmr_array && (j < inf->ncells_count); ++j) {
+			struct lte_lc_ncell *ncell = inf->neighbor_cells + j;
 
 			ncell_obj = cJSON_CreateObject();
 
@@ -1743,12 +1769,14 @@ int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf
 		}
 	}
 
+	k_free(tmp_cells);
 	return 0;
 
 cleanup:
 	/* Only need to delete the lte_array since all items (if any) were added to it */
 	cJSON_DeleteItemFromObject(req_obj_out, NRF_CLOUD_CELL_POS_JSON_KEY_LTE);
 	LOG_ERR("Failed to format location request, out of memory");
+	k_free(tmp_cells);
 	return -ENOMEM;
 }
 
@@ -1821,7 +1849,7 @@ int nrf_cloud_format_ground_fix_req(struct lte_lc_cells_info const *const cell_i
 	cJSON *req_obj = cJSON_CreateObject();
 
 	if (cell_info) {
-		err = nrf_cloud_format_cell_pos_req_json(cell_info, 1, req_obj);
+		err = nrf_cloud_format_cell_pos_req_json(cell_info, req_obj);
 		if (err) {
 			goto cleanup;
 		}

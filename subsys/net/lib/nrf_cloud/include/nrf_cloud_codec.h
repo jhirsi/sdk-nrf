@@ -209,10 +209,10 @@ int nrf_cloud_json_add_modem_info(cJSON * const data_obj);
 /** @brief Builds a cellular positioning request in the provided cJSON object
  * using the provided cell info
  */
-int nrf_cloud_format_cell_pos_req_json(struct lte_lc_cells_info const *const inf,
-				       size_t inf_cnt, cJSON * const req_obj_out);
+int nrf_cloud_format_cell_pos_req_json(const struct lte_lc_cells_info *inf,
+				       cJSON * const req_obj_out);
 
-/** @brief Builds a single-cell cellular positioning request in the provided cJSON object.
+/** @brief Builds a [single-cell] cellular positioning request in the provided cJSON object.
  * Function obtains the necessary network info from the modem.
  */
 int nrf_cloud_format_single_cell_pos_req_json(cJSON * const req_obj_out);
