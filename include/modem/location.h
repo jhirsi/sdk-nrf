@@ -9,7 +9,8 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
-#if defined(CONFIG_LOCATION_METHOD_GNSS_AGPS_EXTERNAL)
+#include <modem/lte_lc.h>
+#if defined(CONFIG_LOCATION_METHOD_GNSS)
 #include <nrf_modem_gnss.h>
 #endif
 #if defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
@@ -207,6 +208,9 @@ struct location_cellular_config {
 
 	/** Used cellular positioning service. */
 	enum location_service service;
+
+	/** Neighbor cell measurement parameters. */
+	struct lte_lc_ncellmeas_params ncellmeas_params;
 };
 
 /** Wi-Fi positioning configuration. */
