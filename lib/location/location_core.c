@@ -19,6 +19,9 @@
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
 #include "method_wifi.h"
 #endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI_CELLULAR)
+#include "method_wifi_cellular.h"
+#endif
 
 LOG_MODULE_DECLARE(location, CONFIG_LOCATION_LOG_LEVEL);
 
@@ -107,6 +110,16 @@ static const struct location_method_api method_wifi_api = {
 	.cancel           = method_wifi_cancel,
 };
 #endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI_CELLULAR)
+/** Combined Wi-Fi and Cellular location method configuration. */
+static const struct location_method_api method_wifi_cellular_api = {
+	.method           = LOCATION_METHOD_WIFI_CELLULAR,
+	.method_string    = "Wi-Fi - Cellular",
+	.init             = method_wifi_cellular_init,
+	.location_get     = method_wifi_cellular_location_get,
+	.cancel           = method_wifi_cellular_cancel,
+};
+#endif
 
 /** Supported location methods. */
 static const struct location_method_api *methods_supported[] = {
@@ -118,6 +131,9 @@ static const struct location_method_api *methods_supported[] = {
 #endif
 #if defined(CONFIG_LOCATION_METHOD_WIFI)
 	&method_wifi_api,
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI_CELLULAR)
+	&method_wifi_cellular_api,
 #endif
 	NULL
 };

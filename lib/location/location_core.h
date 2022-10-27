@@ -9,7 +9,7 @@
 
 struct location_method_api {
 	enum location_method method;
-	char method_string[10];
+	char method_string[17];
 	int  (*init)(void);
 	int  (*validate_params)(const struct location_method_config *config);
 	int  (*location_get)(const struct location_method_config *config);

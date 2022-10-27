@@ -30,6 +30,10 @@ config LOCATION_METHOD_WIFI
 	select NET_MGMT_EVENT_INFO
 	select NET_L2_WIFI_MGMT
 
+config LOCATION_METHOD_WIFI_CELLULAR
+	bool "Allow both Wi-Fi and Cellular positionings to be used for obtaining the location"
+	default y if LOCATION_METHOD_WIFI && LOCATION_METHOD_CELLULAR
+
 config LOCATION_METHODS_LIST_SIZE
 	int "Maximum number of location methods in configuration"
 	default 3

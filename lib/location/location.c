@@ -30,6 +30,7 @@ static bool initialized;
 static const char LOCATION_METHOD_CELLULAR_STR[] = "Cellular";
 static const char LOCATION_METHOD_GNSS_STR[] = "GNSS";
 static const char LOCATION_METHOD_WIFI_STR[] = "Wi-Fi";
+static const char LOCATION_METHOD_WIFI_CELLULAR_STR[] = "Wi-Fi - Cellular";
 static const char LOCATION_METHOD_UNKNOWN_STR[] = "Unknown";
 
 int location_init(location_event_handler_t handler)
@@ -70,6 +71,9 @@ int location_request(const struct location_config *config)
 #endif
 #if defined(CONFIG_LOCATION_METHOD_CELLULAR)
 		LOCATION_METHOD_CELLULAR,
+#endif
+#if defined(CONFIG_LOCATION_METHOD_WIFI) && defined(CONFIG_LOCATION_METHOD_CELLULAR)
+		LOCATION_METHOD_WIFI_CELLULAR,
 #endif
 		};
 
@@ -143,6 +147,18 @@ static void location_config_method_defaults_set(
 		method->wifi.service = LOCATION_SERVICE_ANY;
 #endif
 	}
+#if defined(CONFIG_LOCATION_METHOD_WIFI_CELLULAR)
+	else if (method_type == LOCATION_METHOD_WIFI_CELLULAR) {
+		method->wifi_cellular.wifi_conf.timeout = 30 * MSEC_PER_SEC;
+		method->wifi_cellular.wifi_conf.service = LOCATION_SERVICE_ANY;
+		
+		method->wifi_cellular.cell_conf.timeout = 30 * MSEC_PER_SEC;
+		method->wifi_cellular.cell_conf.service = LOCATION_SERVICE_ANY;
+		method->wifi_cellular.cell_conf.ncellmeas_params.gci_count = 10;
+		method->wifi_cellular.cell_conf.ncellmeas_params.search_type =
+			LTE_LC_NEIGHBOR_SEARCH_TYPE_DEFAULT;
+	} 
+#endif
 }
 
 void location_config_defaults_set(
@@ -181,6 +197,9 @@ const char *location_method_str(enum location_method method)
 
 	case LOCATION_METHOD_WIFI:
 		return LOCATION_METHOD_WIFI_STR;
+
+	case LOCATION_METHOD_WIFI_CELLULAR:
+		return LOCATION_METHOD_WIFI_CELLULAR_STR;
 
 	default:
 		return LOCATION_METHOD_UNKNOWN_STR;

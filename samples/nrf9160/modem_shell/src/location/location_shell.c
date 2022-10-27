@@ -64,7 +64,7 @@ static const char location_get_usage_str[] =
 	"[--cellular_timeout <timeout in msecs>] [--cellular_service <service_string>]\n"
 	"[--wifi_timeout <timeout in msecs>] [--wifi_service <service_string>]\n"
 	"Options:\n"
-	"  -m, --method,       Location method: 'gnss', 'cellular' or 'wifi'. Multiple\n"
+	"  -m, --method,       Location method: 'gnss', 'cellular', 'wifi' or 'wifi_cellular'. Multiple\n"
 	"                      '--method' parameters may be given to indicate list of\n"
 	"                      methods in priority order.\n"
 	"  --mode,             Location request mode: 'fallback' (default) or 'all'.\n"
@@ -531,6 +531,8 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 				method_list[method_count] = LOCATION_METHOD_GNSS;
 			} else if (strcmp(optarg, "wifi") == 0) {
 				method_list[method_count] = LOCATION_METHOD_WIFI;
+			} else if (strcmp(optarg, "wifi_cellular") == 0) {
+				method_list[method_count] = LOCATION_METHOD_WIFI_CELLULAR;
 			} else {
 				mosh_error("Unknown method (%s) given. See usage:", optarg);
 				goto show_usage;
@@ -601,6 +603,23 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 				config.methods[i].wifi.service = wifi_service;
 				if (wifi_timeout_set) {
 					config.methods[i].wifi.timeout = wifi_timeout;
+				}
+			} else if (config.methods[i].method == LOCATION_METHOD_WIFI_CELLULAR) {
+				config.methods[i].wifi_cellular.wifi_conf.service = wifi_service;
+				if (wifi_timeout_set) {
+					config.methods[i].wifi_cellular.wifi_conf.timeout = wifi_timeout;
+				}
+				config.methods[i].wifi_cellular.cell_conf.service = cellular_service;
+				if (cellular_timeout_set) {
+					config.methods[i].wifi_cellular.cell_conf.timeout = cellular_timeout;
+				}
+				if (ncellmeas_gci_count_set) {
+					config.methods[i].wifi_cellular.cell_conf.ncellmeas_params.gci_count =
+						ncellmeas_gci_count;
+				}
+				if (ncellmeas_search_type_set) {
+					config.methods[i].wifi_cellular.cell_conf.ncellmeas_params.search_type =
+						ncellmeas_search_type;
 				}
 			}
 		}

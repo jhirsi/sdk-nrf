@@ -36,6 +36,8 @@ enum location_method {
 	LOCATION_METHOD_GNSS,
 	/** Wi-Fi positioning. */
 	LOCATION_METHOD_WIFI,
+	/** Combined Wi-Fi and cellular positioning. */
+	LOCATION_METHOD_WIFI_CELLULAR,
 };
 
 /** Location acquisition mode. */
@@ -225,6 +227,12 @@ struct location_wifi_config {
 	enum location_service service;
 };
 
+/** Wi-Fi and Cellular positioning configuration. */
+struct location_wifi_cellular_config {
+	struct location_wifi_config wifi_conf;
+	struct location_cellular_config cell_conf;
+};
+
 /** Location method configuration. */
 struct location_method_config {
 	/** Location method. */
@@ -236,6 +244,8 @@ struct location_method_config {
 		struct location_gnss_config gnss;
 		/** Configuration for LOCATION_METHOD_WIFI. */
 		struct location_wifi_config wifi;
+		/** Configuration for LOCATION_METHOD_WIFI_CELLULAR. */
+		struct location_wifi_cellular_config wifi_cellular;
 	};
 };
 
