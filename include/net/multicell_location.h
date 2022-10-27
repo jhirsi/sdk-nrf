@@ -9,7 +9,7 @@
 
 #include <zephyr/kernel.h>
 #include <modem/lte_lc.h>
-
+#include <net/nrf_cloud_ground_fix.h>
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -22,9 +22,10 @@ struct multicell_location {
 	double latitude;
 	double longitude;
 	float accuracy;
+	enum nrf_cloud_ground_fix_type type; /* TODO: is this needed after all? */
 };
 
-/** Cellular positioning service. */
+/** Positioning service. */
 enum multicell_service {
 	/**
 	 * @brief Use any location service that has been configured to be available.
@@ -39,22 +40,25 @@ enum multicell_service {
 	MULTICELL_SERVICE_HERE
 };
 
-/** Cellular positioning input parameters. */
+/** Positioning input parameters. */
 struct multicell_location_params {
-	/** Cellular positioning service to be used. */
+	/** positioning service to be used. */
 	enum multicell_service service;
 	/** Neighbor cell data. */
 	const struct lte_lc_cells_info *cell_data;
+	/** Wi-Fi scanning results data. */
+	struct wifi_scan_info *wifi_data;
+
 	/**
-	 * @brief Timeout (in milliseconds) of how long the cellular positioning procedure can take.
+	 * @brief Timeout (in milliseconds) of how long the positioning procedure can take.
 	 * SYS_FOREVER_MS means that the timer is disabled.
 	 */
 	int32_t timeout;
 };
 
 /**
- * @brief Send a request for location based on cell measurements to the
- *        selected location service.
+ * @brief Send a request for location based on cell measurements or/and Wi-Fi scanning results
+ *        to the selected location service.
  *
  * @note This function will block the calling thread until a response
  *       is received from the location service, or timeout has elapsed.

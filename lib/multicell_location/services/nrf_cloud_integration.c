@@ -111,7 +111,7 @@ int location_service_get_cell_location_nrf_cloud(
 
 	LOG_DBG("Sending cellular positioning request (MQTT)");
 	err = nrf_cloud_ground_fix_request(
-		params->cell_data, NULL, true, location_service_location_ready_cb);
+		params->cell_data, params->wifi_data, true, location_service_location_ready_cb);
 	if (err == -EACCES) {
 		LOG_ERR("Cloud connection is not established");
 		return err;
@@ -151,7 +151,7 @@ int location_service_get_cell_location_nrf_cloud(
 	};
 	const struct nrf_cloud_rest_ground_fix_request loc_req = {
 		.cell_info = (struct lte_lc_cells_info *)params->cell_data,
-		.wifi_info = NULL
+		.wifi_info = (struct wifi_scan_info *)params->wifi_data
 	};
 
 	LOG_DBG("Sending cellular positioning request (REST)");
@@ -160,6 +160,7 @@ int location_service_get_cell_location_nrf_cloud(
 		location->accuracy = (double)result.unc;
 		location->latitude = result.lat;
 		location->longitude = result.lon;
+		location->type = result.type;
 	}
 
 	return err;
