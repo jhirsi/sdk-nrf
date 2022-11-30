@@ -40,6 +40,10 @@ static struct lte_lc_cells_info cell_data = {
 };
 static bool running;
 
+#if defined(CONFIG_LOCATION_METRICS)
+static struct location_data_details_cellular location_data_details_cellular;
+#endif
+
 void method_cellular_lte_ind_handler(const struct lte_lc_evt *const evt)
 {
 	switch (evt->type) {
@@ -133,8 +137,7 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	LOG_DBG("Triggering neighbor cell measurements");
 	ret = method_cellular_ncellmeas_start(cellular_config.ncellmeas_params);
 	if (ret) {
-		LOG_WRN("Cannot start neighbor cell measurements");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Cannot start neighbor cell measurements");
 		running = false;
 		return;
 	}
@@ -157,8 +160,8 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 
 	/* TODO: is this needed with GCI? */
 	if (cell_data.current_cell.id == LTE_LC_CELL_EUTRAN_ID_INVALID) {
-		LOG_WRN("Current cell ID not valid");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Current cell ID not valid");
+
 		running = false;
 		return;
 	}
@@ -174,8 +177,8 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 
 		/* Check if timeout has already elapsed */
 		if (ncellmeas_time >= cellular_config.timeout) {
-			LOG_WRN("Timeout occurred during neighbour cell measurement");
-			location_core_event_cb_timeout();
+			location_core_event_cb_timeout(
+				"Timeout occurred during neighbour cell measurement");
 			running = false;
 			return;
 		}
@@ -188,11 +191,14 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 	params.cell_data = &cell_data;
 	ret = multicell_location_get(&params, &location);
 	if (ret) {
-		LOG_ERR("Failed to acquire location from multicell_location lib, error: %d", ret);
+		char err_str[LOCATION_DETAILS_METRICS_CAUSE_STR_MAX_LEN + 1];
+
+		sprintf(err_str,
+			"Failed to acquire location from multicell_location lib, error: %d", ret);
 		if (ret == -ETIMEDOUT) {
-			location_core_event_cb_timeout();
+			location_core_event_cb_timeout(err_str);
 		} else {
-			location_core_event_cb_error();
+			location_core_event_cb_error(err_str);
 		}
 	} else {
 		location_result.latitude = location.latitude;
@@ -208,6 +214,10 @@ static void method_cellular_positioning_work_fn(struct k_work *work)
 
 int method_cellular_location_get(const struct location_method_config *config)
 {
+#if (CONFIG_LOCATION_METRICS)
+	memset(&location_data_details_cellular, 0, sizeof(location_data_details_cellular));
+#endif
+
 	/* Note: LTE status not checked, let it fail in NCELLMEAS if no connection */
 
 	method_cellular_positioning_work.cellular_config = config->cellular;
@@ -234,6 +244,13 @@ int method_cellular_cancel(void)
 
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_METRICS)
+void method_cellular_details_get(struct location_data_details *details)
+{
+	details->cellular = location_data_details_cellular;
+}
+#endif
 
 int method_cellular_init(void)
 {

@@ -16,6 +16,7 @@
 #endif
 #include <modem/location.h>
 #include <dk_buttons_and_leds.h>
+#include <date_time.h>
 #if defined(CONFIG_MOSH_CLOUD_LWM2M)
 #include <net/lwm2m_client_utils_location.h>
 #include "cloud_lwm2m.h"
@@ -23,7 +24,10 @@
 
 #include "mosh_print.h"
 #include "location_cmd_utils.h"
-
+#if defined(CONFIG_MOSH_METRICS)
+#include "location_metrics.h"
+#include "str_utils.h"
+#endif
 #include "mosh_defines.h"
 #include "link_shell.h"
 
@@ -48,6 +52,7 @@ struct gnss_location_work_data {
 	struct k_work work;
 
 	enum nrf_cloud_gnss_type format;
+	int64_t timestamp_ms;
 
 	/* Data from location event */
 	struct location_event_data loc_evt_data;
@@ -57,6 +62,19 @@ static struct gnss_location_work_data gnss_location_work_data;
 
 #if defined(CONFIG_DK_LIBRARY)
 static struct k_work_delayable location_evt_led_work;
+#endif
+
+#if defined(CONFIG_MOSH_METRICS)
+/* Work for location metrics to nRF Cloud */
+struct metrics_work_data {
+	struct k_work work;
+	struct location_metrics_data metrics;
+};
+
+static struct metrics_work_data metrics_work_data;
+
+/* There could be only one running location command at a time */
+static char current_loc_cmd_str[LOCATION_METRICS_CMD_STR_MAX_LEN + 1];
 #endif
 
 /******************************************************************************/
@@ -92,6 +110,9 @@ static const char location_get_usage_str[] =
 	"  --gnss_priority,    Enables GNSS priority mode\n"
 	"  --gnss_cloud_nmea,  Send acquired GNSS location to nRF Cloud formatted as NMEA\n"
 	"  --gnss_cloud_pvt,   Send acquired GNSS location to nRF Cloud formatted as PVT\n"
+#if defined(CONFIG_MOSH_METRICS)
+	"  --cloud_metrics,    Send metrics data to cloud. Note: additional costs may apply.\n"
+#endif
 	"  --cellular_timeout, Cellular timeout in milliseconds. Zero means timeout is disabled.\n"
 	"  --cellular_service, Used cellular positioning service:\n"
 	"                      'any' (default), 'nrf' or 'here'\n"
@@ -117,6 +138,9 @@ enum {
 	LOCATION_SHELL_OPT_GNSS_PRIORITY_MODE,
 	LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_NMEA,
 	LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_PVT,
+#if defined(CONFIG_MOSH_METRICS)
+	LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_METRICS,
+#endif
 	LOCATION_SHELL_OPT_CELLULAR_TIMEOUT,
 	LOCATION_SHELL_OPT_CELLULAR_SERVICE,
 	LOCATION_SHELL_OPT_CELLULAR_NCELLMEAS_SEARCH_TYPE,
@@ -139,6 +163,9 @@ static struct option long_options[] = {
 	{ "gnss_priority", no_argument, 0, LOCATION_SHELL_OPT_GNSS_PRIORITY_MODE },
 	{ "gnss_cloud_nmea", no_argument, 0, LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_NMEA },
 	{ "gnss_cloud_pvt", no_argument, 0, LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_PVT },
+#if defined(CONFIG_MOSH_METRICS)
+	{ "cloud_metrics", no_argument, 0, LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_METRICS },
+#endif
 	{ "cellular_timeout", required_argument, 0, LOCATION_SHELL_OPT_CELLULAR_TIMEOUT },
 	{ "cellular_service", required_argument, 0, LOCATION_SHELL_OPT_CELLULAR_SERVICE },
 	{ "cellular_search_type", required_argument, 0,
@@ -152,6 +179,7 @@ static struct option long_options[] = {
 };
 
 static bool gnss_location_to_cloud;
+static bool metrics_to_cloud;
 static enum nrf_cloud_gnss_type gnss_location_to_cloud_format;
 
 /******************************************************************************/
@@ -200,7 +228,7 @@ static void location_to_cloud_worker(struct k_work *work_item)
 	if (data->loc_evt_data.method == LOCATION_METHOD_GNSS) {
 		/* Encode json payload in requested format, either NMEA or in PVT*/
 		ret = location_cmd_utils_gnss_loc_to_cloud_payload_json_encode(
-			data->format, &data->loc_evt_data.location, &body);
+			data->format, &data->loc_evt_data.location, data->timestamp_ms, &body);
 		if (ret) {
 			mosh_error("Failed to generate nrf cloud NMEA or PVT, err: %d", ret);
 			goto clean_up;
@@ -426,8 +454,76 @@ exit:
 }
 #endif /* CONFIG_LOCATION_METHOD_CELLULAR_EXTERNAL */
 
+#if defined(CONFIG_MOSH_METRICS)
+static void metrics_to_cloud_worker(struct k_work *work_item)
+{
+	struct metrics_work_data *data = CONTAINER_OF(work_item, struct metrics_work_data, work);
+	int ret;
+	char *body = NULL;
+
+	ret = location_metrics_utils_json_payload_encode(&data->metrics, &body);
+	if (ret) {
+		mosh_error("location metrics json encoding failed: %d", ret);
+		goto clean_up;
+	}
+#if defined(CONFIG_NRF_CLOUD_MQTT)
+	struct nrf_cloud_tx_data mqtt_msg = {
+		.data.ptr = body,
+		.data.len = strlen(body),
+		.qos = MQTT_QOS_1_AT_LEAST_ONCE,
+		.topic_type = NRF_CLOUD_TOPIC_MESSAGE,
+	};
+
+	mosh_print("Sending location related metrics to nRF Cloud via MQTT, body: %s", body);
+	ret = nrf_cloud_send(&mqtt_msg);
+	if (ret) {
+		mosh_error("MQTT: location metrics sending failed: %d", ret);
+	}
+#elif defined(CONFIG_NRF_CLOUD_REST)
+#define REST_METRICS_RX_BUF_SZ 300 /* No payload in a response, "just" headers */
+	static char rx_buf[REST_METRICS_RX_BUF_SZ];
+	static char device_id[NRF_CLOUD_CLIENT_ID_MAX_LEN + 1];
+	static struct nrf_cloud_rest_context rest_ctx = { .connect_socket = -1,
+							  .keep_alive = false,
+							  .rx_buf = rx_buf,
+							  .rx_buf_len = sizeof(rx_buf),
+							  .fragment_size = 0 };
+
+	ret = nrf_cloud_client_id_get(device_id, sizeof(device_id));
+	if (ret) {
+		mosh_error("Failed to get device ID, error: %d", ret);
+		goto clean_up;
+	}
+
+	mosh_print("Sending location related metrics to nRF Cloud via REST, body: %s", body);
+	ret = nrf_cloud_rest_send_device_message(&rest_ctx, device_id, body, false, NULL);
+	if (ret) {
+		mosh_error("REST: location metrics sending failed: %d", ret);
+	}
+#endif
+
+clean_up:
+	if (body) {
+		cJSON_free(body);
+	}
+}
+#endif
+
+/******************************************************************************/
+
 void location_ctrl_event_handler(const struct location_event_data *event_data)
 {
+	int64_t ts_ms = NRF_CLOUD_NO_TIMESTAMP;
+
+#if defined(CONFIG_DATE_TIME)
+	int err;
+
+	err = date_time_now(&ts_ms);
+	if (err) {
+		ts_ms = NRF_CLOUD_NO_TIMESTAMP;
+	}
+#endif
+
 	switch (event_data->id) {
 	case LOCATION_EVT_LOCATION:
 		mosh_print("Location:");
@@ -451,6 +547,9 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 				event_data->location.datetime.second,
 				event_data->location.datetime.ms);
 		}
+#if defined(CONFIG_LOCATION_METRICS)
+		mosh_print("  TTF: %.02f secs", event_data->location.details.used_time_sec);
+#endif
 		mosh_print(
 			"  Google maps URL: https://maps.google.com/?q=%f,%f",
 			event_data->location.latitude, event_data->location.longitude);
@@ -458,9 +557,15 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 		if (gnss_location_to_cloud) {
 			k_work_init(&gnss_location_work_data.work, location_to_cloud_worker);
 
+			gnss_location_work_data.timestamp_ms = ts_ms;
 			gnss_location_work_data.loc_evt_data = *event_data;
 			gnss_location_work_data.format = gnss_location_to_cloud_format;
+#if defined(CONFIG_MOSH_METRICS)
+			/* Cannot use the same workq as metrics does, using system workq */
+			k_work_submit(&gnss_location_work_data.work);
+#else
 			k_work_submit_to_queue(&mosh_common_work_q, &gnss_location_work_data.work);
+#endif
 		}
 
 #if defined(CONFIG_DK_LIBRARY)
@@ -516,6 +621,19 @@ void location_ctrl_event_handler(const struct location_event_data *event_data)
 		mosh_warn("Unknown event from location library, id %d", event_data->id);
 		break;
 	}
+#if defined(CONFIG_MOSH_METRICS)
+	if (metrics_to_cloud) {
+		k_work_init(&metrics_work_data.work, metrics_to_cloud_worker);
+
+		memcpy(&metrics_work_data.metrics.event_data, event_data,
+			sizeof(struct location_event_data));
+		metrics_work_data.metrics.timestamp_ms = ts_ms;
+		strncpy(metrics_work_data.metrics.loc_cmd_str, current_loc_cmd_str,
+			LOCATION_METRICS_CMD_STR_MAX_LEN);
+
+		k_work_submit_to_queue(&mosh_common_work_q, &metrics_work_data.work);
+	}
+#endif
 }
 
 void location_ctrl_init(void)
@@ -582,6 +700,8 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 	bool use_custom_ncellmeas_resp = false;
 
 	gnss_location_to_cloud_format = NRF_CLOUD_GNSS_TYPE_PVT;
+	gnss_location_to_cloud = false;
+	metrics_to_cloud = false;
 
 	if (argc < 2) {
 		goto show_usage;
@@ -605,8 +725,6 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 	/* We start from subcmd arguments */
 	optind = 2;
 
-	gnss_location_to_cloud = false;
-
 	while ((opt = getopt_long(argc, argv, "m:t:", long_options, &long_index)) != -1) {
 		switch (opt) {
 		case LOCATION_SHELL_OPT_GNSS_TIMEOUT:
@@ -627,6 +745,11 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 		case LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_PVT:
 			gnss_location_to_cloud = true;
 			break;
+#if defined(CONFIG_LOCATION_METRICS)
+		case LOCATION_SHELL_OPT_GNSS_LOC_CLOUD_METRICS:
+			metrics_to_cloud = true;
+			break;
+#endif
 		case LOCATION_SHELL_OPT_CELLULAR_TIMEOUT:
 			cellular_timeout = atoi(optarg);
 			cellular_timeout_set = true;
@@ -762,8 +885,12 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 	/* Handle location subcommands */
 	switch (command) {
 	case LOCATION_CMD_CANCEL:
+		metrics_to_cloud = false;
 		gnss_location_to_cloud = false;
 		k_work_cancel(&gnss_location_work_data.work);
+#if defined(CONFIG_MOSH_METRICS)
+		k_work_cancel(&metrics_work_data.work);
+#endif
 		ret = location_request_cancel();
 		if (ret) {
 			mosh_error("Canceling location request failed, err: %d", ret);
@@ -837,6 +964,14 @@ int location_shell(const struct shell *shell, size_t argc, char **argv)
 			mosh_error("Requesting location failed, err: %d", ret);
 			return -1;
 		}
+
+#if defined(CONFIG_MOSH_METRICS)
+		/* Store current command */
+		get_command_str_from_argv(
+			argc, argv,
+			current_loc_cmd_str,
+			LOCATION_METRICS_CMD_STR_MAX_LEN + 1);
+#endif
 		mosh_print("Started to get current location...");
 		break;
 	}

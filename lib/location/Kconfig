@@ -44,6 +44,11 @@ config LOCATION_WORKQUEUE_STACK_SIZE
 	int "Stack size for the library work queue"
 	default 4096
 
+config LOCATION_METRICS
+	bool "Gather and include some telemetry data location events"
+	depends on LOCATION_DATA_DETAILS
+	default n
+
 if LOCATION_METHOD_GNSS
 
 config LOCATION_METHOD_GNSS_AGPS_EXTERNAL

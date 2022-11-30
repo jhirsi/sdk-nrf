@@ -42,6 +42,10 @@ static int current_method_index;
 /** Whether to perform fallback for current location request processing. */
 static bool execute_fallback = true;
 
+#if defined(CONFIG_LOCATION_METRICS)
+static uint64_t current_ttf_start_timestamp;
+#endif
+
 /***** Work queue and work item definitions *****/
 
 #define LOCATION_CORE_STACK_SIZE CONFIG_LOCATION_WORKQUEUE_STACK_SIZE
@@ -102,9 +106,8 @@ static const struct location_method_api method_cellular_api = {
 	.init             = method_cellular_init,
 	.location_get     = method_cellular_location_get,
 	.cancel           = method_cellular_cancel,
-	.timeout          = method_cellular_cancel,
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-	.details_get      = NULL,
+#if defined(CONFIG_LOCATION_METRICS) /* Currently only with the metrics*/
+	.details_get      = method_cellular_details_get,
 #endif
 };
 #endif
@@ -116,9 +119,8 @@ static const struct location_method_api method_wifi_api = {
 	.init             = method_wifi_init,
 	.location_get     = method_wifi_location_get,
 	.cancel           = method_wifi_cancel,
-	.timeout          = method_wifi_cancel,
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-	.details_get      = NULL,
+#if defined(CONFIG_LOCATION_METRICS) /* Currently only with the metrics*/
+	.details_get      = method_wifi_details_get,
 #endif
 };
 #endif
@@ -354,7 +356,9 @@ static int location_core_location_get_pos(const struct location_config *config)
 	LOG_DBG("Requesting location with '%s' method",
 		(char *)location_method_api_get(requested_method)->method_string);
 	location_core_current_event_data_init(requested_method);
-
+#if defined(CONFIG_LOCATION_METRICS)
+	current_ttf_start_timestamp = k_uptime_get();
+#endif
 	err = location_method_api_get(requested_method)->location_get(
 		&config->methods[current_method_index]);
 
@@ -381,17 +385,27 @@ int location_core_location_get(const struct location_config *config)
 	return location_core_location_get_pos(config);
 }
 
-void location_core_event_cb_error(void)
+void location_core_event_cb_error(const char *error_cause_str)
 {
-	current_event_data.id = LOCATION_EVT_ERROR;
+	LOG_ERR("%s", error_cause_str);
 
+	current_event_data.id = LOCATION_EVT_ERROR;
+#if defined(CONFIG_LOCATION_METRICS)
+	strncpy(current_event_data.error.failure_cause_str, error_cause_str,
+		sizeof(current_event_data.error.failure_cause_str));
+#endif
 	location_core_event_cb(NULL);
 }
 
-void location_core_event_cb_timeout(void)
+void location_core_event_cb_timeout(const char *timeout_cause_str)
 {
-	current_event_data.id = LOCATION_EVT_TIMEOUT;
+	LOG_INF("%s", timeout_cause_str);
 
+	current_event_data.id = LOCATION_EVT_TIMEOUT;
+#if defined(CONFIG_LOCATION_METRICS)
+	strncpy(current_event_data.error.failure_cause_str, timeout_cause_str,
+		sizeof(current_event_data.error.failure_cause_str));
+#endif
 	location_core_event_cb(NULL);
 }
 
@@ -526,7 +540,6 @@ static void location_core_event_details_get(struct location_event_data *event)
 {
 #if defined(CONFIG_LOCATION_DATA_DETAILS)
 	if (location_method_api_get(current_method)->details_get != NULL) {
-
 		struct location_data_details *details;
 
 		if (event->id == LOCATION_EVT_LOCATION) {
@@ -536,6 +549,12 @@ static void location_core_event_details_get(struct location_event_data *event)
 		}
 
 		location_method_api_get(current_method)->details_get(details);
+
+#if defined(CONFIG_LOCATION_METRICS)
+		details->used_config = current_config;
+		details->used_time_sec =
+			(double)(k_uptime_get() - current_ttf_start_timestamp) / 1000;
+#endif
 	}
 #endif
 }
@@ -583,6 +602,9 @@ static void location_core_event_cb_fn(struct k_work *work)
 				current_event_data.location.datetime.second,
 				current_event_data.location.datetime.ms);
 		}
+#if defined(CONFIG_LOCATION_METRICS)
+		LOG_DBG("  TTF: %.02f secs", current_event_data.location.details.used_time_sec);
+#endif
 		LOG_DBG("  Google maps URL: https://maps.google.com/?q=%s,%s",
 			latitude_str, longitude_str);
 		if (current_config.mode == LOCATION_REQ_MODE_ALL) {
@@ -601,6 +623,9 @@ static void location_core_event_cb_fn(struct k_work *work)
 				event_handler(&current_event_data);
 
 				/* Run next method on the list */
+#if defined(CONFIG_LOCATION_METRICS)
+				current_ttf_start_timestamp = k_uptime_get();
+#endif
 				location_core_current_event_data_init(requested_method);
 				err = location_method_api_get(requested_method)->location_get(
 					&current_config.methods[current_method_index]);
@@ -690,26 +715,30 @@ static void location_core_method_timeout_work_fn(struct k_work *work)
 
 	ARG_UNUSED(work);
 
-	LOG_INF("Method specific timeout expired");
-
 	location_method_api_get(current_method)->timeout();
-	location_core_event_cb_timeout();
+	location_core_event_cb_timeout("Method specific timeout expired");
 }
 
 static void location_core_timeout_work_fn(struct k_work *work)
 {
+	const char *err_str = "Timeout for entire location request expired";
 	enum location_method current_method =
 		current_config.methods[current_method_index].method;
 
 	ARG_UNUSED(work);
-
-	LOG_INF("Timeout for entire location request expired");
 
 	location_method_api_get(current_method)->timeout();
 	/* config->timeout needs to expire without fallbacks */
 
 	current_event_data.id = LOCATION_EVT_TIMEOUT;
 	execute_fallback = false;
+
+	LOG_INF("%s", err_str);
+
+#if defined(CONFIG_LOCATION_METRICS)
+	strncpy(current_event_data.error.failure_cause_str, err_str,
+		sizeof(current_event_data.error.failure_cause_str));
+#endif
 
 	k_work_submit_to_queue(
 		location_core_work_queue_get(),

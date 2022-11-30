@@ -141,100 +141,6 @@ struct location_datetime {
 	uint16_t ms;
 };
 
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-/** Location details for GNSS. */
-struct location_data_details_gnss {
-	/** Number of satellites tracked at the time of event. */
-	uint8_t satellites_tracked;
-	/** PVT data. */
-	struct nrf_modem_gnss_pvt_data_frame pvt_data;
-};
-
-/** Location details. */
-struct location_data_details {
-	/** Location details for GNSS. */
-	struct location_data_details_gnss gnss;
-};
-#endif
-
-/** Location data. */
-struct location_data {
-	/** Geodetic latitude (deg) in WGS-84. */
-	double latitude;
-	/** Geodetic longitude (deg) in WGS-84. */
-	double longitude;
-	/** Location accuracy in meters (1-sigma). */
-	float accuracy;
-	/** Date and time (UTC). */
-	struct location_datetime datetime;
-
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-	/** Location details. */
-	struct location_data_details details;
-#endif
-};
-
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-/** Location error information. */
-struct location_data_error {
-	/** Data details at the time of error. */
-	struct location_data_details details;
-};
-#endif
-
-/** Location event data. */
-struct location_event_data {
-	/** Event ID. */
-	enum location_event_id id;
-	/** Used location method. */
-	enum location_method method;
-
-	/** Event specific data. */
-	union {
-		/** Current location, used with event LOCATION_EVT_LOCATION. */
-		struct location_data location;
-
-#if defined(CONFIG_LOCATION_DATA_DETAILS)
-		/**
-		 * Relevant location data when a timeout or an error occurs.
-		 * Used with event LOCATION_EVT_TIMEOUT and LOCATION_EVT_ERROR.
-		 */
-		struct location_data_error error;
-#endif
-
-#if defined(CONFIG_LOCATION_METHOD_GNSS_AGPS_EXTERNAL)
-		/**
-		 * A-GPS notification data frame used by GNSS to let the application know it
-		 * needs new assistance data, used with event LOCATION_EVT_GNSS_ASSISTANCE_REQUEST.
-		 */
-		struct nrf_modem_gnss_agps_data_frame agps_request;
-#endif
-#if  defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
-		/**
-		 * P-GPS notification data frame used by GNSS to let the application know it
-		 * needs new assistance data, used with event LOCATION_EVT_GNSS_PREDICTION_REQUEST.
-		 */
-		struct gps_pgps_request pgps_request;
-#endif
-#if  defined(CONFIG_LOCATION_METHOD_CELLULAR_EXTERNAL)
-		/**
-		 * Cellular cell information to let the application know it should send these
-		 * to a cloud service to resolve the location.
-		 * Used with event LOCATION_EVT_CELLULAR_EXT_REQUEST.
-		 */
-		struct lte_lc_cells_info cellular_request;
-#endif
-#if  defined(CONFIG_LOCATION_METHOD_WIFI_EXTERNAL)
-		/**
-		 * Wi-Fi access point information to let the application know it should send these
-		 * to a cloud service to resolve the location.
-		 * Used with event LOCATION_EVT_WIFI_EXT_REQUEST.
-		 */
-		struct wifi_scan_info wifi_request;
-#endif
-	};
-};
-
 /** GNSS configuration. */
 struct location_gnss_config {
 	/**
@@ -370,6 +276,131 @@ struct location_config {
 	 * @brief Location acquisition mode.
 	 */
 	enum location_req_mode mode;
+};
+
+#define LOCATION_DETAILS_METRICS_CAUSE_STR_MAX_LEN 255
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+/** Location details for GNSS. */
+struct location_data_details_gnss {
+	/** Number of satellites tracked at the time of event. */
+	uint8_t satellites_tracked;
+	/** PVT data. */
+	struct nrf_modem_gnss_pvt_data_frame pvt_data;
+
+#if defined(CONFIG_LOCATION_METRICS)
+	/** Number of satellites used for a fix. */
+	uint8_t satellites_used;
+	/** Average cn0 of satellites used for a fix. */
+	double cn0_avg_satellites_used;
+#endif
+};
+
+#if defined(CONFIG_LOCATION_METRICS)
+struct location_data_details_wifi {
+	uint16_t scanned_ap_count;
+};
+
+struct location_data_details_cellular {
+};
+#endif
+
+/** Location details. */
+struct location_data_details {
+	/** Location details for GNSS. */
+	struct location_data_details_gnss gnss;
+
+#if defined(CONFIG_LOCATION_METRICS)
+	/* TODO: to be union? */
+	struct location_data_details_wifi wifi;
+	struct location_data_details_cellular cellular;
+
+	double used_time_sec; /* Time used for processing a location request */
+	struct location_config used_config;
+#endif
+};
+#endif
+
+/** Location data. */
+struct location_data {
+	/** Geodetic latitude (deg) in WGS-84. */
+	double latitude;
+	/** Geodetic longitude (deg) in WGS-84. */
+	double longitude;
+	/** Location accuracy in meters (1-sigma). */
+	float accuracy;
+	/** Date and time (UTC). */
+	struct location_datetime datetime;
+
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+	/** Location details. */
+	struct location_data_details details;
+#endif
+};
+
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+/** Location error information. */
+struct location_data_error {
+	/** Data details at the time of error. */
+	struct location_data_details details;
+
+#if defined(CONFIG_LOCATION_METRICS)
+	/** Failure cause string. */
+	char failure_cause_str[LOCATION_DETAILS_METRICS_CAUSE_STR_MAX_LEN + 1];
+#endif
+};
+#endif
+
+/** Location event data. */
+struct location_event_data {
+	/** Event ID. */
+	enum location_event_id id;
+	/** Used location method. */
+	enum location_method method;
+
+	/** Event specific data. */
+	union {
+		/** Current location, used with event LOCATION_EVT_LOCATION. */
+		struct location_data location;
+
+#if defined(CONFIG_LOCATION_DATA_DETAILS)
+		/**
+		 * Relevant location data when a timeout or an error occurs.
+		 * Used with event LOCATION_EVT_TIMEOUT and LOCATION_EVT_ERROR.
+		 */
+		struct location_data_error error;
+#endif
+
+#if defined(CONFIG_LOCATION_METHOD_GNSS_AGPS_EXTERNAL)
+		/**
+		 * A-GPS notification data frame used by GNSS to let the application know it
+		 * needs new assistance data, used with event LOCATION_EVT_GNSS_ASSISTANCE_REQUEST.
+		 */
+		struct nrf_modem_gnss_agps_data_frame agps_request;
+#endif
+#if  defined(CONFIG_LOCATION_METHOD_GNSS_PGPS_EXTERNAL)
+		/**
+		 * P-GPS notification data frame used by GNSS to let the application know it
+		 * needs new assistance data, used with event LOCATION_EVT_GNSS_PREDICTION_REQUEST.
+		 */
+		struct gps_pgps_request pgps_request;
+#endif
+#if  defined(CONFIG_LOCATION_METHOD_CELLULAR_EXTERNAL)
+		/**
+		 * Cellular cell information to let the application know it should send these
+		 * to a cloud service to resolve the location.
+		 * Used with event LOCATION_EVT_CELLULAR_EXT_REQUEST.
+		 */
+		struct lte_lc_cells_info cellular_request;
+#endif
+#if  defined(CONFIG_LOCATION_METHOD_WIFI_EXTERNAL)
+		/**
+		 * Wi-Fi access point information to let the application know it should send these
+		 * to a cloud service to resolve the location.
+		 * Used with event LOCATION_EVT_WIFI_EXT_REQUEST.
+		 */
+		struct wifi_scan_info wifi_request;
+#endif
+	};
 };
 
 /**

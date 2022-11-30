@@ -635,6 +635,41 @@ static uint8_t method_gnss_tracked_satellites(const struct nrf_modem_gnss_pvt_da
 	return tracked;
 }
 
+#if defined(CONFIG_LOCATION_METRICS)
+struct gnss_pvt_metrics {
+	uint8_t satellites_used_in_fix;
+	uint16_t cn0_average_used_in_fix;
+};
+
+static struct gnss_pvt_metrics method_gnss_pvt_metrics_get(
+	const struct nrf_modem_gnss_pvt_data_frame *pvt_data)
+{
+	struct gnss_pvt_metrics pvt_metrics;
+	uint32_t cn0_sum = 0;
+	uint8_t used = 0;
+
+	for (uint32_t i = 0; i < NRF_MODEM_GNSS_MAX_SATELLITES; i++) {
+		if (pvt_data->sv[i].sv == 0) {
+			break;
+		}
+
+		const struct nrf_modem_gnss_sv *sv_data = &pvt_data->sv[i];
+
+		if (sv_data->flags & NRF_MODEM_GNSS_SV_FLAG_USED_IN_FIX) {
+			used++;
+			cn0_sum = cn0_sum + sv_data->cn0;
+		}
+	}
+
+	if (used) {
+		pvt_metrics.satellites_used_in_fix = used;
+		pvt_metrics.cn0_average_used_in_fix = (double)cn0_sum / used;
+	}
+
+	return pvt_metrics;
+}
+#endif
+
 static void method_gnss_print_pvt(const struct nrf_modem_gnss_pvt_data_frame *pvt_data)
 {
 	LOG_DBG("Tracked satellites: %d, fix valid: %s, insuf. time window: %s",
@@ -671,8 +706,7 @@ static void method_gnss_pvt_work_fn(struct k_work *item)
 	}
 
 	if (nrf_modem_gnss_read(&pvt_data, sizeof(pvt_data), NRF_MODEM_GNSS_DATA_PVT) != 0) {
-		LOG_ERR("Failed to read PVT data from GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to read PVT data from GNSS");
 		return;
 	}
 
@@ -683,6 +717,12 @@ static void method_gnss_pvt_work_fn(struct k_work *item)
 #if defined(CONFIG_LOCATION_DATA_DETAILS)
 	location_data_details_gnss.pvt_data = pvt_data;
 	location_data_details_gnss.satellites_tracked = satellites_tracked;
+#if defined(CONFIG_LOCATION_METRICS)
+	struct gnss_pvt_metrics pvt_metrics = method_gnss_pvt_metrics_get(&pvt_data);
+
+	location_data_details_gnss.satellites_used = pvt_metrics.satellites_used_in_fix;
+	location_data_details_gnss.cn0_avg_satellites_used = pvt_metrics.cn0_average_used_in_fix;
+#endif
 #endif
 
 	/* Store fix data only if we get a valid fix. Thus, the last valid data is always kept
@@ -712,9 +752,8 @@ static void method_gnss_pvt_work_fn(struct k_work *item)
 		if (pvt_data.execution_time >= VISIBILITY_DETECTION_EXEC_TIME &&
 		    pvt_data.execution_time < (VISIBILITY_DETECTION_EXEC_TIME + MSEC_PER_SEC) &&
 		    satellites_tracked < VISIBILITY_DETECTION_SAT_LIMIT) {
-			LOG_DBG("GNSS visibility obstructed, canceling");
 			method_gnss_cancel();
-			location_core_event_cb_error();
+			location_core_event_cb_error("GNSS visibility obstructed, canceling");
 		}
 	}
 
@@ -810,16 +849,14 @@ static void method_gnss_positioning_work_fn(struct k_work *work)
 	err |= nrf_modem_gnss_use_case_set(use_case);
 
 	if (err) {
-		LOG_ERR("Failed to configure GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to configure GNSS");
 		running = false;
 		return;
 	}
 
 	err = nrf_modem_gnss_start();
 	if (err) {
-		LOG_ERR("Failed to start GNSS");
-		location_core_event_cb_error();
+		location_core_event_cb_error("Failed to start GNSS");
 		running = false;
 		return;
 	}

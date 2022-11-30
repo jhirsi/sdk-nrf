@@ -47,6 +47,10 @@ static struct wifi_scan_info latest_wifi_info = {
 	.ap_info = latest_scan_results,
 };
 
+#if defined(CONFIG_LOCATION_METRICS)
+static struct location_data_details_wifi location_data_details_wifi;
+#endif
+
 static K_SEM_DEFINE(wifi_scanning_ready, 0, 1);
 
 /******************************************************************************/
@@ -112,6 +116,11 @@ static void method_wifi_scan_done_handle(struct net_mgmt_event_callback *cb)
 			CONFIG_LOCATION_METHOD_WIFI_SCANNING_RESULTS_MAX_CNT :
 			current_scan_result_count;
 	current_scan_result_count = 0;
+
+#if defined(CONFIG_LOCATION_METRICS)
+	location_data_details_wifi.scanned_ap_count = latest_scan_result_count;
+#endif
+
 	k_sem_give(&wifi_scanning_ready);
 }
 
@@ -147,12 +156,13 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 	const struct location_wifi_config wifi_config = work_data->wifi_config;
 	int64_t starting_uptime_ms = work_data->starting_uptime_ms;
 	int err;
+	char err_str[LOCATION_DETAILS_METRICS_CAUSE_STR_MAX_LEN + 1] = { 0 };
 
 	location_core_timer_start(wifi_config.timeout);
 
 	err = method_wifi_scanning_start();
 	if (err) {
-		LOG_WRN("Cannot start Wi-Fi scanning, err %d", err);
+		sprintf(err_str, "Cannot start Wi-Fi scanning, err %d", err);
 		goto end;
 	}
 
@@ -170,7 +180,7 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 		/* Not worth to start trying to fetch with the REST api over cellular.
 		 * Thus, fail faster in this case and save the trying "costs".
 		 */
-		LOG_WRN("Default PDN context is NOT active, cannot retrieve a location");
+		sprintf(err_str, "Default PDN context is NOT active, cannot retrieve a location");
 		err = -EFAULT;
 		goto end;
 	}
@@ -183,7 +193,8 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 				(k_uptime_get() - starting_uptime_ms));
 			if (request.timeout_ms < 0) {
 				/* No remaining time at all */
-				LOG_WRN("No remaining time left for requesting a position");
+				sprintf(err_str,
+					"No remaining time left for requesting a position");
 				err = -ETIMEDOUT;
 				goto end;
 			}
@@ -200,9 +211,10 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 
 		err = wifi_service_location_get(wifi_config.service, &request, &result);
 		if (err) {
-			LOG_ERR("Failed to acquire a location by using "
+			sprintf(err_str,
+				"Failed to acquire a location by using "
 				"Wi-Fi positioning, err: %d",
-				err);
+					err);
 			err = -ENODATA;
 		} else {
 			location_result.latitude = result.latitude;
@@ -220,19 +232,20 @@ static void method_wifi_positioning_work_fn(struct k_work *work)
 			 * (400: bad request).
 			 * Thus, fail faster in this case and save the data transfer costs.
 			 */
-			LOG_WRN("Retrieving a location based on a single Wi-Fi "
-				"access point is not possible");
+			sprintf(err_str,
+			       "Retrieving a location based on a single Wi-Fi "
+			       "access point is not possible");
 		} else {
-			LOG_WRN("No Wi-Fi scanning results");
+			sprintf(err_str, "No Wi-Fi scanning results");
 		}
 		err = -EFAULT;
 	}
 end:
 	if (err == -ETIMEDOUT) {
-		location_core_event_cb_timeout();
+		location_core_event_cb_timeout(err_str);
 		running = false;
 	} else if (err) {
-		location_core_event_cb_error();
+		location_core_event_cb_error(err_str);
 		running = false;
 	}
 }
@@ -250,6 +263,10 @@ int method_wifi_cancel(void)
 
 int method_wifi_location_get(const struct location_method_config *config)
 {
+#if (CONFIG_LOCATION_METRICS)
+	memset(&location_data_details_wifi, 0, sizeof(location_data_details_wifi));
+#endif
+
 	k_work_init(&method_wifi_start_work.work_item, method_wifi_positioning_work_fn);
 	method_wifi_start_work.wifi_config = config->wifi;
 	method_wifi_start_work.starting_uptime_ms = k_uptime_get();
@@ -259,6 +276,13 @@ int method_wifi_location_get(const struct location_method_config *config)
 
 	return 0;
 }
+
+#if defined(CONFIG_LOCATION_METRICS)
+void method_wifi_details_get(struct location_data_details *details)
+{
+	details->wifi = location_data_details_wifi;
+}
+#endif
 
 int method_wifi_init(void)
 {
