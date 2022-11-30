@@ -269,6 +269,22 @@ static int cmd_gnss_config_system(const struct shell *shell, size_t argc, char *
 		system_mask |= 0x4;
 	}
 
+	/* GAL (optional) */
+	if (argc > 3) {
+		value = atoi(argv[3]);
+		if (value == 1) {
+			system_mask |= 0x8;
+		}
+	}
+
+	/* SBAS (optional) */
+	if (argc > 2) {
+		value = atoi(argv[2]);
+		if (value == 1) {
+			system_mask |= 0x2;
+		}
+	}
+
 	return gnss_set_system_mask(system_mask);
 }
 
@@ -1022,9 +1038,9 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 SHELL_STATIC_SUBCMD_SET_CREATE(
 	sub_gnss_config,
 	SHELL_CMD_ARG(system, NULL,
-		      "<QZSS enabled>\n"
+		      "<QZSS enabled> [SBAS enabled] [GAL enabled]\n"
 		      "System mask. 0 = disabled, 1 = enabled. GPS L1 C/A is always enabled.",
-		      cmd_gnss_config_system, 2, 0),
+		      cmd_gnss_config_system, 2, 2),
 	SHELL_CMD(elevation, NULL, "<angle>\nElevation threshold angle.",
 		  cmd_gnss_config_elevation),
 	SHELL_CMD_ARG(use_case, NULL,
