@@ -27,13 +27,8 @@
 #ifndef        IPERF_LOCALE_H
 #define        IPERF_LOCALE_H
 
-
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-extern const char nrf_iperf3_usage_support_str[]; /* added */
-#else
 extern const char usage_shortstr[];
 extern const char usage_longstr[];
-#endif
 extern const char version[];
 
 extern const char seperator_line[];
@@ -41,6 +36,7 @@ extern const char seperator_line[];
 extern const char server_port[] ;
 extern const char client_port[] ;
 extern const char bind_address[] ;
+extern const char bind_dev[] ;
 extern const char multicast_ttl[] ;
 extern const char join_multicast[] ;
 extern const char client_datagram_size[] ;

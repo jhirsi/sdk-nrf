@@ -1,5 +1,5 @@
-/*--------------------------------------------------------------- 
- * iperf, Copyright (c) 2014-2020, The Regents of the University of
+/*---------------------------------------------------------------
+ * iperf, Copyright (c) 2014-2022, The Regents of the University of
  * California, through Lawrence Berkeley National Laboratory (subject
  * to receipt of any required approvals from the U.S. Dept. of
  * Energy).  All rights reserved.
@@ -27,49 +27,49 @@
  * Based on code that is:
  *
  * Copyright (c) 1999,2000,2001,2002,2003
- * The Board of Trustees of the University of Illinois            
- * All Rights Reserved.                                           
- *--------------------------------------------------------------- 
- * Permission is hereby granted, free of charge, to any person    
- * obtaining a copy of this software (Iperf) and associated       
- * documentation files (the "Software"), to deal in the Software  
- * without restriction, including without limitation the          
- * rights to use, copy, modify, merge, publish, distribute,        
- * sublicense, and/or sell copies of the Software, and to permit     
+ * The Board of Trustees of the University of Illinois
+ * All Rights Reserved.
+ *---------------------------------------------------------------
+ * Permission is hereby granted, free of charge, to any person
+ * obtaining a copy of this software (Iperf) and associated
+ * documentation files (the "Software"), to deal in the Software
+ * without restriction, including without limitation the
+ * rights to use, copy, modify, merge, publish, distribute,
+ * sublicense, and/or sell copies of the Software, and to permit
  * persons to whom the Software is furnished to do
- * so, subject to the following conditions: 
+ * so, subject to the following conditions:
  *
- *     
- * Redistributions of source code must retain the above 
- * copyright notice, this list of conditions and 
- * the following disclaimers. 
  *
- *     
- * Redistributions in binary form must reproduce the above 
- * copyright notice, this list of conditions and the following 
- * disclaimers in the documentation and/or other materials 
- * provided with the distribution. 
- * 
- *     
- * Neither the names of the University of Illinois, NCSA, 
- * nor the names of its contributors may be used to endorse 
+ * Redistributions of source code must retain the above
+ * copyright notice, this list of conditions and
+ * the following disclaimers.
+ *
+ *
+ * Redistributions in binary form must reproduce the above
+ * copyright notice, this list of conditions and the following
+ * disclaimers in the documentation and/or other materials
+ * provided with the distribution.
+ *
+ *
+ * Neither the names of the University of Illinois, NCSA,
+ * nor the names of its contributors may be used to endorse
  * or promote products derived from this Software without
- * specific prior written permission. 
- * 
- * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, 
- * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES 
- * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND 
- * NONINFRINGEMENT. IN NO EVENT SHALL THE CONTIBUTORS OR COPYRIGHT 
- * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, 
- * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, 
+ * specific prior written permission.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES
+ * OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE CONTIBUTORS OR COPYRIGHT
+ * HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+ * WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE,
  * ARISING FROM, OUT OF OR IN CONNECTION WITH THE
- * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE. 
+ * SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * ________________________________________________________________
- * National Laboratory for Applied Network Research 
- * National Center for Supercomputing Applications 
- * University of Illinois at Urbana-Champaign 
+ * National Laboratory for Applied Network Research
+ * National Center for Supercomputing Applications
+ * University of Illinois at Urbana-Champaign
  * http://www.ncsa.uiuc.edu
- * ________________________________________________________________ 
+ * ________________________________________________________________
  *
  * Locale.c
  * by Ajay Tirumala <tirumala@ncsa.uiuc.edu>
@@ -91,116 +91,69 @@ extern    "C"
  * usage
  * ------------------------------------------------------------------- */
 
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-const char nrf_iperf3_usage_support_str[] = 
-                           "Usage: iperf3 [-s|-c host] [options]\n"
-                           "       iperf3 [-m|--manual] [-v|--version]\n\n"
-                           "Server or Client:\n"
-                           "  -p, --port      #         server port to listen on/connect to\n"
-                           "  -f, --format   [kmgtKMGT] format to report: Kbits, Mbits, Gbits, Tbits\n"
-                           "  -i, --interval  #         seconds between periodic throughput reports\n"
-                           "  -B, --bind      <host>    bind to the interface associated with the address <host>\n"
-                           "  -V, --verbose             more detailed output\n"
-                           "  -J, --json                output in JSON format\n"
-                           "  --timestamps    <format>  emit a timestamp at the start of each output line\n"
-                           "                            (using optional format string as per strftime(3))\n"
-                           "  -d, --debug               emit debugging output\n"
-                           "  -v, --version             show version information and quit\n"
-                           "  -m, --manual              show this message and quit\n"
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)                           
-                           "      --pdn_id <pdn_id>     use this option to bind to PDN with actual PDN ID.\n"
-#endif
-                           "\nServer specific:\n"
-                           "  -s, --server              run in server mode\n"
-                           "  -1, --one-off             handle one client connection then exit\n"
+const char usage_shortstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
+                           "Try `iperf3 --help' for more information.\n";
 
-                           "\nClient specific:\n"
-                           "  -c, --client    <host>    run in client mode, connecting to <host>\n"
-                           "  -u, --udp                 use UDP rather than TCP\n"
-                           "  --connect-timeout #       timeout for control connection setup (ms)\n"
-#if defined (CONFIG_NRF_MODEM_LIB_TRACE)
-                           "  --curr-mdm-traces         use currently configured modem traces\n"
-#endif
-                           "  -b, --bitrate #[KMG][/#]  target bitrate in bits/sec (0 for unlimited)\n"
-                           "                            (default %d Mbit/sec for UDP, unlimited for TCP)\n"
-                           "                            (optional slash and packet count for burst mode)\n"
-//			   "  --pacing-timer #[KMG]     set the timing for pacing, in microseconds (default 1000)\n"
-                           "  -t, --time      #         time in seconds to transmit for (default %d secs)\n"
-                           "  -n, --bytes     #[KMG]    number of bytes to transmit (instead of -t)\n"
-                           "  -k, --blockcount #[KMG]   number of blocks (packets) to transmit (instead of -t or -n)\n"
-                           "  -l, --length    #[KMG]    length of buffer to read or write\n"
-			                     "                   (default %d Bytes for TCP, dynamic or %d for UDP)\n"
-//TODO:                           "  --cport         <port>    bind to a specific client port (TCP and UDP, default: ephemeral port)\n"
-//                           "  -P   #           number of parallel client streams to run\n"
-                           "  -R, --reverse             run in reverse mode (server sends, client receives)\n"
-                           "  -2, --bidir               run in bidirectional mode.\n"
-//                           "                            Client and server send and receive data.\n"
-//                           "  -w, --window    #[KMG]    set window size / socket buffer size\n"
-#if defined(HAVE_TCP_CONGESTION)
-                           "  -C, --congestion <algo>   set TCP congestion control algorithm (Linux and FreeBSD only)\n"
-#endif /* HAVE_TCP_CONGESTION */
-//                           "  -M, --set-mss   #         set TCP/SCTP maximum segment size (MTU - 40 bytes)\n"
-//TODO: test                 "  -N, --no-delay            set TCP/SCTP no delay, disabling Nagle's Algorithm\n"
-                           "  -4, --version4            only use IPv4\n"
-                           "  -6, --version6            only use IPv6\n"
-                           "  -O, --omit N              omit the first n seconds\n"
-                           "  -T, --title str           prefix every output line with this string\n"
-//                           "  --extra-data str          data string to include in client and server JSON\n"
-//                           "  --get-server-output       get results from server\n"
-//                           "  --udp-counters-64bit      use 64-bit counters in UDP test packets\n"
-//                           "  --repeating-payload       use repeating pattern in payload, instead of\n"
-//                           "                            randomized payload (like in iperf2)\n"
-  
-			   "\n"
-                           "[KMG] indicates options that support a K/M/G suffix for kilo-, mega-, or giga-\n"
-			   "\n"
-#ifdef PACKAGE_URL
-                           "iperf3 homepage at: " PACKAGE_URL "\n"
-#endif /* PACKAGE_URL */
-#ifdef PACKAGE_BUGREPORT
-                           "Report bugs to:     " PACKAGE_BUGREPORT "\n"
-#endif /* PACKAGE_BUGREPORT */
-			   ;
-#endif /* CONFIG_NRF_IPERF3_INTEGRATION */
-
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* nrf_iperf3_usage_support_str used, see above */
 const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "       iperf3 [-h|--help] [-v|--version]\n\n"
                            "Server or Client:\n"
                            "  -p, --port      #         server port to listen on/connect to\n"
                            "  -f, --format   [kmgtKMGT] format to report: Kbits, Mbits, Gbits, Tbits\n"
                            "  -i, --interval  #         seconds between periodic throughput reports\n"
+                           "  -I, --pidfile file        write PID file\n"
                            "  -F, --file name           xmit/recv the specified file\n"
 #if defined(HAVE_CPU_AFFINITY)
                            "  -A, --affinity n/n,m      set CPU affinity\n"
 #endif /* HAVE_CPU_AFFINITY */
+#if defined(HAVE_SO_BINDTODEVICE)
+                           "  -B, --bind <host>[%%<dev>] bind to the interface associated with the address <host>\n"
+                           "                            (optional <dev> equivalent to `--bind-dev <dev>`)\n"
+                           "  --bind-dev <dev>          bind to the network interface with SO_BINDTODEVICE\n"
+#else /* HAVE_SO_BINDTODEVICE */
                            "  -B, --bind      <host>    bind to the interface associated with the address <host>\n"
+#endif /* HAVE_SO_BINDTODEVICE */
+#if defined (CONFIG_NRF_MODEM_LIB_TRACE)
+                           "  --curr-mdm-traces         use currently configured modem traces\n"
+#endif
+#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)                           
+                           "  --pdn_id <pdn_id>         use this option to bind to PDN with actual PDN ID.\n"
+#endif
                            "  -V, --verbose             more detailed output\n"
                            "  -J, --json                output in JSON format\n"
                            "  --logfile f               send output to a log file\n"
                            "  --forceflush              force flushing output at every interval\n"
-                           "  --timestamps    <format>  emit a timestamp at the start of each output line\n"
-                           "                            (using optional format string as per strftime(3))\n"
-    
-                           "  -d, --debug               emit debugging output\n"
+                           "  --timestamps<=format>     emit a timestamp at the start of each output line\n"
+                           "                            (optional \"=\" and format string as per strftime(3))\n"
+
+                           "  --rcv-timeout #           idle timeout for receiving data (default %d ms)\n"
+#if defined(HAVE_TCP_USER_TIMEOUT)
+                           "  --snd-timeout #           timeout for unacknowledged TCP data\n"
+                           "                            (in ms, default is system settings)\n"
+#endif /* HAVE_TCP_USER_TIMEOUT */
+                           "  -d, --debug[=#]           emit debugging output\n"
+                           "                            (optional optional \"=\" and debug level: 1-4. Default is 4 - all messages)\n"
                            "  -v, --version             show version information and quit\n"
                            "  -h, --help                show this message and quit\n"
                            "Server specific:\n"
                            "  -s, --server              run in server mode\n"
                            "  -D, --daemon              run the server as a daemon\n"
-                           "  -I, --pidfile file        write PID file\n"
                            "  -1, --one-off             handle one client connection then exit\n"
 			   "  --server-bitrate-limit #[KMG][/#]   server's total bit rate limit (default 0 = no limit)\n"
 			   "                            (optional slash and number of secs interval for averaging\n"
 			   "                            total data rate.  Default is 5 seconds)\n"
+                           "  --idle-timeout #          restart idle server after # seconds in case it\n"
+                           "                            got stuck (default - no timeout)\n"
 #if defined(HAVE_SSL)
                            "  --rsa-private-key-path    path to the RSA private key used to decrypt\n"
 			   "                            authentication credentials\n"
                            "  --authorized-users-path   path to the configuration file containing user\n"
                            "                            credentials\n"
+                           "  --time-skew-threshold     time skew threshold (in seconds) between the server\n"
+                           "                            and client during the authentication process\n"
 #endif //HAVE_SSL
                            "Client specific:\n"
-                           "  -c, --client    <host>    run in client mode, connecting to <host>\n"
+                           "  -c, --client <host>[%%<dev>] run in client mode, connecting to <host>\n"
+                           "                              (option <dev> equivalent to `--bind-dev <dev>`)\n"
 #if defined(HAVE_SCTP_H)
                            "  --sctp                    use SCTP rather than TCP\n"
                            "  -X, --xbind <name>        bind SCTP association to links\n"
@@ -211,7 +164,7 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "  -b, --bitrate #[KMG][/#]  target bitrate in bits/sec (0 for unlimited)\n"
                            "                            (default %d Mbit/sec for UDP, unlimited for TCP)\n"
                            "                            (optional slash and packet count for burst mode)\n"
-			   "  --pacing-timer #[KMG]     set the timing for pacing, in microseconds (default 1000)\n"
+			   "  --pacing-timer #[KMG]     set the timing for pacing, in microseconds (default %d)\n"
 #if defined(HAVE_SO_MAX_PACING_RATE)
                            "  --fq-rate #[KMG]          enable fair-queuing based socket pacing in\n"
 			   "                            bits/sec (Linux only)\n"
@@ -226,7 +179,9 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "  -R, --reverse             run in reverse mode (server sends, client receives)\n"
                            "  --bidir                   run in bidirectional mode.\n"
                            "                            Client and server send and receive data.\n"
-                           "  -w, --window    #[KMG]    set window size / socket buffer size\n"
+                           "  -w, --window    #[KMG]    set send/receive socket buffer sizes\n"
+                           "                            (indirectly sets TCP window size)\n"
+
 #if defined(HAVE_TCP_CONGESTION)
                            "  -C, --congestion <algo>   set TCP congestion control algorithm (Linux and FreeBSD only)\n"
 #endif /* HAVE_TCP_CONGESTION */
@@ -245,19 +200,22 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
                            "  -L, --flowlabel N         set the IPv6 flow label (only supported on Linux)\n"
 #endif /* HAVE_FLOWLABEL */
                            "  -Z, --zerocopy            use a 'zero copy' method of sending data\n"
-                           "  -O, --omit N              omit the first n seconds\n"
+                           "  -O, --omit N              perform pre-test for N seconds and omit the pre-test statistics\n"
                            "  -T, --title str           prefix every output line with this string\n"
                            "  --extra-data str          data string to include in client and server JSON\n"
                            "  --get-server-output       get results from server\n"
                            "  --udp-counters-64bit      use 64-bit counters in UDP test packets\n"
                            "  --repeating-payload       use repeating pattern in payload, instead of\n"
                            "                            randomized payload (like in iperf2)\n"
+#if defined(HAVE_DONT_FRAGMENT)
+                           "  --dont-fragment           set IPv4 Don't Fragment flag\n"
+#endif /* HAVE_DONT_FRAGMENT */
 #if defined(HAVE_SSL)
                            "  --username                username for authentication\n"
                            "  --rsa-public-key-path     path to the RSA public key used to encrypt\n"
                            "                            authentication credentials\n"
 #endif //HAVESSL
-    
+
 #ifdef NOT_YET_SUPPORTED /* still working on these */
 #endif
 
@@ -274,7 +232,7 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
 
 #ifdef OBSOLETE /* from old iperf: no longer supported. Add some of these back someday */
   "-d, --dualtest           Do a bidirectional test simultaneously\n"
-  "-L, --listenport #       port to recieve bidirectional tests back on\n"
+  "-L, --listenport #       port to receive bidirectional tests back on\n"
   "-I, --stdin              input the data to be transmitted from stdin\n"
   "-F, --fileinput <name>   input the data to be transmitted from a file\n"
   "-r, --tradeoff           Do a bidirectional test individually\n"
@@ -282,7 +240,6 @@ const char usage_longstr[] = "Usage: iperf3 [-s|-c host] [options]\n"
   "-x, --reportexclude [CDMSV]   exclude C(connection) D(data) M(multicast) S(settings) V(server) reports\n"
   "-y, --reportstyle C      report as a Comma-Separated Values\n"
 #endif
-#endif /* !defined(CONFIG_NRF_IPERF3_INTEGRATION) */
 
 const char version[] = PACKAGE_STRING;
 
@@ -301,6 +258,9 @@ const char client_port[] =
 
 const char bind_address[] =
 "Binding to local address %s\n";
+
+const char bind_dev[] =
+"Binding to local network device %s\n";
 
 const char bind_port[] =
 "Binding to local port %s\n";
@@ -350,7 +310,7 @@ const char report_connecting[] =
 "Connecting to host %s, port %d\n";
 
 const char report_authentication_succeeded[] =
-"Authentication successed for user '%s' ts %ld\n";
+"Authentication succeeded for user '%s' ts %ld\n";
 
 const char report_authentication_failed[] =
 "Authentication failed for user '%s' ts %ld\n";
@@ -480,12 +440,9 @@ const char server_reporting[] =
 const char reportCSV_peer[] =
 "%s,%u,%s,%u";
 
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-const char report_cpu[] = "CPU Utilization: not supported\n";
-#else
 const char report_cpu[] =
-"CPU Utilization: %s/%s %.1f%% (%.1f%%u/%.1f%%s), %s/%s %.1f%% (%.1f%%u/%.1f%%s)\n"; 
-#endif
+"CPU Utilization: %s/%s %.1f%% (%.1f%%u/%.1f%%s), %s/%s %.1f%% (%.1f%%u/%.1f%%s)\n";
+
 const char report_local[] = "local";
 const char report_remote[] = "remote";
 const char report_sender[] = "sender";

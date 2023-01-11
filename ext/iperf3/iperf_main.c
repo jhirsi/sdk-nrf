@@ -1,5 +1,5 @@
 /*
- * iperf, Copyright (c) 2014, 2015, 2017, 2019, The Regents of the University of
+ * iperf, Copyright (c) 2014-2022, The Regents of the University of
  * California, through Lawrence Berkeley National Laboratory (subject
  * to receipt of any required approvals from the U.S. Dept. of
  * Energy).  All rights reserved.
@@ -52,15 +52,6 @@
 
 static int run(struct iperf_test *test);
 
-/**************************************************************************/
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* NRF_IPERF3_INTEGRATION_TODO: zephyr support missing?? */
-int
-daemon(int nochdir, int noclose)
-{
-    (void)nochdir; (void)noclose;
-    return -1;
-}
-#endif
 
 /**************************************************************************/
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
@@ -79,7 +70,7 @@ iperf_main(int argc, char **argv)
     // XXX: Setting the process affinity requires root on most systems.
     //      Is this a feature we really need?
 #ifdef TEST_PROC_AFFINITY
-    /* didnt seem to work.... */
+    /* didn't seem to work.... */
     /*
      * increasing the priority of the process to minimise packet generation
      * delay
@@ -91,7 +82,7 @@ iperf_main(int argc, char **argv)
         fprintf(stderr, "setting priority to valid level\n");
         rc = setpriority(PRIO_PROCESS, 0, 0);
     }
-    
+
     /* setting the affinity of the process  */
     cpu_set_t cpu_set;
     int affinity = -1;
@@ -110,7 +101,7 @@ iperf_main(int argc, char **argv)
         err("couldn't change CPU affinity");
 #endif
 
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)    
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
     test = iperf_new_test();
     if (!test) {
         iperf_errexit(NULL, "create new test error - %s", iperf_strerror(i_errno));
@@ -132,7 +123,7 @@ iperf_main(int argc, char **argv)
         {
             iperf_err(test, "parameter error - %s", iperf_strerror(i_errno));
             fprintf(stderr, "\n");
-            nrf_iperf3_usage();
+            usage_long(stdout);
             retval = -1;
         }
         goto exit;
@@ -161,7 +152,6 @@ exit:
     if (!test)
         iperf_errexit(NULL, "create new test error - %s", iperf_strerror(i_errno));
     iperf_defaults(test);	/* sets defaults */
-
     if (iperf_parse_arguments(test, argc, argv) < 0) {
         iperf_err(test, "parameter error - %s", iperf_strerror(i_errno));
         fprintf(stderr, "\n");
@@ -189,14 +179,6 @@ sigend_handler(int sig)
 #endif
 
 /**************************************************************************/
-/* NRF_IPERF3_INTEGRATION_TODO: enable when zephyr shell is supporting abort */
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
-static bool do_exit;
-static void signal_handler(int sig)
-{
-	do_exit = true;
-}
-#endif
 static int
 run(struct iperf_test *test)
 {
@@ -211,41 +193,41 @@ run(struct iperf_test *test)
     signal(SIGPIPE, SIG_IGN);
 #endif
 
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
-/* NRF_IPERF3_INTEGRATION_TODO: enable when zephyr shell is supporting abort */
-	signal(SIGINT, signal_handler);
-	signal(SIGTERM, signal_handler);
-#endif
     switch (test->role) {
         case 's':
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* No support */
 	    if (test->daemon) {
-		int rc;
+		int rc = -1;
+		
+#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* No support */
 		rc = daemon(0, 0);
+#endif
 		if (rc < 0) {
 		    i_errno = IEDAEMON;
 		    iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
-            return -1;
 		}
 	    }
 	    if (iperf_create_pidfile(test) < 0) {
-		    i_errno = IEPIDFILE;
-		    iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
-            return -1;
+		i_errno = IEPIDFILE;
+		iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
 	    }
-#endif
             for (;;) {
 		int rc;
 		rc = iperf_run_server(test);
+                test->server_last_run_rc =rc;
 		if (rc < 0) {
 		    iperf_err(test, "error - %s", iperf_strerror(i_errno));
+                    if (test->json_output) {
+                        if (iperf_json_finish(test) < 0)
+                            return -1;
+                    }
+                    iflush(test);
+
 		    if (rc < -1) {
 		        iperf_errexit(test, "exiting");
-                return -1;
 		    }
                 }
                 iperf_reset_test(test);
-                if (iperf_get_test_one_off(test)) {
+                if (iperf_get_test_one_off(test) && rc != 2) {
 		    /* Authentication failure doesn't count for 1-off test */
 		    if (rc < 0 && i_errno == IEAUTHTEST) {
 			continue;
@@ -253,18 +235,19 @@ run(struct iperf_test *test)
 		    break;
 		}
             }
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* No support */
 	    iperf_delete_pidfile(test);
-#endif
             break;
 	case 'c':
-	    if (iperf_run_client(test) < 0) {
-		    iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
-            return -1;
-        }
+	    if (iperf_create_pidfile(test) < 0) {
+		i_errno = IEPIDFILE;
+		iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
+	    }
+	    if (iperf_run_client(test) < 0)
+		iperf_errexit(test, "error - %s", iperf_strerror(i_errno));
+	    iperf_delete_pidfile(test);
             break;
         default:
-            nrf_iperf3_usage();
+            usage();
             break;
     }
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)

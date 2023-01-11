@@ -1,5 +1,5 @@
 /*
- * iperf, Copyright (c) 2014-2020, The Regents of the University of
+ * iperf, Copyright (c) 2014-2022, The Regents of the University of
  * California, through Lawrence Berkeley National Laboratory (subject
  * to receipt of any required approvals from the U.S. Dept. of
  * Energy).  All rights reserved.
@@ -33,7 +33,6 @@
 #include "iperf.h"
 #include "iperf_api.h"
 
-
 int gerror;
 
 char iperf_timestrerr[100];
@@ -43,31 +42,31 @@ void
 iperf_err(struct iperf_test *test, const char *format, ...)
 {
     va_list argp;
-    char str[1000]; /* NRF_IPERF3_INTEGRATION_TODO: heap instead of stack? */
+    char str[1000];
+    time_t now;
+    struct tm *ltm = NULL;
     char *ct = NULL;
 
     /* Timestamp if requested */
-    time_t now;
-    struct tm *ltm = NULL;
     if (test != NULL && test->timestamps) {
-        time(&now);
-        ltm = localtime(&now);
-        strftime(iperf_timestrerr, sizeof(iperf_timestrerr), test->timestamp_format, ltm);
-        ct = iperf_timestrerr;
+	time(&now);
+	ltm = localtime(&now);
+	strftime(iperf_timestrerr, sizeof(iperf_timestrerr), test->timestamp_format, ltm);
+	ct = iperf_timestrerr;
     }
 
     va_start(argp, format);
     vsnprintf(str, sizeof(str), format, argp);
     if (test != NULL && test->json_output && test->json_top != NULL)
-        cJSON_AddStringToObject(test->json_top, "error", str);
-    else
-    if (test && test->outfile && test->outfile != stdout) {
-        if (ct) {
-            fprintf(test->outfile, "%s", ct);
-        }
-        fprintf(test->outfile, "iperf3: %s\n", str);
-    }
+	cJSON_AddStringToObject(test->json_top, "error", str);
     else {
+	if (test && test->outfile && test->outfile != stdout) {
+	    if (ct) {
+		fprintf(test->outfile, "%s", ct);
+	    }
+	    fprintf(test->outfile, "iperf3: %s\n", str);
+	}
+	else {
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
         /* Write to RAM "file" if requested: */
         if (test != NULL && test->resp_std_out_buff_len && test->resp_std_out_buff != NULL) {
@@ -88,11 +87,12 @@ iperf_err(struct iperf_test *test, const char *format, ...)
         } else
 #endif
         {
-            if (ct) {
-                fprintf(stderr, "%s", ct);
-            }
-            fprintf(stderr, "iperf3: %s\n", str);
-        }
+	    if (ct) {
+		fprintf(stderr, "%s", ct);
+	    }
+	    fprintf(stderr, "iperf3: %s\n", str);
+	}
+    }
     }
     va_end(argp);
 }
@@ -109,28 +109,28 @@ iperf_errexit(struct iperf_test *test, const char *format, ...)
 
     /* Timestamp if requested */
     if (test != NULL && test->timestamps) {
-        time(&now);
-        ltm = localtime(&now);
-        strftime(iperf_timestrerr, sizeof(iperf_timestrerr), "%c ", ltm);
-        ct = iperf_timestrerr;
+	time(&now);
+	ltm = localtime(&now);
+	strftime(iperf_timestrerr, sizeof(iperf_timestrerr), "%c ", ltm);
+	ct = iperf_timestrerr;
     }
 
     va_start(argp, format);
     vsnprintf(str, sizeof(str), format, argp);
     if (test != NULL && test->json_output && test->json_top != NULL) {
-        cJSON_AddStringToObject(test->json_top, "error", str);
-        iperf_json_finish(test);
+	cJSON_AddStringToObject(test->json_top, "error", str);
+	iperf_json_finish(test);
     } else
-    if (test && test->outfile && test->outfile != stdout) {
-        if (ct) {
-            fprintf(test->outfile, "%s", ct);
-        }
-        fprintf(test->outfile, "iperf3: %s\n", str);
-    }
-    else {
-        if (ct) {
-            fprintf(stderr, "%s", ct);
-        }
+	if (test && test->outfile && test->outfile != stdout) {
+	    if (ct) {
+		fprintf(test->outfile, "%s", ct);
+	    }
+	    fprintf(test->outfile, "iperf3: %s\n", str);
+	}
+	else {
+	    if (ct) {
+		fprintf(stderr, "%s", ct);
+	    }
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
         /* Write to RAM "file" if requested: */
         if (test != NULL && test->resp_std_out_buff_len && test->resp_std_out_buff != NULL) {
@@ -147,14 +147,13 @@ iperf_errexit(struct iperf_test *test, const char *format, ...)
         } else
 #endif
         {
-            fprintf(stderr, "iperf3: %s\n", str);
-        }
+	    fprintf(stderr, "iperf3: %s\n", str);
+	}
     }
     va_end(argp);
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
-    if (test) {
+    if (test)
         iperf_delete_pidfile(test);
-    }
     exit(1);
 #endif
 }
@@ -217,12 +216,12 @@ iperf_strerror(int int_errno)
         case IESETSERVERAUTH:
              snprintf(errstr, len, "you must specify a path to a valid RSA private key and a user credential file");
             break;
-        case IEBADFORMAT:
-            snprintf(errstr, len, "bad format specifier (valid formats are in the set [kmgtKMGT])");
-            break;
-        case IEBADPORT:
-            snprintf(errstr, len, "port number must be between 1 and 65535 inclusive");
-            break;
+	case IEBADFORMAT:
+	    snprintf(errstr, len, "bad format specifier (valid formats are in the set [kmgtKMGT])");
+	    break;
+	case IEBADPORT:
+	    snprintf(errstr, len, "port number must be between 1 and 65535 inclusive");
+	    break;
         case IEMSS:
             snprintf(errstr, len, "TCP MSS too large (maximum = %d bytes)", MAX_MSS);
             break;
@@ -245,13 +244,13 @@ iperf_strerror(int int_errno)
         case IEENDCONDITIONS:
             snprintf(errstr, len, "only one test end condition (-t, -n, -k) may be specified");
             break;
-        case IELOGFILE:
-            snprintf(errstr, len, "unable to open log file");
-            perr = 1;
-            break;
-        case IENOSCTP:
-            snprintf(errstr, len, "no SCTP support available");
-            break;
+	case IELOGFILE:
+	    snprintf(errstr, len, "unable to open log file");
+	    perr = 1;
+	    break;
+	case IENOSCTP:
+	    snprintf(errstr, len, "no SCTP support available");
+	    break;
         case IENEWTEST:
             snprintf(errstr, len, "unable to create a new test");
             perr = 1;
@@ -276,13 +275,13 @@ iperf_strerror(int int_errno)
             break;
         case IELISTEN:
             snprintf(errstr, len, "unable to start listener for connections");
-            herr = 1;
+	    herr = 1;
             perr = 1;
             break;
         case IECONNECT:
             snprintf(errstr, len, "unable to connect to server");
             perr = 1;
-            herr = 1;
+	    herr = 1;
             break;
         case IEACCEPT:
             snprintf(errstr, len, "unable to accept connection from client");
@@ -394,10 +393,22 @@ iperf_strerror(int int_errno)
             snprintf(errstr, len, "unable to set CPU affinity");
             perr = 1;
             break;
-    case IEDAEMON:
-            snprintf(errstr, len, "unable to become a daemon");
+        case IERCVTIMEOUT:
+            snprintf(errstr, len, "receive timeout value is incorrect or not in range");
             perr = 1;
-        break;
+            break;
+        case IESNDTIMEOUT:
+            snprintf(errstr, len, "send timeout value is incorrect or not in range");
+            perr = 1;
+            break;
+        case IERVRSONLYRCVTIMEOUT:
+            snprintf(errstr, len, "client receive timeout is valid only in receiving mode");
+            perr = 1;
+            break;
+	case IEDAEMON:
+	    snprintf(errstr, len, "unable to become a daemon");
+	    perr = 1;
+	    break;
         case IECREATESTREAM:
             snprintf(errstr, len, "unable to create a new stream");
             herr = 1;
@@ -410,7 +421,7 @@ iperf_strerror(int int_errno)
             break;
         case IESTREAMLISTEN:
             snprintf(errstr, len, "unable to start stream listener");
-            herr = 1;
+	    herr = 1;
             perr = 1;
             break;
         case IESTREAMCONNECT:
@@ -445,17 +456,17 @@ iperf_strerror(int int_errno)
             perr = 1;
             break;
         case IESETCONGESTION:
-            snprintf(errstr, len, "unable to set TCP_CONGESTION: " 
+            snprintf(errstr, len, "unable to set TCP_CONGESTION: "
                                   "Supplied congestion control algorithm not supported on this host");
             break;
-        case IEPIDFILE:
+	case IEPIDFILE:
             snprintf(errstr, len, "unable to write PID file");
             perr = 1;
             break;
-        case IEV6ONLY:
-            snprintf(errstr, len, "Unable to set/reset IPV6_V6ONLY");
-            perr = 1;
-            break;
+	case IEV6ONLY:
+	    snprintf(errstr, len, "Unable to set/reset IPV6_V6ONLY");
+	    perr = 1;
+	    break;
         case IESETSCTPDISABLEFRAG:
             snprintf(errstr, len, "unable to set SCTP_DISABLE_FRAGMENTS");
             perr = 1;
@@ -464,23 +475,48 @@ iperf_strerror(int int_errno)
             snprintf(errstr, len, "unable to set SCTP_INIT num of SCTP streams\n");
             perr = 1;
             break;
-        case IESETPACING:
-            snprintf(errstr, len, "unable to set socket pacing");
+	case IESETPACING:
+	    snprintf(errstr, len, "unable to set socket pacing");
+	    perr = 1;
+	    break;
+	case IESETBUF2:
+	    snprintf(errstr, len, "socket buffer size not set correctly");
+	    break;
+	case IEREVERSEBIDIR:
+	    snprintf(errstr, len, "cannot be both reverse and bidirectional");
+            break;
+	case IETOTALRATE:
+	    snprintf(errstr, len, "total required bandwidth is larger than server limit");
+            break;
+    case IESKEWTHRESHOLD:
+	    snprintf(errstr, len, "skew threshold must be a positive number");
+            break;
+	case IEIDLETIMEOUT:
+	    snprintf(errstr, len, "idle timeout parameter is not positive or larger than allowed limit");
+            break;
+	case IEBINDDEV:
+	    snprintf(errstr, len, "Unable to bind-to-device (check perror, maybe permissions?)");
+            break;
+    case IEBINDDEVNOSUPPORT:
+	    snprintf(errstr, len, "`<ip>%%<dev>` is not supported as system does not support bind to device");
+            break;
+    case IEHOSTDEV:
+	    snprintf(errstr, len, "host device name (ip%%<dev>) is supported (and required) only for IPv6 link-local address");
+            break;        
+	case IENOMSG:
+	    snprintf(errstr, len, "idle timeout for receiving data");
+            break;
+    case IESETDONTFRAGMENT:
+	    snprintf(errstr, len, "unable to set IP Do-Not-Fragment flag");
+            break;
+        case IESETUSERTIMEOUT:
+            snprintf(errstr, len, "unable to set TCP/SCTP MSS");
             perr = 1;
             break;
-        case IESETBUF2:
-            snprintf(errstr, len, "socket buffer size not set correctly");
-            break;
-        case IEREVERSEBIDIR:
-            snprintf(errstr, len, "cannot be both reverse and bidirectional");
-            break;
-        case IETOTALRATE:
-            snprintf(errstr, len, "total required bandwidth is larger than server limit");
-            break;
-        default:
-            snprintf(errstr, len, "int_errno=%d", int_errno);
-            perr = 1;
-            break;
+	default:
+	    snprintf(errstr, len, "int_errno=%d", int_errno);
+	    perr = 1;
+	    break;
     }
 
     /* Append the result of strerror() or gai_strerror() if appropriate */
@@ -490,7 +526,7 @@ iperf_strerror(int int_errno)
         strncat(errstr, strerror(errno), len - strlen(errstr) - 1);
     else if (herr && gerror) {
         strncat(errstr, gai_strerror(gerror), len - strlen(errstr) - 1);
-        gerror = 0;
+	gerror = 0;
     }
 
     return errstr;

@@ -28,23 +28,12 @@
 #define __IPERF_UTIL_H
 
 #include "iperf_config.h"
-#if defined(CONFIG_CJSON_LIB)
-#include <cJSON.h>
-#else
 #include "cjson.h"
-#endif
 #include <sys/select.h>
 #include <stddef.h>
 
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-/* getsockname in system is not working */
-#include "iperf.h"
-int nrf_iperf3_mock_getsockname(struct iperf_test *test, int sockfd, struct sockaddr *addr, socklen_t *addrlen);
-#endif
-
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
 int readentropy(void *out, size_t outsize);
-#endif
+
 void fill_with_repeating_pattern(void *out, size_t outsize);
 
 void make_cookie(char *);
@@ -57,9 +46,8 @@ int timeval_equals(struct timeval *tv0, struct timeval *tv1);
 
 double timeval_diff(struct timeval *tv0, struct timeval *tv1);
 
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
 void cpu_util(double pcpu[3]);
-#endif
+
 const char* get_system_info(void);
 
 const char* get_optional_features(void);
@@ -76,7 +64,4 @@ extern int daemon(int nochdir, int noclose);
 ssize_t getline(char **buf, size_t *bufsiz, FILE *fp);
 #endif /* HAVE_GETLINE */
 
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
-int iperf_util_socket_pdn_id_set(int fd, const char *pdn_id_str);
-#endif
 #endif

@@ -158,11 +158,11 @@ tmr_timeout( struct iperf_time* nowP )
     int past;
     static struct timeval timeout;
 
-    getnow(nowP, &now);
+    getnow( nowP, &now );
     /* Since the list is sorted, we only need to look at the first timer. */
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
 #define MAX_TIMEOUT_IN_MICROSECS (1000000LL * 3LL)  /* 3 seconds */
-#define MIN_TIMEOUT_IN_MICROSECS 1000LL             /* 1 ms */
+#define MIN_TIMEOUT_IN_MICROSECS 10000LL             /* 1 ms */
     if (timers == NULL) {
 	    usecs = MAX_TIMEOUT_IN_MICROSECS;
     } else {
@@ -176,7 +176,7 @@ tmr_timeout( struct iperf_time* nowP )
         usecs = MAX_TIMEOUT_IN_MICROSECS;
     }
     if (usecs <= MIN_TIMEOUT_IN_MICROSECS) {
-        usecs = MIN_TIMEOUT_IN_MICROSECS;
+        usecs = 0;
     }
 #else
     if ( timers == NULL )
@@ -193,6 +193,7 @@ tmr_timeout( struct iperf_time* nowP )
     timeout.tv_usec = usecs % 1000000LL;
     return &timeout;
 }
+
 
 void
 tmr_run( struct iperf_time* nowP )
@@ -224,7 +225,7 @@ void
 tmr_reset( struct iperf_time* nowP, Timer* t )
 {
     struct iperf_time now;
-    
+
     getnow( nowP, &now );
     t->time = now;
     iperf_time_add_usecs( &t->time, t->usecs );

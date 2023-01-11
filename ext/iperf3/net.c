@@ -33,7 +33,6 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <assert.h>
 #include <netdb.h>
 #include <string.h>
@@ -61,9 +60,13 @@
 #include <poll.h>
 #endif /* HAVE_POLL_H */
 
+#include "iperf.h"
 #include "iperf_util.h"
 #include "net.h"
 #include "timer.h"
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+#include "iperf_api.h"
+#endif
 
 /*
  * Declaration of gerror in iperf_error.c.  Most other files in iperf3 can get this
@@ -100,11 +103,9 @@ timeout_connect(int s, const struct sockaddr *name, socklen_t namelen,
 			if ((ret = getsockopt(s, SOL_SOCKET, SO_ERROR,
 			    &optval, &optlen)) == 0) {
 				errno = optval;
-                printf("timeout_connect() getsockopt error %d\n", ret);
 				ret = optval == 0 ? 0 : -1;
 			}
 		} else if (ret == 0) {
-            printf("timeout_connect() ETIMEDOUT\n");
 			errno = ETIMEDOUT;
 			ret = -1;
 		} else
@@ -121,85 +122,79 @@ timeout_connect(int s, const struct sockaddr *name, socklen_t namelen,
  * Copyright: http://swtch.com/libtask/COPYRIGHT
 */
 
-/* make connection to server */
+/* create a socket */
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-/* Added test */
-int netdial(struct iperf_test *test, int domain, int proto, const char *local, int local_port, const char *server, int port, int timeout)
+int
+create_socket(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, struct addrinfo **server_res_out)
+
 #else
 int
-netdial(int domain, int proto, const char *local, int local_port, const char *server, int port, int timeout)
+create_socket(int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, struct addrinfo **server_res_out)
 #endif
 {
-    struct addrinfo hints, *local_res, *server_res;
+    struct addrinfo hints, *local_res = NULL, *server_res = NULL;
     int s, saved_errno;
+#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
+	char portstr[12];
+#else
+    char portstr[6];
+#endif
 
     if (local) {
         memset(&hints, 0, sizeof(hints));
         hints.ai_family = domain;
         hints.ai_socktype = proto;
-        if ((gerror = getaddrinfo(local, NULL, &hints, &local_res)) != 0)
+        if ((gerror = getaddrinfo(local, NULL, &hints, &local_res)) != 0) {
+            if (test->debug) {
+                iperf_printf(test, "getaddrinfo() 1 failed!!!");
+        }
+
             return -1;
+        }
     }
 
     memset(&hints, 0, sizeof(hints));
-    
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-    //here was mixed with protos & types
-    int type = proto;
-    int protocol = 0;
-    char portstr[12];
-
-    if (type == SOCK_STREAM) {
-	    protocol = IPPROTO_TCP;
-     } else if (type == SOCK_DGRAM) {
-	    protocol = IPPROTO_UDP;
-     }
-
     hints.ai_family = domain;
-    hints.ai_socktype = type;
-
+    hints.ai_socktype = proto;
+    snprintf(portstr, sizeof(portstr), "%d", port);
 #if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
     if (test->pdn_id_str != NULL) {
         hints.ai_flags = (AI_PDNSERV | AI_NUMERICSERV);
         snprintf(portstr, 12, "%d:%s", test->server_port, test->pdn_id_str);
     }
 #endif
-    if ((gerror = getaddrinfo(
-        server,
-        (test->pdn_id_str != NULL ? portstr : NULL), 
-        &hints, &server_res)) != 0) {
-        printf("getaddrinfo failed with error code %d %s\n", gerror, gai_strerror(gerror));
+    if ((gerror = getaddrinfo(server, portstr, &hints, &server_res)) != 0) {
+        if (test->debug) {
+            iperf_printf(test, "getaddrinfo() 2 failed!!!");
+        }
+        if (local)
+            freeaddrinfo(local_res);
+        
         return -1;
     }
 
-    s = socket(server_res->ai_family, type, protocol);
-#else
-    struct addrinfo hints;
-
-    hints.ai_family = domain;
-    hints.ai_socktype = proto;
-    if ((gerror = getaddrinfo(server, NULL, &hints, &server_res)) != 0)
-        return -1;
-
     s = socket(server_res->ai_family, proto, 0);
-#endif
-        if (s < 0) {
+    if (s < 0) {
 	if (local)
 	    freeaddrinfo(local_res);
 	freeaddrinfo(server_res);
         return -1;
     }
 
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
-    /* Set PDN based on PDN ID if requested */
-    if (test->pdn_id_str != NULL) {
-        int ret = iperf_util_socket_pdn_id_set(s, test->pdn_id_str);
-        if (ret != 0) {
-            printk("iperf_tcp_listen: cannot bind socket with PDN ID %s\n", test->pdn_id_str);
+    if (bind_dev) {
+#if defined(HAVE_SO_BINDTODEVICE)
+        if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+                       bind_dev, IFNAMSIZ) < 0)
+#endif // HAVE_SO_BINDTODEVICE
+        {
+            saved_errno = errno;
+            close(s);
+            freeaddrinfo(local_res);
+            freeaddrinfo(server_res);
+            errno = saved_errno;
             return -1;
-        }				
+        }
     }
-#endif
 
     /* Bind the local address if given a name (with or without --cport) */
     if (local) {
@@ -242,6 +237,8 @@ netdial(int domain, int proto, const char *local, int local_port, const char *se
 	}
 	/* Unknown protocol */
 	else {
+	    close(s);
+	    freeaddrinfo(server_res);
 	    errno = EAFNOSUPPORT;
             return -1;
 	}
@@ -255,7 +252,31 @@ netdial(int domain, int proto, const char *local, int local_port, const char *se
         }
     }
 
-    ((struct sockaddr_in *) server_res->ai_addr)->sin_port = htons(port);
+    *server_res_out = server_res;
+    return s;
+}
+
+/* make connection to server */
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+int
+netdial(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, int timeout)
+#else
+int
+netdial(int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, int timeout)
+#endif
+{
+    struct addrinfo *server_res = NULL;
+    int s, saved_errno;
+
+#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
+    s = create_socket(test, domain, proto, local, bind_dev, local_port, server, port, &server_res);
+#else
+    s = create_socket(domain, proto, local, bind_dev, local_port, server, port, &server_res);
+#endif    
+    if (s < 0) {
+      return -1;
+    }
+
     if (timeout_connect(s, (struct sockaddr *) server_res->ai_addr, server_res->ai_addrlen, timeout) < 0 && errno != EINPROGRESS) {
 	saved_errno = errno;
 	close(s);
@@ -263,10 +284,6 @@ netdial(int domain, int proto, const char *local, int local_port, const char *se
 	errno = saved_errno;
         return -1;
     }
-    
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-    test->remote_addr = *(server_res->ai_addr);
-#endif
 
     freeaddrinfo(server_res);
     return s;
@@ -274,23 +291,18 @@ netdial(int domain, int proto, const char *local, int local_port, const char *se
 
 /***************************************************************/
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-int netannounce(struct iperf_test *test, int domain, int proto, const char *local, int port)
+int netannounce(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int port)
 #else
-int
-netannounce(int domain, int proto, const char *local, int port)
+int netannounce(int domain, int proto, const char *local, const char *bind_dev, int port)
 #endif
 {
     struct addrinfo hints, *res;
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)    
-    char portstr[12];
-#else
     char portstr[6];
-#endif
     int s, opt, saved_errno;
 
     snprintf(portstr, 6, "%d", port);
     memset(&hints, 0, sizeof(hints));
-    /* 
+    /*
      * If binding to the wildcard address with no explicit address
      * family specified, then force us to get an AF_INET6 socket.  On
      * CentOS 6 and MacOS, getaddrinfo(3) with AF_UNSPEC in ai_family,
@@ -308,77 +320,42 @@ netannounce(int domain, int proto, const char *local, int port)
     else {
 	hints.ai_family = domain;
     }
-
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-    //here was mixed with protos & types
-    int type = proto;
-    int protocol = 0;
-
-    if (type == SOCK_STREAM) {
-	    protocol = IPPROTO_TCP;
-     } else if (type == SOCK_DGRAM) {
-	    protocol = IPPROTO_UDP;
-     }
-
-    hints.ai_socktype = type;
-    hints.ai_protocol = protocol;
-    hints.ai_flags = AI_PASSIVE;
-
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)    
-    /* Set PDN to hints if requested: */
-    if (test->pdn_id_str != NULL) {
-        hints.ai_flags = (AI_PDNSERV | AI_NUMERICSERV);
-        snprintf(portstr, 12, "%d:%s", port, test->pdn_id_str);
-    }
-#endif    
-
-    if ((gerror = getaddrinfo(local, portstr, &hints, &res)) != 0) {
-        printf("getaddrinfo failed with error code %d %s\n", gerror, gai_strerror(gerror));
-        return -1;
-    }
-
-    s = socket(res->ai_family, type, protocol);
-    
-    if (s < 0) {
-        printk("listen socket creation failed\n");
-	    freeaddrinfo(res);
-        return -1;
-    }
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
-    /* Set PDN based on PDN ID if requested */
-    if (test->pdn_id_str != NULL) {
-        int ret = iperf_util_socket_pdn_id_set(s, test->pdn_id_str);
-        if (ret != 0) {
-            printk("iperf_tcp_listen: cannot bind socket with PDN ID %s\n", test->pdn_id_str);
-            return -1;
-        }				
-    }
-#endif
-
-#else /* not CONFIG_NRF_IPERF3_INTEGRATION: */
     hints.ai_socktype = proto;
     hints.ai_flags = AI_PASSIVE;
-    if ((gerror = getaddrinfo(local, portstr, &hints, &res)) != 0)
-        return -1; 
+    if ((gerror = getaddrinfo(local, portstr, &hints, &res)) != 0) {
+        if (test->debug) {
+            iperf_printf(test, "netannounce: getaddrinfo() failed!!!");
+        }
+        return -1;
+    }
 
     s = socket(res->ai_family, proto, 0);
     if (s < 0) {
-        printk("listen socket creation failed\n");
-	    freeaddrinfo(res);
+	freeaddrinfo(res);
         return -1;
-    }    
-#endif
+    }
+
+    if (bind_dev) {
+#if defined(HAVE_SO_BINDTODEVICE)
+        if (setsockopt(s, SOL_SOCKET, SO_BINDTODEVICE,
+                       bind_dev, IFNAMSIZ) < 0)
+#endif // HAVE_SO_BINDTODEVICE
+        {
+            saved_errno = errno;
+            close(s);
+            freeaddrinfo(res);
+            errno = saved_errno;
+            return -1;
+        }
+    }
 
     opt = 1;
-    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR, 
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEADDR,
 		   (char *) &opt, sizeof(opt)) < 0) {
 	saved_errno = errno;
 	close(s);
 	freeaddrinfo(res);
 	errno = saved_errno;
-    
-    /* NRF_IPERF3_INTEGRATION_CHANGE: note: SO_REUSEADDR is not supported by modem in 1.2.1/1.2.2. */
-    printk("listen setsockopt SO_REUSEADDR %s\n",  gai_strerror(saved_errno));
 	return -1;
     }
     /*
@@ -389,14 +366,13 @@ netannounce(int domain, int proto, const char *local, int port)
      * OpenBSD explicitly omits support for IPv4-mapped addresses,
      * even though it implements IPV6_V6ONLY.
      */
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
 #if defined(IPV6_V6ONLY) && !defined(__OpenBSD__)
     if (res->ai_family == AF_INET6 && (domain == AF_UNSPEC || domain == AF_INET6)) {
 	if (domain == AF_UNSPEC)
 	    opt = 0;
 	else
 	    opt = 1;
-	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY, 
+	if (setsockopt(s, IPPROTO_IPV6, IPV6_V6ONLY,
 		       (char *) &opt, sizeof(opt)) < 0) {
 	    saved_errno = errno;
 	    close(s);
@@ -406,7 +382,6 @@ netannounce(int domain, int proto, const char *local, int port)
 	}
     }
 #endif /* IPV6_V6ONLY */
-#endif
 
     if (bind(s, (struct sockaddr *) res->ai_addr, res->ai_addrlen) < 0) {
         saved_errno = errno;
@@ -417,7 +392,7 @@ netannounce(int domain, int proto, const char *local, int port)
     }
 
     freeaddrinfo(res);
-    
+
     if (proto == SOCK_STREAM) {
         if (listen(s, INT_MAX) < 0) {
 	    saved_errno = errno;
@@ -477,10 +452,6 @@ Nwrite(int fd, const char *buf, size_t count, int prot)
 #if (EAGAIN != EWOULDBLOCK)
 		case EWOULDBLOCK:
 #endif
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-        /* Also EINPROGRESS handled as EWOULDBLOCK/EAGAIN */
-        case EINPROGRESS:
-#endif
 		return count - nleft;
 
 		case ENOBUFS:
@@ -518,7 +489,7 @@ int
 Nsendfile(int fromfd, int tofd, const char *buf, size_t count)
 {
 #if defined(HAVE_SENDFILE)
-    off_t offset; /* NRF_IPERF3_INTEGRATION_CHANGE: moved under flagging to be out from NRF */
+    off_t offset;
 #if defined(__FreeBSD__) || (defined(__APPLE__) && defined(__MACH__) && defined(MAC_OS_X_VERSION_10_6))
     off_t sent;
 #endif
@@ -600,7 +571,7 @@ setnonblocking(int fd, int nonblocking)
 }
 
 /****************************************************************************/
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION) /* due to lack of decent platform support: mock version used instead from iperf_util.c */
+
 int
 getsockdomain(int sock)
 {
@@ -612,4 +583,3 @@ getsockdomain(int sock)
     }
     return ((struct sockaddr *) &sa)->sa_family;
 }
-#endif

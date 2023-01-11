@@ -35,7 +35,11 @@
 #define _WITH_GETLINE
 #include <stdio.h>
 
+#include <inttypes.h>
+#include <stdint.h>
+
 #if defined(HAVE_SSL)
+#include <termios.h> /* NRF_IPERF3_INTEGRATION_CHANGE: moved under SSL flag */
 #include <termios.h> /* NRF_IPERF3_INTEGRATION_CHANGE: moved under SSL flag */
 
 #include <openssl/rsa.h>
@@ -45,7 +49,7 @@
 #include <openssl/buffer.h>
 #include <openssl/err.h>
 
-const char *auth_text_format = "user: %s\npwd:  %s\nts:   %ld";
+const char *auth_text_format = "user: %s\npwd:  %s\nts:   %"PRId64;
 
 void sha256(const char *string, char outputBuffer[65])
 {
@@ -62,10 +66,10 @@ void sha256(const char *string, char outputBuffer[65])
     outputBuffer[64] = 0;
 }
 
-int check_authentication(const char *username, const char *password, const time_t ts, const char *filename){
+int check_authentication(const char *username, const char *password, const time_t ts, const char *filename, int skew_threshold){
     time_t t = time(NULL);
     time_t utc_seconds = mktime(localtime(&t));
-    if ( (utc_seconds - ts) > 10 || (utc_seconds - ts) < -10 ) {
+    if ( (utc_seconds - ts) > skew_threshold || (utc_seconds - ts) < -skew_threshold ) {
         return 1;
     }
 
@@ -161,11 +165,11 @@ EVP_PKEY *load_pubkey_from_file(const char *file) {
     if (file) {
       key = BIO_new_file(file, "r");
       pkey = PEM_read_bio_PUBKEY(key, NULL, NULL, NULL);
- 
+
       BIO_free(key);
     }
     return (pkey);
-}   
+}
 
 EVP_PKEY *load_pubkey_from_base64(const char *buffer) {
     unsigned char *key = NULL;
@@ -244,18 +248,18 @@ int encrypt_rsa_message(const char *plaintext, EVP_PKEY *public_key, unsigned ch
     BIO_free(bioBuff);
 
     if (encryptedtext_len < 0) {
-      /* We probably shoudln't be printing stuff like this */
+      /* We probably shouldn't be printing stuff like this */
       fprintf(stderr, "%s\n", ERR_error_string(ERR_get_error(), NULL));
     }
 
-    return encryptedtext_len;  
+    return encryptedtext_len;
 }
 
 int decrypt_rsa_message(const unsigned char *encryptedtext, const int encryptedtext_len, EVP_PKEY *private_key, unsigned char **plaintext) {
     RSA *rsa = NULL;
     unsigned char *rsa_buffer = NULL, pad = RSA_PKCS1_PADDING;
     int plaintext_len, rsa_buffer_len, keysize;
-    
+
     rsa = EVP_PKEY_get1_RSA(private_key);
 
     keysize = RSA_size(rsa);
@@ -271,7 +275,7 @@ int decrypt_rsa_message(const unsigned char *encryptedtext, const int encryptedt
     BIO_free(bioBuff);
 
     if (plaintext_len < 0) {
-      /* We probably shoudln't be printing stuff like this */
+      /* We probably shouldn't be printing stuff like this */
       fprintf(stderr, "%s\n", ERR_error_string(ERR_get_error(), NULL));
     }
 
@@ -291,7 +295,7 @@ int encode_auth_setting(const char *username, const char *password, EVP_PKEY *pu
     if (text == NULL) {
 	return -1;
     }
-    snprintf(text, text_len, auth_text_format, username, password, utc_seconds);
+    snprintf(text, text_len, auth_text_format, username, password, (int64_t)utc_seconds);
 
     unsigned char *encrypted = NULL;
     int encrypted_len;
@@ -309,7 +313,8 @@ int encode_auth_setting(const char *username, const char *password, EVP_PKEY *pu
 int decode_auth_setting(int enable_debug, const char *authtoken, EVP_PKEY *private_key, char **username, char **password, time_t *ts){
     unsigned char *encrypted_b64 = NULL;
     size_t encrypted_len_b64;
-    Base64Decode(authtoken, &encrypted_b64, &encrypted_len_b64);        
+    int64_t utc_seconds;
+    Base64Decode(authtoken, &encrypted_b64, &encrypted_len_b64);
 
     unsigned char *plaintext = NULL;
     int plaintext_len;
@@ -331,7 +336,7 @@ int decode_auth_setting(int enable_debug, const char *authtoken, EVP_PKEY *priva
 	return -1;
     }
 
-    int rc = sscanf((char *) plaintext, auth_text_format, s_username, s_password, ts);
+    int rc = sscanf((char *) plaintext, auth_text_format, s_username, s_password, &utc_seconds);
     if (rc != 3) {
 	free(s_password);
 	free(s_username);
@@ -344,6 +349,7 @@ int decode_auth_setting(int enable_debug, const char *authtoken, EVP_PKEY *priva
     }
     *username = s_username;
     *password = s_password;
+    *ts = (time_t)utc_seconds;
     OPENSSL_free(plaintext);
     return (0);
 }

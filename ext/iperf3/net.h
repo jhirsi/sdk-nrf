@@ -32,23 +32,21 @@
 #endif
 
 int timeout_connect(int s, const struct sockaddr *name, socklen_t namelen, int timeout);
-
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-int netdial(struct iperf_test *test, int domain, int proto, const char *local, int local_port, const char *server, int port, int timeout); /* Added test */
-int netannounce(struct iperf_test *test, int domain, int proto, const char *local, int port); /* Added test */
+int create_socket(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, struct addrinfo **server_res_out);
+int netdial(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, int timeout);
+int netannounce(struct iperf_test *test, int domain, int proto, const char *local, const char *bind_dev, int port);
 #else
-int netdial(int domain, int proto, const char *local, int local_port, const char *server, int port, int timeout);
-int netannounce(int domain, int proto, const char *local, int port);
+int create_socket(int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, struct addrinfo **server_res_out);
+int netdial(int domain, int proto, const char *local, const char *bind_dev, int local_port, const char *server, int port, int timeout);
+int netannounce(int domain, int proto, const char *local, const char *bind_dev, int port);
 #endif
-
 int Nread(int fd, char *buf, size_t count, int prot);
 int Nwrite(int fd, const char *buf, size_t count, int prot) /* __attribute__((hot)) */;
 int has_sendfile(void);
 int Nsendfile(int fromfd, int tofd, const char *buf, size_t count) /* __attribute__((hot)) */;
 int setnonblocking(int fd, int nonblocking);
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
 int getsockdomain(int sock);
-#endif
 int parse_qos(const char *tos);
 
 #define NET_SOFTERROR -1

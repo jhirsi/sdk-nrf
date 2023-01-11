@@ -38,11 +38,6 @@
 #include <string.h>
 #include <stdarg.h>
 #include <sys/select.h>
-
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
-#include <sys/socket.h>
-#endif
-
 #include <sys/types.h>
 #include <sys/time.h>
 #include <sys/resource.h>
@@ -53,77 +48,10 @@
 #include <errno.h>
 #include <fcntl.h>
 
-#if defined(CONFIG_CJSON_LIB)
-#include <cJSON.h>
-#else
 #include "cjson.h"
-#endif
-
 #include "iperf.h"
 #include "iperf_api.h"
 
-
-#if defined(CONFIG_NRF_IPERF3_INTEGRATION)
-/* Added, ref: https://docs.zephyrproject.org/1.13.0/kernel/timing/clocks.html */
-#ifndef CLOCKS_PER_SEC
-#define CLOCKS_PER_SEC CONFIG_SYS_CLOCK_TICKS_PER_SEC
-#endif
-
-/**************************************************************************/
-static int nrf_iperf3_mock_gethostname(char *name, size_t len)
-{
-     strncpy(name, CONFIG_NRF_IPERF3_HOST_NAME, len);
-     return 0;
-}
-/**************************************************************************/
-/* Aadded because zephyr getsockname not working. Note: this is very dummy */
-/* https://pubs.opengroup.org/onlinepubs/9699919799/functions/getsockname.html */
-int nrf_iperf3_mock_getsockname(struct iperf_test *test, int sockfd, struct sockaddr *addr, socklen_t *addrlen)
-{
-    /* Note:
-       very dummy, not doing anything according to given sockfd, just settting the family by set preference
-    */
-    memset(addr->data, 0, sizeof(addr->data));
-    addr->sa_family = AF_UNSPEC;
-
-    if (test->settings->domain == AF_INET6) {
-        addr->sa_family = AF_INET6;
-    }
-    else {
-         addr->sa_family = AF_INET;
-    }
-
-    return 0;
-}
-
-/* Added */
-int getrusage(int who, struct rusage *usage)
-{
-    memset(usage, 0, sizeof(*usage));   // XXX
-    return 0;
-}
-#endif
-
-#if defined (CONFIG_NRF_IPERF3_MULTICONTEXT_SUPPORT)
-int iperf_util_socket_pdn_id_set(int fd, const char *pdn_id_str)
-{
-	int ret;
-	size_t len;
-	struct ifreq ifr = {0};
-    
-    snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "pdn%s", pdn_id_str);
-	len = strlen(ifr.ifr_name);
-
-	ret = setsockopt(fd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, len);
-	if (ret < 0) {
-		printk("Failed to bind socket with PDN ID %s, error: %d, %s\n", 
-            pdn_id_str, ret, strerror(ret));
-		return -EINVAL;
-	}
-
-	return 0;
-}
-#endif
 /*
  * Read entropy from /dev/urandom
  * Errors are fatal.
@@ -143,7 +71,6 @@ int readentropy(void *out, size_t outsize)
         if (frandom == NULL) {
             iperf_errexit(NULL, "error - failed to open %s: %s\n",
                           rndfile, strerror(errno));
-            return -1;
         }
         setbuf(frandom, NULL);
     }
@@ -151,7 +78,6 @@ int readentropy(void *out, size_t outsize)
         iperf_errexit(NULL, "error - failed to read %s: %s\n",
                       rndfile,
                       feof(frandom) ? "EOF" : strerror(errno));
-        return -1;
     }
     return 0;
 }
@@ -191,13 +117,11 @@ void fill_with_repeating_pattern(void *out, size_t outsize)
 #if defined(CONFIG_NRF_IPERF3_INTEGRATION)
 void make_cookie(char *cookie)
 {
-    int len = strlen(CONFIG_NRF_IPERF3_HOST_NAME);
-    char hostname[len];
+    char *hostname = CONFIG_NRF_IPERF3_HOST_NAME;
     struct timeval tv = { .tv_sec = 0, .tv_usec = 0 };
     char temp[100];
 
     /* Generate a string based on hostname, time, randomness, and filler. */
-    (void) nrf_iperf3_mock_gethostname(hostname, sizeof(hostname) + 1);    
     (void) gettimeofday(&tv, 0);
     (void) snprintf(temp, sizeof(temp), "%s.%ld.%06ld.%08lx%08lx.%s", hostname, (unsigned long int) tv.tv_sec, (unsigned long int) tv.tv_usec, (unsigned long int) rand(), (unsigned long int) rand(), "1234567890123456789012345678901234567890");
 
@@ -206,7 +130,8 @@ void make_cookie(char *cookie)
     cookie[36] = '\0';
 }
 #else
-void make_cookie(const char *cookie)
+void
+make_cookie(const char *cookie)
 {
     unsigned char *out = (unsigned char*)cookie;
     size_t pos;
@@ -223,7 +148,7 @@ void make_cookie(const char *cookie)
 /* is_closed
  *
  * Test if the file descriptor fd is closed.
- * 
+ *
  * Iperf uses this function to test whether a TCP stream socket
  * is closed, because accepting and denying an invalid connection
  * in iperf_tcp_accept is not considered an error.
@@ -271,7 +196,7 @@ double
 timeval_diff(struct timeval * tv0, struct timeval * tv1)
 {
     double time1, time2;
-    
+
     time1 = tv0->tv_sec + (tv0->tv_usec / 1000000.0);
     time2 = tv1->tv_sec + (tv1->tv_usec / 1000000.0);
 
@@ -329,9 +254,11 @@ get_system_info(void)
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)  /* other system info not supported */
     static char buf[1024];
     struct utsname  uts;
+
     memset(buf, 0, 1024);
     uname(&uts);
-    snprintf(buf, sizeof(buf), "%s %s %s %s %s", uts.sysname, uts.nodename, 
+
+    snprintf(buf, sizeof(buf), "%s %s %s %s %s", uts.sysname, uts.nodename,
 	     uts.release, uts.version, uts.machine);
 #endif
     return buf;
@@ -353,44 +280,44 @@ get_optional_features(void)
 #if !defined(CONFIG_NRF_IPERF3_INTEGRATION)  /* not supported */
 #if defined(HAVE_CPU_AFFINITY)
     if (numfeatures > 0) {
-	strncat(features, ", ", 
+	strncat(features, ", ",
 		sizeof(features) - strlen(features) - 1);
     }
-    strncat(features, "CPU affinity setting", 
+    strncat(features, "CPU affinity setting",
 	sizeof(features) - strlen(features) - 1);
     numfeatures++;
 #endif /* HAVE_CPU_AFFINITY */
-    
+
 #if defined(HAVE_FLOWLABEL)
     if (numfeatures > 0) {
-	strncat(features, ", ", 
+	strncat(features, ", ",
 		sizeof(features) - strlen(features) - 1);
     }
-    strncat(features, "IPv6 flow label", 
+    strncat(features, "IPv6 flow label",
 	sizeof(features) - strlen(features) - 1);
     numfeatures++;
 #endif /* HAVE_FLOWLABEL */
-    
+
 #if defined(HAVE_SCTP_H)
     if (numfeatures > 0) {
-	strncat(features, ", ", 
+	strncat(features, ", ",
 		sizeof(features) - strlen(features) - 1);
     }
-    strncat(features, "SCTP", 
+    strncat(features, "SCTP",
 	sizeof(features) - strlen(features) - 1);
     numfeatures++;
 #endif /* HAVE_SCTP_H */
-    
+
 #if defined(HAVE_TCP_CONGESTION)
     if (numfeatures > 0) {
-	strncat(features, ", ", 
+	strncat(features, ", ",
 		sizeof(features) - strlen(features) - 1);
     }
-    strncat(features, "TCP congestion algorithm setting", 
+    strncat(features, "TCP congestion algorithm setting",
 	sizeof(features) - strlen(features) - 1);
     numfeatures++;
 #endif /* HAVE_TCP_CONGESTION */
-    
+
 #if defined(HAVE_SENDFILE)
     if (numfeatures > 0) {
 	strncat(features, ", ",
@@ -420,9 +347,30 @@ get_optional_features(void)
 	sizeof(features) - strlen(features) - 1);
     numfeatures++;
 #endif /* HAVE_SSL */
+
+#if defined(HAVE_SO_BINDTODEVICE)
+    if (numfeatures > 0) {
+	strncat(features, ", ",
+		sizeof(features) - strlen(features) - 1);
+    }
+    strncat(features, "bind to device",
+	sizeof(features) - strlen(features) - 1);
+    numfeatures++;
+#endif /* HAVE_SO_BINDTODEVICE */
+
+#if defined(HAVE_DONT_FRAGMENT)
+    if (numfeatures > 0) {
+	strncat(features, ", ",
+		sizeof(features) - strlen(features) - 1);
+    }
+    strncat(features, "support IPv4 don't fragment",
+	sizeof(features) - strlen(features) - 1);
+    numfeatures++;
+#endif /* HAVE_DONT_FRAGMENT */
 #endif
+
     if (numfeatures == 0) {
-	strncat(features, "None", 
+	strncat(features, "None",
 		sizeof(features) - strlen(features) - 1);
     }
 
@@ -561,8 +509,8 @@ int daemon(int nochdir, int noclose)
 
     /*
      * Fork again to avoid becoming a session leader.
-     * This might only matter on old SVr4-derived OSs. 
-     * Note in particular that glibc and FreeBSD libc 
+     * This might only matter on old SVr4-derived OSs.
+     * Note in particular that glibc and FreeBSD libc
      * only fork once.
      */
     pid = fork();
