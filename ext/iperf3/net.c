@@ -380,6 +380,19 @@ netannounce(int domain, int proto, const char *local, int port)
     printk("listen setsockopt SO_REUSEADDR %s\n",  gai_strerror(saved_errno));
 	return -1;
     }
+    opt = 1;
+    if (setsockopt(s, SOL_SOCKET, SO_REUSEPORT, (char *)&opt, sizeof(opt)) < 0) {
+	    saved_errno = errno;
+	    close(s);
+	    freeaddrinfo(res);
+	    errno = saved_errno;
+
+	    /* NRF_IPERF3_INTEGRATION_CHANGE: note: SO_REUSEADDR is not supported by modem
+	     * in 1.2.1/1.2.2. */
+	    printk("netannounce: listen setsockopt SO_REUSEPORT failed: %s -- continue\n",
+		   gai_strerror(saved_errno));
+	    /* continue */
+    }
     /*
      * If we got an IPv6 socket, figure out if it should accept IPv4
      * connections as well.  We do that if and only if no address
@@ -388,7 +401,7 @@ netannounce(int domain, int proto, const char *local, int port)
      * OpenBSD explicitly omits support for IPv4-mapped addresses,
      * even though it implements IPV6_V6ONLY.
      */
-#if !defined(CONFIG_NRF_IPERF3_INTEGRATION)
+#if defined(CONFIG_NET_NATIVE) && defined(CONFIG_NET_IPV6)
 #if defined(IPV6_V6ONLY) && !defined(__OpenBSD__)
     if (res->ai_family == AF_INET6 && (domain == AF_UNSPEC || domain == AF_INET6)) {
 	if (domain == AF_UNSPEC)
@@ -409,6 +422,7 @@ netannounce(int domain, int proto, const char *local, int port)
 
     if (bind(s, (struct sockaddr *) res->ai_addr, res->ai_addrlen) < 0) {
         saved_errno = errno;
+        printk("netannounce: bind() failed: %s\n", gai_strerror(saved_errno));
         close(s);
 	freeaddrinfo(res);
         errno = saved_errno;
@@ -419,10 +433,11 @@ netannounce(int domain, int proto, const char *local, int port)
     
     if (proto == SOCK_STREAM) {
         if (listen(s, INT_MAX) < 0) {
-	    saved_errno = errno;
-	    close(s);
-	    errno = saved_errno;
-            return -1;
+		printk("netannounce: listen() failed: %s\n", gai_strerror(errno));
+		saved_errno = errno;
+		close(s);
+		errno = saved_errno;
+		return -1;
         }
     }
 
