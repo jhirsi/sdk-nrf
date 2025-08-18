@@ -56,5 +56,9 @@
 
 /* Enable external flash */
 &gd25wb256 {
-	status = "okay";
+	status = "disabled";
+};
+/* Just for sure to disable as these are in 30/31 pins where pwr pin is */
+arduino_i2c: &i2c2 {
+	status = "disabled";
 };
