@@ -1,0 +1,33 @@
+# Copyright (c) 2025 Nordic Semiconductor
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig NET_L2_DECT
+	bool "L2 Wi-Fi Connectivity"
+	depends on DECT_NRP_MAC
+	help
+	  Enable support for DECT NR+ Net L2.
+
+if NET_L2_DECT
+module = NET_L2_DECT
+module-dep = NET_LOG
+module-str = Log level for dect nr+ L2
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+endif # NET_L2_DECT
+
+config NET_L2_DECT_MGMT
+	bool "DECT NR+ Net Management support"
+	depends on NET_L2_DECT
+	select NET_MGMT
+	select NET_MGMT_EVENT
+	select NET_MGMT_EVENT_INFO
+	help
+	  Enable support for DECT NR+ Net Management interface.
+
+if NET_L2_DECT_MGMT
+module = NET_L2_DECT_MGMT
+module-dep = NET_LOG
+module-str = Log level for dect nr+ management layer
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+endif # NET_L2_DECT_MGMT
