@@ -112,7 +112,11 @@ static int generate_auth_header(const char *const tok, char **auth_hdr_out)
 
 #ifdef CONFIG_NRF_CLOUD_REST_AUTOGEN_JWT
 	if (!tok) {
+#if defined(CONFIG_MODEM_JWT)		
 		tok_len = CONFIG_MODEM_JWT_MAX_LEN;
+#else
+		tok_len = 850;
+#endif
 	}
 #endif /* CONFIG_NRF_CLOUD_REST_AUTOGEN_JWT */
 

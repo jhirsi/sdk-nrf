@@ -125,7 +125,9 @@ static const char *const job_status_strings[] = {
 #endif
 
 /* Define a string represention what connection method we are using. */
-#if defined(CONFIG_NRF_MODEM_LIB)
+#if defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
+#define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL "DECT NR+ with nRF91 modem MAC"
+#elif defined(CONFIG_NRF_MODEM_LIB)
 #define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL NRF_CLOUD_JSON_VAL_METHOD_LTE
 #elif defined(CONFIG_WIFI)
 #define NRF_CLOUD_JSON_VAL_CFGD_METHOD_VAL NRF_CLOUD_JSON_VAL_METHOD_WIFI
@@ -1388,7 +1390,7 @@ static int encode_modem_info_device(struct device_param *device, cJSON *json_obj
 static int encode_modem_info_json_object(struct modem_param_info *modem, cJSON *root_obj,
 	const char * const app_ver)
 {
-	int ret;
+	int ret = 0;
 
 	__ASSERT_NO_MSG(root_obj != NULL);
 	__ASSERT_NO_MSG(modem != NULL);
@@ -1487,7 +1489,9 @@ int nrf_cloud_modem_info_json_encode(const struct nrf_cloud_modem_info *const mo
 		   (mod_inf->device == NRF_CLOUD_INFO_SET)) {
 		LOG_ERR("CONFIG_MODEM_INFO_ADD_DEVICE is not enabled, unable to add device info");
 		return -EACCES;
-	} else if ((!IS_ENABLED(CONFIG_MODEM_INFO_ADD_NETWORK)) &&
+	}
+#if !defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
+	else if ((!IS_ENABLED(CONFIG_MODEM_INFO_ADD_NETWORK)) &&
 		   (mod_inf->network == NRF_CLOUD_INFO_SET)) {
 		LOG_ERR("CONFIG_MODEM_INFO_ADD_NETWORK is not enabled, unable to add network info");
 		return -EACCES;
@@ -1496,7 +1500,7 @@ int nrf_cloud_modem_info_json_encode(const struct nrf_cloud_modem_info *const mo
 		LOG_ERR("CONFIG_MODEM_INFO_ADD_SIM is not enabled, unable to add SIM info");
 		return -EACCES;
 	}
-
+#endif
 	int err = 0;
 	bool locked = false;
 	cJSON *tmp = cJSON_CreateObject();
@@ -1529,11 +1533,14 @@ int nrf_cloud_modem_info_json_encode(const struct nrf_cloud_modem_info *const mo
 	}
 
 	if (encode_info_item_cs(mod_inf->device,
-				NRF_CLOUD_DEVICE_JSON_KEY_DEV_INF, tmp, mod_inf_obj) ||
-	    encode_info_item_cs(mod_inf->network,
+				NRF_CLOUD_DEVICE_JSON_KEY_DEV_INF, tmp, mod_inf_obj)
+#if !defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
+		|| encode_info_item_cs(mod_inf->network,
 				NRF_CLOUD_DEVICE_JSON_KEY_NET_INF, tmp, mod_inf_obj) ||
 	    encode_info_item_cs(mod_inf->sim,
-				NRF_CLOUD_DEVICE_JSON_KEY_SIM_INF, tmp, mod_inf_obj)) {
+				NRF_CLOUD_DEVICE_JSON_KEY_SIM_INF, tmp, mod_inf_obj)
+#endif
+		) {
 		LOG_ERR("Failed to encode modem info");
 		err = -EIO;
 		goto cleanup;

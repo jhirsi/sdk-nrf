@@ -194,7 +194,8 @@ int nrf_cloud_jwt_generate(uint32_t time_valid_s, char *const jwt_buf, size_t jw
 		      nrf_cloud_sec_tag_coap_jwt_get() : nrf_cloud_sec_tag_get();
 	const char *subject;
 
-#if defined(CONFIG_MODEM_JWT)
+#if defined(CONFIG_MODEM_JWT) && !defined(CONFIG_NRF_CLOUD_JWT_SOURCE_CUSTOM)
+/* TODO: nrf cloud lib support to get modem uuid without JWT lib? */
 	/* Check if modem time is valid */
 	char buf[GET_TIME_RSP_SZ];
 
@@ -210,7 +211,8 @@ int nrf_cloud_jwt_generate(uint32_t time_valid_s, char *const jwt_buf, size_t jw
 		exp_delta_s = NRF_CLOUD_JWT_VALID_TIME_S_DEF;
 	}
 
-	if (IS_ENABLED(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_INTERNAL_UUID)) {
+	if (IS_ENABLED(CONFIG_NRF_CLOUD_CLIENT_ID_SRC_INTERNAL_UUID) &&
+	    !IS_ENABLED(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)) {
 		/* The UUID is present in the iss claim, so there is no need
 		 * to also include it in the sub claim.
 		 */

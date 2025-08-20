@@ -836,7 +836,10 @@ int nrf_cloud_coap_transport_authenticate(struct nrf_cloud_coap_client *const cl
 	int err = 0;
 	char *jwt;
 
-#if defined(CONFIG_MODEM_INFO)
+#if defined(CONFIG_MODEM_INFO) && !defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
+	/* TODO: this does not work with dect, could use:
+	 * modem_info_string_get(MODEM_INFO_FW_VERSION, info_str, sizeof(info_str));
+	 */
 	char mfw_string[MODEM_INFO_FWVER_SIZE];
 	char ver_string[strlen(VER_STRING_FMT) +
 			MODEM_INFO_FWVER_SIZE +

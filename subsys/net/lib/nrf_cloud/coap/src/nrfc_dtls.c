@@ -39,7 +39,7 @@ static bool keepopen_supported;
 
 static int get_device_ip_address(uint8_t *d4_addr)
 {
-#if defined(CONFIG_MODEM_INFO)
+#if defined(CONFIG_MODEM_INFO) && !defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
 	char buf[INET_ADDRSTRLEN + sizeof(" ") + INET6_ADDRSTRLEN + 1];
 	int err;
 
