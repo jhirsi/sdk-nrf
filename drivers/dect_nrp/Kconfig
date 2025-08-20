@@ -1,0 +1,80 @@
+menu "Common configs for DECT NR+ mac"
+
+config DECT_NRP_MAC
+	bool "Common configs for DECT NR+ modem mac"
+	depends on NRF_MODEM_VARIANT_DECT_MAC
+	depends on SETTINGS
+	select NET_L2_DECT
+	select NET_L2_DECT_MGMT
+	select DECT_NRP_LIB
+	help
+	  dect nr+ modem mac configs.
+
+if DECT_NRP_MAC
+
+#Select actual driver
+choice DECT_NRP_MAC_DRIVER
+	prompt "Select DECT NR+ modem mac driver"
+	default DECT_NRP_MAC_DRIVER_NRF
+
+	config DECT_NRP_MAC_DRIVER_NRF
+		bool "nrf91 mac driver"
+endchoice
+
+choice DECT_NRP_MAC_DEFAULT_DEV_TYPE
+	prompt "Select default device type"
+	default DECT_NRP_MAC_DEFAULT_DEV_TYPE_PT
+
+	config DECT_NRP_MAC_DEFAULT_DEV_TYPE_PT
+		bool "PT device type"
+
+	config DECT_NRP_MAC_DEFAULT_DEV_TYPE_FT
+		bool "FT device type"
+endchoice
+
+config DECT_NRP_MAC_DEFAULT_NW_ID
+	hex "Default nw id"
+	default 0x87654321
+	help
+	  Default nw id.
+
+config DECT_NRP_MAC_DEFAULT_LONG_RD_ID
+	int "Default long rd id"
+	default 666
+	help
+	  Default long rd id.
+
+config DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT
+	int "Maximum number of associations"
+	default 50
+
+config DECT_NRP_MAC_BORDER_ROUTER
+	bool "Enable border router support for DECT NR+"
+	default y if NET_L2_ETHERNET || MODEM_CELLULAR
+	select NET_ROUTING if NET_IPV6 && NET_ROUTE
+	help
+	  Enable Border Router (BR) support.
+	  SLM running with LTE connection in connected nrf9151DK accessed via
+	  PPP by using MODEM_CELLULAR feature (preferred option),
+	  or Ethernet based NET_L2_ETHERNET mode can be used as a border router.
+	  If MODEM_CELLULAR is selected, then BR has only one sink and vice versa.
+
+config DECT_NRP_MAC_NET_IF_NO_AUTO_START
+	bool "Enable interface auto-start"
+	help
+	  This option allows user to disable autostarting of the net interface
+	  immediately after initialization and instead call for net_if_up()
+	  manually.
+
+module = DECT_NRP_MAC
+module-dep = LOG
+module-str = Log level for dect nr+ nrf91 driver
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+#Include vendor specifics
+if DECT_NRP_MAC_DRIVER_NRF
+rsource "nrf91_mac/Kconfig"
+endif # DECT_NRP_MAC_DRIVER_NRF
+endif # DECT_NRP_MAC
+
+endmenu

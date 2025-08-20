@@ -1,0 +1,43 @@
+menu "Nordic driver specific configs for DECT NR+ modem mac"
+
+config DECT_NRP_MAC_NRF
+	bool "Nordic driver specific configs for DECT NR+ modem mac"
+	depends on NRF_MODEM_VARIANT_DECT_MAC
+	depends on SETTINGS
+	default y if DECT_NRP_MAC_DRIVER_NRF
+	select NET_L2_DECT
+	select NET_L2_DECT_MGMT
+	select DECT_NRP_LIB
+	help
+	  Nordic specific dect nr+ modem mac configs.
+
+if DECT_NRP_MAC_NRF
+
+config DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
+	bool "Enable TX flow control"
+	default y
+	help
+	  Enable TX window based flow ctrl on unacked mdm TX DLC data requests.
+
+config DECT_NRP_MAC_NRF_CTRL_THREAD_STACK_SIZE
+	int "Driver's internal ctrl thread stack size"
+	default 3072
+	help
+	  This option sets the driver's stack size for its internal ctrl thread.
+	  Note: most probably this could be deacreased if size of net mgmt events are decreased.
+
+config DECT_NRP_MAC_NRF_RX_THREAD_STACK_SIZE
+	int "Driver's internal RX thread stack size"
+	default 3072
+	help
+	  This option sets the driver's stack size for its internal RX thread.
+
+config DECT_NRP_MAC_NRF_MDM_BUNDLED_TX_RESPS
+	bool "Modem sending bundled TX resps"
+	default n
+	help
+	  Enable bundled TX resps from modem. Needs custom mfw. To be removed?
+
+endif # DECT_NRP_MAC_NRF
+
+endmenu
