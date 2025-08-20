@@ -16,6 +16,8 @@ manifest:
   # "remotes" is a list of locations where git repositories are cloned
   # and fetched from.
   remotes:
+    - name: jhirsi
+      url-base: https://github.com/jhirsi
     # nRF Connect SDK GitHub organization.
     # NCS repositories are hosted here.
     - name: ncs
@@ -57,7 +59,6 @@ manifest:
   # For 'userdata' fields in the projects area, please refer to:
   # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/nrf/dm_code_base.html
   projects:
-
     # The Zephyr RTOS fork in the NCS, along with the subset of its
     # modules which NCS imports directly.
     #
@@ -65,7 +66,8 @@ manifest:
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/modules.html
     - name: zephyr
       repo-path: sdk-zephyr
-      revision: 25ced410af6caf6fea810b49ef4cf9b3bcb40b2b
+      remote: jhirsi
+      revision: zephyr_dect_mac_dev
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
@@ -143,9 +145,10 @@ manifest:
       repo-path: sdk-oberon-psa-crypto
       revision: d682b30a4498ecbaa8992e909b8d8c31f4988956
     - name: nrfxlib
-      repo-path: sdk-nrfxlib
+      repo-path: sdk-nrfxlib-dect-nrp
       path: nrfxlib
-      revision: b492d688f201ecd7880e0898e1b166cd02cc266a
+      remote: ncs
+      revision: dect_nrp_mdm_mac_dev
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
