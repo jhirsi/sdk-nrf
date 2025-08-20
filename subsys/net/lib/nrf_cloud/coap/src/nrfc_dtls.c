@@ -111,7 +111,7 @@ int nrfc_dtls_setup(int sock)
 		cid_supported = false;
 	}
 
-#if !defined(CONFIG_BOARD_NATIVE_SIM)
+#if !defined(CONFIG_BOARD_NATIVE_SIM) && !defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
 	int timeout = TLS_DTLS_HANDSHAKE_TIMEO_123S;
 
 	LOG_DBG("  Set handshake timeout %d", timeout);
@@ -122,7 +122,10 @@ int nrfc_dtls_setup(int sock)
 		LOG_ERR("Error setting handshake timeout: %d", -errno);
 	}
 #endif
-
+#if defined(CONFIG_NRF_MODEM_VARIANT_DECT_MAC)
+	/* TLS_DTLS_HANDSHAKE_TIMEO not supported by zephyr */
+	/* TODO:TLS_DTLS_HANDSHAKE_TIMEOUT_MIN? TLS_DTLS_HANDSHAKE_TIMEOUT_MAX? */
+#endif
 	int verify = TLS_PEER_VERIFY_REQUIRED;
 
 	LOG_DBG("  Peer verify: %d", verify);
