@@ -1,0 +1,2474 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+#include <zephyr/kernel.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <strings.h>
+#include <zephyr/shell/shell.h>
+#include <zephyr/posix/sys/socket.h>
+
+#include <zephyr/net/ethernet.h> /* just for ETH_P_ALL */
+
+#include <zephyr/sys/printk.h>
+#include <zephyr/init.h>
+
+#include <getopt.h>
+
+#include <zephyr/net/net_if.h>
+#include <zephyr/net/net_event.h>
+
+#include <net/dect_nrp_utils.h>
+
+#if defined(CONFIG_NET_CONNECTION_MANAGER)
+#include <zephyr/net/conn_mgr_monitor.h>
+#include <zephyr/net/conn_mgr_connectivity.h>
+#endif
+#include "dect_net_l2.h"
+#include "dect_net_l2_mgmt.h"
+
+#include "desh_print.h"
+
+/**************************************************************************************************/
+
+static struct {
+	struct net_if *iface;
+} context;
+
+/**************************************************************************************************/
+
+static struct net_mgmt_event_callback dect_shell_mgmt_cb;
+
+#define DECT_SHELL_MGMT_EVENTS                                                                     \
+	(NET_EVENT_DECT_ACTIVATE_DONE | NET_EVENT_DECT_DEACTIVATE_DONE |                           \
+	 NET_EVENT_DECT_RSSI_SCAN_RESULT | NET_EVENT_DECT_RSSI_SCAN_DONE |                         \
+	 NET_EVENT_DECT_SCAN_DONE | NET_EVENT_DECT_SCAN_RESULT |                                   \
+	 NET_EVENT_DECT_ASSOCIATION_REQ_RESULT | NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED |       \
+	 NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED | NET_EVENT_DECT_ASSOCIATION_RELEASED |          \
+	 NET_EVENT_DECT_CLUSTER_CREATED_RESULT | NET_EVENT_DECT_NEIGHBOR_LIST |                    \
+	 NET_EVENT_DECT_NEIGHBOR_INFO | NET_EVENT_DECT_NW_BEACON_START_RESULT |                    \
+	 NET_EVENT_DECT_NW_BEACON_STOP_RESULT | NET_EVENT_DECT_NEIGHBOR_INFO |                     \
+	 NET_EVENT_DECT_NETWORK_STATUS | NET_EVENT_DECT_SINK_STATUS)
+
+K_SEM_DEFINE(dect_shell_rx_thread_sem, 0, 1);
+
+/**************************************************************************************************/
+
+static char *net_sprint_addr(sa_family_t af, const void *addr)
+{
+#define NBUFS 3
+	static char buf[NBUFS][NET_IPV6_ADDR_LEN];
+	static int i;
+	char *s = buf[++i % NBUFS];
+
+	return net_addr_ntop(af, addr, s, NET_IPV6_ADDR_LEN);
+}
+#define net_sprint_ipv6_addr(_addr) net_sprint_addr(AF_INET6, _addr)
+
+char *dect_shell_util_mac_error_to_string(enum dect_status_values status, char *out_str_buff,
+					  size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+
+	switch (status) {
+	case DECT_MAC_STATUS_OK:
+		strncpy(out_str_buff, "OK", out_str_buff_len);
+	case DECT_MAC_STATUS_FAIL:
+		strncpy(out_str_buff, "Fail", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NOT_ALLOWED:
+		strncpy(out_str_buff, "Not allowed", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NO_CONFIG:
+		strncpy(out_str_buff, "No config", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_RD_NOT_FOUND:
+		strncpy(out_str_buff, "RD not found", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_TEMP_FAILURE:
+		strncpy(out_str_buff, "Temporary failure", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NO_RESOURCES:
+		strncpy(out_str_buff, "No resources", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NO_RESPONSE:
+		strncpy(out_str_buff, "No response", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NW_REJECT:
+		strncpy(out_str_buff, "Network reject", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NO_MEMORY:
+		strncpy(out_str_buff, "No memory", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_NO_RSSI_RESULTS:
+		strncpy(out_str_buff, "No RSSI results", out_str_buff_len);
+		break;
+	case DECT_MAC_STATUS_OS_ERROR:
+		strncpy(out_str_buff, "OS error", out_str_buff_len);
+		break;
+	default:
+		snprintf(out_str_buff, out_str_buff_len, "Unknown (%d)", status);
+		break;
+	}
+
+	return out_str_buff;
+}
+
+/**************************************************************************************************/
+
+static bool dect_shell_util_hexstr_check(const uint8_t *data, uint16_t data_len)
+{
+	for (int i = 0; i < data_len; i++) {
+		char ch = *(data + i);
+
+		if ((ch < '0' || ch > '9') && (ch < 'A' || ch > 'F') && (ch < 'a' || ch > 'f')) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/* Convert hex string to hex array */
+int dect_shell_util_atoh(const char *ascii, uint16_t ascii_len, uint8_t *hex, uint16_t hex_len)
+{
+	char hex_str[3];
+
+	if (hex == NULL || ascii == NULL) {
+		return -EINVAL;
+	}
+	if ((ascii_len % 2) > 0) {
+		return -EINVAL;
+	}
+	if (ascii_len > (hex_len * 2)) {
+		return -EINVAL;
+	}
+	if (!dect_shell_util_hexstr_check(ascii, ascii_len)) {
+		return -EINVAL;
+	}
+
+	hex_str[2] = '\0';
+	for (int i = 0; (i * 2) < ascii_len; i++) {
+		strncpy(&hex_str[0], ascii + (i * 2), 2);
+		*(hex + i) = (uint8_t)strtoul(hex_str, NULL, 16);
+	}
+
+	return (ascii_len / 2);
+}
+
+/* Convert from hex array to hex string */
+int dect_shell_util_htoa(const uint8_t *hex, uint16_t hex_len, char *ascii, uint16_t ascii_len)
+{
+	if (hex == NULL || ascii == NULL) {
+		return -EINVAL;
+	}
+	if (ascii_len < (hex_len * 2)) {
+		return -EINVAL;
+	}
+
+	for (int i = 0; i < hex_len; i++) {
+		sprintf(ascii + (i * 2), "%02X", *(hex + i));
+	}
+
+	return (hex_len * 2);
+}
+
+/**************************************************************************************************/
+
+#define ANSI_RESET_ALL	  "\x1b[0m"
+#define ANSI_COLOR_RED	  "\x1b[31m"
+#define ANSI_COLOR_YELLOW "\x1b[33m"
+#define ANSI_COLOR_GREEN  "\x1b[32m"
+#define ANSI_COLOR_BLUE	  "\x1b[34m"
+
+static char *dect_shell_util_rssi_scan_result_verdict_to_string(int verdict, char *out_str_buff,
+								size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+	int current_len = strlen(out_str_buff);
+
+	if (verdict == DECT_RSSI_SCAN_VERDICT_FREE) {
+		sprintf(out_str_buff + current_len, "%sF%s", ANSI_COLOR_GREEN, ANSI_RESET_ALL);
+	} else if (verdict == DECT_RSSI_SCAN_VERDICT_POSSIBLE) {
+		sprintf(out_str_buff + current_len, "%sP%s", ANSI_COLOR_YELLOW, ANSI_RESET_ALL);
+	} else if (verdict == DECT_RSSI_SCAN_VERDICT_BUSY) {
+		sprintf(out_str_buff + current_len, "%sB%s", ANSI_COLOR_RED, ANSI_RESET_ALL);
+	} else {
+		sprintf(out_str_buff + current_len, "%sU%s", ANSI_COLOR_BLUE, ANSI_RESET_ALL);
+	}
+	return out_str_buff;
+}
+
+static void handle_dect_rssi_scan_result_evt(struct net_mgmt_event_callback *cb)
+{
+	const struct dect_rssi_scan_result_evt *evt =
+		(const struct dect_rssi_scan_result_evt *)cb->info;
+	struct dect_rssi_scan_result_data *entry =
+		(struct dect_rssi_scan_result_data *)&evt->rssi_scan_result;
+	char verdict_str[48 + ((48 * 6) * 2) + 1];
+	char *tmp_ptr = verdict_str;
+
+	verdict_str[0] = '\0';
+
+	desh_print("RSSI scan result:");
+	desh_print("  Channel:                             %d", entry->channel);
+	desh_print("  All subslots free:                   %s",
+		   entry->all_subslots_free ? "yes" : "no");
+	if (entry->another_cluster_detected_in_channel) {
+		/* Currently only when selecting channel when creating a cluster */
+		desh_print("  Another cluster detected in channel: %s",
+			   entry->another_cluster_detected_in_channel ? "yes" : "no");
+	}
+
+	if (!entry->all_subslots_free) {
+		desh_print("  Free subslot count:                  %d",
+			entry->free_subslot_cnt);
+		desh_print("  Possible subslot count:              %d",
+			entry->possible_subslot_cnt);
+		desh_print("  Busy subslot count:                  %d",
+			entry->busy_subslot_cnt);
+		desh_print("  Scan suitable percent:               %d%%",
+			entry->scan_suitable_percent);
+		desh_print("  Frame subslot verdicts: "
+			   "(Free=F, Possible=P, Busy=B, Unknown=U)");
+
+		for (int i = 0; i < sizeof(entry->frame_subslot_verdicts); i++) {
+			tmp_ptr = dect_shell_util_rssi_scan_result_verdict_to_string(
+				entry->frame_subslot_verdicts[i], tmp_ptr, sizeof(verdict_str));
+		}
+		desh_print("    %s", verdict_str);
+	}
+}
+
+static void handle_dect_scan_result_evt(struct net_mgmt_event_callback *cb)
+{
+	const struct dect_scan_result_evt *entry = (const struct dect_scan_result_evt *)cb->info;
+
+	desh_print("Scan result:");
+	desh_print("  Beacon type:             %s",
+		   entry->beacon_type == DECT_SCAN_RESULT_TYPE_NW_BEACON ? "NW" : "Cluster");
+	desh_print("  Reception channel:       %d", entry->channel);
+	desh_print("  Long RD ID:              %u (0x%08x)", entry->transmitter_long_rd_id,
+		   entry->transmitter_long_rd_id);
+	desh_print("  NW ID:                   %u (0x%08x)", entry->network_id, entry->network_id);
+	desh_print("  RX RSSI-2:               %ddBm", entry->rx_signal_info.rssi_2);
+	desh_print("  RX SNR:                  %ddB", entry->rx_signal_info.snr);
+	desh_print("  RX MCS index:            %d", entry->rx_signal_info.mcs);
+	/* TODO convert to dbm: */
+	desh_print("  RX Transmit power:       %d", entry->rx_signal_info.transmit_power);
+	if (entry->beacon_type == DECT_SCAN_RESULT_TYPE_NW_BEACON) {
+		desh_print("  Current cluster channel: %d",
+			   entry->network_beacon.current_cluster_channel);
+		desh_print("  Next cluster channel:    %d",
+			   entry->network_beacon.next_cluster_channel);
+		for (int i = 0; i < entry->network_beacon.num_network_beacon_channels; i++) {
+			desh_print("  Additional network beacon channel #%d: %d", i + 1,
+				   entry->network_beacon.network_beacon_channels[i]);
+		}
+	}
+}
+
+static void handle_dect_scan_done(struct net_mgmt_event_callback *cb)
+{
+	const struct dect_common_resp_evt *evt = (const struct dect_common_resp_evt *)cb->info;
+
+	if (evt->status != DECT_MAC_STATUS_OK) {
+		char err_str[128] = {0};
+
+		dect_shell_util_mac_error_to_string(evt->status, err_str, sizeof(err_str));
+
+		desh_warn("Scan request failed: %d (%s)", evt->status, err_str);
+	} else {
+		desh_print("Scan request done");
+	}
+}
+
+/**************************************************************************************************/
+
+static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
+					      uint32_t mgmt_event, struct net_if *iface)
+{
+	char err_str[128] = {0};
+
+	switch (mgmt_event) {
+	case NET_EVENT_DECT_ACTIVATE_DONE: {
+		const struct dect_common_resp_evt *evt =
+			(const struct dect_common_resp_evt *)cb->info;
+
+		if (evt->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(evt->status, err_str, sizeof(err_str));
+			desh_warn("NET_EVENT_DECT_ACTIVATE_DONE: activation failed: %d (%s)",
+				  evt->status, err_str);
+		} else {
+			desh_print("NET_EVENT_DECT_ACTIVATE_DONE: activation done");
+		}
+		break;
+	}
+	case NET_EVENT_DECT_DEACTIVATE_DONE: {
+		const struct dect_common_resp_evt *evt =
+			(const struct dect_common_resp_evt *)cb->info;
+
+		if (evt->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(evt->status, err_str, sizeof(err_str));
+			desh_warn("NET_EVENT_DECT_DEACTIVATE_DONE: de-activation failed: %d (%s)",
+				  evt->status, err_str);
+		} else {
+			desh_print("NET_EVENT_DECT_DEACTIVATE_DONE: de-activation done");
+		}
+		break;
+	}
+
+	case NET_EVENT_DECT_RSSI_SCAN_RESULT:
+		desh_print("NET_EVENT_DECT_RSSI_SCAN_RESULT");
+		handle_dect_rssi_scan_result_evt(cb);
+		break;
+	case NET_EVENT_DECT_RSSI_SCAN_DONE: {
+		const struct dect_common_resp_evt *evt =
+			(const struct dect_common_resp_evt *)cb->info;
+
+		if (evt->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(evt->status, err_str, sizeof(err_str));
+
+			desh_warn("NET_EVENT_DECT_RSSI_SCAN_DONE: scan failed: %d (%s)",
+				  evt->status, err_str);
+		} else {
+			desh_print("NET_EVENT_DECT_RSSI_SCAN_DONE: scan done");
+		}
+		break;
+	}
+	case NET_EVENT_DECT_SCAN_RESULT:
+		desh_print("NET_EVENT_DECT_SCAN_RESULT");
+		handle_dect_scan_result_evt(cb);
+		break;
+	case NET_EVENT_DECT_SCAN_DONE:
+		desh_print("NET_EVENT_DECT_SCAN_DONE");
+		handle_dect_scan_done(cb);
+		break;
+	case NET_EVENT_DECT_ASSOCIATION_REQ_RESULT: {
+		const struct dect_association_req_result_evt *resp_data =
+			(const struct dect_association_req_result_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_ASSOCIATION_REQ_RESULT");
+		desh_print("Association response from long RD ID %u: %s",
+			   resp_data->transmitter_long_rd_id,
+			   resp_data->accepted ? "accepted" : "rejected");
+		if (!resp_data->accepted) {
+			char reject_cause_str[64];
+
+			reject_cause_str[0] = '\0';
+			switch (resp_data->reject_cause) {
+			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_RADIO_CAPACITY:
+				strcpy(reject_cause_str, "No radio capacity");
+				break;
+			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_HW_CAPACITY:
+				strcpy(reject_cause_str, "No hardware capacity");
+				break;
+			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_CONFLICTED_SHORT_ID:
+				strcpy(reject_cause_str, "Conflicted short ID");
+				break;
+			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_SECURITY_NEEDED:
+				strcpy(reject_cause_str, "Security needed");
+				break;
+			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON:
+				strcpy(reject_cause_str, "Other reason");
+				break;
+			case DECT_MAC_ASSOCIATION_NO_RESPONSE:
+				strcpy(reject_cause_str, "No response");
+				break;
+			default:
+				strcpy(reject_cause_str, "Unknown");
+				break;
+			}
+			desh_print("  Reject cause: %d (%s)", resp_data->reject_cause,
+				   reject_cause_str);
+		}
+		break;
+	}
+	case NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED: {
+		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
+
+		desh_print("NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED");
+		desh_print("Association created with a parent with long RD ID %u", *long_rd_id);
+		break;
+	}
+	case NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED: {
+		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
+
+		desh_print("NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED");
+		desh_print("Association created with a device with long RD ID %u", *long_rd_id);
+		break;
+	}
+	case NET_EVENT_DECT_ASSOCIATION_RELEASED: {
+		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
+
+		desh_print("NET_EVENT_DECT_ASSOCIATION_RELEASED");
+		desh_print("Association released with long RD ID %u", *long_rd_id);
+		break;
+	}
+	case NET_EVENT_DECT_CLUSTER_CREATED_RESULT: {
+		const struct dect_cluster_start_resp_evt *resp_data =
+			(const struct dect_cluster_start_resp_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_CLUSTER_CREATED_RESULT");
+		if (resp_data->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(resp_data->status, err_str,
+							    sizeof(err_str));
+
+			desh_warn("Cluster start failed: %d (%s)", resp_data->status, err_str);
+
+		} else {
+			desh_print("Cluster started at channel %d.", resp_data->cluster_channel);
+		}
+		break;
+	}
+	case NET_EVENT_DECT_CLUSTER_INFO: {
+		const struct dect_cluster_info_evt *resp_data =
+			(const struct dect_cluster_info_evt *)cb->info;
+		desh_print("NET_EVENT_DECT_CLUSTER_INFO");
+		if (resp_data->status != DECT_MAC_STATUS_OK) {
+			desh_warn("Cluster info request failed (%d)", resp_data->status);
+		} else {
+			struct dect_rssi_scan_result_data *entry =
+				(struct dect_rssi_scan_result_data *)&resp_data->status_info
+					.rssi_result;
+
+			char verdict_str[48 + ((48 * 6) * 2) + 1];
+			char *tmp_ptr = verdict_str;
+
+			desh_print("Cluster status information:");
+			desh_print("  Cluster channel:                 %d",
+				   resp_data->status_info.rssi_result.channel);
+			desh_print("  Number of Association requests:  %d",
+				   resp_data->status_info.num_association_requests);
+			desh_print("  Number of Association failures:  %d",
+				   resp_data->status_info.num_association_failures);
+			desh_print("  Number of neighbors:             %d",
+				   resp_data->status_info.num_neighbors);
+			desh_print("  Number of FTPT neighbors:        %d",
+				   resp_data->status_info.num_ftpt_neighbors);
+			desh_print("  Number of received RACH PDCs:    %d",
+				   resp_data->status_info.num_rach_rx_pdc);
+			desh_print("  Number of RACH PCC CRC failures: %d",
+				   resp_data->status_info.num_rach_rx_pcc_crc_failures);
+			desh_print("  Current RSSI scan result of cluster channel:");
+			desh_print("    Channel:                       %d",
+				   resp_data->status_info.rssi_result.channel);
+			desh_print("    Busy percentage:               %d%%",
+				   resp_data->status_info.rssi_result.busy_percentage);
+			desh_print("  All subslots free:               %s",
+				   entry->all_subslots_free ? "yes" : "no");
+			if (!entry->all_subslots_free) {
+				desh_print("  Free subslot count:      %d",
+					   entry->free_subslot_cnt);
+				desh_print("  Possible subslot count:  %d",
+					   entry->possible_subslot_cnt);
+				desh_print("  Busy subslot count:      %d",
+					   entry->busy_subslot_cnt);
+				desh_print("  Scan suitable percent:   %d%%",
+					   entry->scan_suitable_percent);
+				desh_print("  Frame subslot verdicts: "
+					   "(Free=F, Possible=P, Busy=B, Unknown=U)");
+				for (int i = 0; i < sizeof(entry->frame_subslot_verdicts); i++) {
+					tmp_ptr =
+						dect_shell_util_rssi_scan_result_verdict_to_string(
+							entry->frame_subslot_verdicts[i], tmp_ptr,
+							sizeof(verdict_str));
+				}
+				desh_print("    %s", verdict_str);
+			}
+		}
+		break;
+	}
+	case NET_EVENT_DECT_NETWORK_STATUS: {
+		desh_print("NET_EVENT_DECT_NETWORK_STATUS");
+		const struct dect_network_status_evt *evt =
+			(const struct dect_network_status_evt *)cb->info;
+
+		switch (evt->network_status) {
+		case DECT_NETWORK_STATUS_FAILURE:
+			if (evt->dect_err_cause == DECT_MAC_STATUS_OS_ERROR) {
+				desh_warn("Network status: failure (OS error %d)",
+					  evt->os_err_cause);
+			} else {
+				dect_shell_util_mac_error_to_string(evt->dect_err_cause, err_str,
+								    sizeof(err_str));
+
+				desh_warn("Network status: failure %d (%s)", evt->dect_err_cause,
+					  err_str);
+			}
+			break;
+		case DECT_NETWORK_STATUS_CREATED:
+			desh_print("Network status: created");
+			break;
+		case DECT_NETWORK_STATUS_REMOVED:
+			desh_print("Network status: removed");
+			break;
+		case DECT_NETWORK_STATUS_JOINED:
+			desh_print("Network status: joined");
+			break;
+		case DECT_NETWORK_STATUS_UNJOINED:
+			desh_print("Network status: unjoined");
+			break;
+		default:
+			desh_error("Unknown network status: %d", evt->network_status);
+			break;
+		}
+		break;
+	}
+	case NET_EVENT_DECT_NEIGHBOR_LIST: {
+		const struct dect_neighbor_list_evt *resp_data =
+			(const struct dect_neighbor_list_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_NEIGHBOR_LIST");
+		if (resp_data->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(resp_data->status, err_str,
+							    sizeof(err_str));
+
+			desh_warn("Neighbor list request failed: %d (%s)", resp_data->status,
+				  err_str);
+		} else {
+			if (resp_data->neighbor_count == 0) {
+				desh_print("  No neighbors found.");
+			} else {
+				desh_print("  Neighbor count: %d", resp_data->neighbor_count);
+				desh_print("  Neighbor list:");
+				for (int i = 0; i < resp_data->neighbor_count; i++) {
+					desh_print("    Neighbor long RD ID %u",
+						   resp_data->neighbor_long_rd_ids[i]);
+				}
+			}
+		}
+		break;
+	}
+	case NET_EVENT_DECT_NEIGHBOR_INFO: {
+		const struct dect_neighbor_info_evt *evt_data =
+			(const struct dect_neighbor_info_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_NEIGHBOR_INFO");
+		if (evt_data->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(evt_data->status, err_str,
+							    sizeof(err_str));
+			desh_warn("Neighbor info request failed: %d (%s)", evt_data->status,
+				  err_str);
+		} else {
+			desh_print("Neighbor status information:");
+			desh_print("  Network ID.....................................%u (0x%08x)",
+				   evt_data->network_id, evt_data->network_id);
+			desh_print("  Neighbor (long RD ID)..........................%u (0x%08x)",
+				   evt_data->long_rd_id, evt_data->long_rd_id);
+			desh_print("  Associated.....................................%s",
+				   evt_data->associated ? "true" : "false");
+			desh_print("  FT mode........................................%s",
+				   evt_data->ft_mode ? "true" : "false");
+			desh_print("  Channel........................................%d",
+				   evt_data->channel);
+			desh_print("  Time in ms since neighbor is last seen.........%u ms",
+				   evt_data->time_since_last_rx_ms);
+			desh_print("  Last RX mcs....................................%u",
+				   evt_data->last_rx_signal_info.mcs);
+			desh_print("  Last RX transmit power.........................%d (%d dBm)",
+				   evt_data->last_rx_signal_info.transmit_power,
+				   dect_nrp_utils_phy_tx_power_to_dbm(
+					   evt_data->last_rx_signal_info.transmit_power));
+			desh_print("  Last RX RSSI 2.................................%d",
+				   evt_data->last_rx_signal_info.rssi_2);
+			desh_print("  Last RX SNR....................................%d",
+				   evt_data->last_rx_signal_info.snr);
+			desh_print("  beacon_average_rx_rssi_2.......................%d",
+				   evt_data->beacon_average_rx_rssi_2);
+			desh_print("  beacon_average_rx_snr..........................%d",
+				   evt_data->beacon_average_rx_snr);
+			desh_print("  total_missed_cluster_beacons...................%u",
+				   evt_data->status_info.total_missed_cluster_beacons);
+			desh_print(
+				"  current_consecutive_missed_cluster_beacons.....%u",
+				evt_data->status_info.current_consecutive_missed_cluster_beacons);
+			desh_print("  num_rx_paging..................................%u",
+				   evt_data->status_info.num_rx_paging);
+			desh_print("  average_rx_mcs.................................%u",
+				   evt_data->status_info.average_rx_mcs);
+			desh_print("  average_rx_txpower.............................%d",
+				   evt_data->status_info.average_rx_txpower);
+			desh_print("  average_rx_rssi_2..............................%d",
+				   evt_data->status_info.average_rx_rssi_2);
+			desh_print("  average_rx_snr.................................%d",
+				   evt_data->status_info.average_rx_snr);
+			desh_print("  average_tx_mcs.................................%u",
+				   evt_data->status_info.average_tx_mcs);
+			desh_print("  average_tx_txpower.............................%d",
+				   evt_data->status_info.average_tx_txpower);
+			desh_print("  num_tx_attempts................................%u",
+				   evt_data->status_info.num_tx_attempts);
+			desh_print("  num_lbt_failures...............................%u",
+				   evt_data->status_info.num_lbt_failures);
+			desh_print("  num_rx_pdc.....................................%u",
+				   evt_data->status_info.num_rx_pdc);
+			desh_print("  num_rx_pdc_crc_fail............................%u",
+				   evt_data->status_info.num_rx_pdc_crc_failures);
+			desh_print("  num_no_response................................%u",
+				   evt_data->status_info.num_no_response);
+			desh_print("  num_harq_ack...................................%u",
+				   evt_data->status_info.num_harq_ack);
+			desh_print("  num_harq_nack..................................%u",
+				   evt_data->status_info.num_harq_nack);
+			desh_print("  num_arq_retx...................................%u",
+				   evt_data->status_info.num_arq_retx);
+			desh_print("  inactive_time_ms...............................%u ms",
+				   evt_data->status_info.inactive_time_ms);
+		}
+		break;
+	}
+	case NET_EVENT_DECT_NW_BEACON_START_RESULT: {
+		const struct dect_common_resp_evt *resp_data =
+			(const struct dect_common_resp_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_NW_BEACON_START_RESULT");
+		if (resp_data->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(resp_data->status, err_str,
+							    sizeof(err_str));
+			desh_warn("NW beacon start failed: %d (%s)", resp_data->status, err_str);
+		} else {
+			desh_print("NW beacon started.");
+		}
+		break;
+	}
+	case NET_EVENT_DECT_NW_BEACON_STOP_RESULT: {
+		const struct dect_common_resp_evt *resp_data =
+			(const struct dect_common_resp_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_NW_BEACON_STOP_RESULT");
+		if (resp_data->status != DECT_MAC_STATUS_OK) {
+			dect_shell_util_mac_error_to_string(resp_data->status, err_str,
+							    sizeof(err_str));
+			desh_warn("NW beacon stop failed: %d (%s)", resp_data->status, err_str);
+		} else {
+			desh_print("NW beacon stopped.");
+		}
+		break;
+	}
+	case NET_EVENT_DECT_SINK_STATUS: {
+		const struct dect_sink_status_evt *evt_data =
+			(const struct dect_sink_status_evt *)cb->info;
+
+		desh_print("NET_EVENT_DECT_SINK_STATUS");
+		if (evt_data->sink_status == DECT_SINK_STATUS_CONNECTED) {
+			desh_print("  Sink is connected, iface towards Internet %p",
+				evt_data->br_iface);
+		} else {
+			desh_print("  Sink is disconnected, iface towards Internet %p",
+				evt_data->br_iface);
+		}
+		break;
+	}
+	default:
+		desh_error("%s: unknown event: %d", (__func__), mgmt_event);
+		break;
+	}
+}
+
+/**************************************************************************************************/
+/* The following do not have short options: */
+enum {
+	DECT_SHELL_RSSI_SCAN_CMD_FRAMES,
+};
+
+static const char dect_shell_rssi_scan_usage_str[] =
+	"Usage: dect rssi_scan <options>\n\n"
+	"Options:\n"
+	"      --frames <nbr_of_frames>,  Number of frames to be scanned on a channel.\n"
+	"  -c  --channels <int,int,..>    Channel list (comma separated). Max 20 channels.\n"
+	"  -b  --band <int>               Band number. If given, given channels ignored and\n"
+	"                                 scanning whole band).\n";
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_rssi_scan[] = {
+	{"channels", required_argument, 0, 'c'},
+	{"band", required_argument, 0, 'b'},
+	{"frames", required_argument, 0, DECT_SHELL_RSSI_SCAN_CMD_FRAMES},
+	{0, 0, 0, 0}};
+
+static void dect_shell_rssi_scan_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct dect_rssi_scan_params params;
+	int long_index = 0;
+	int opt;
+	int ret;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	optreset = 1;
+	optind = 1;
+
+	params.band = 0;
+	params.channel_count = 0;
+	params.frame_count_to_scan = 2010 / 10; /* 2010 ms / 10 ms = 201 frames */
+
+	while ((opt = getopt_long(argc, argv, "c:b:h", long_options_rssi_scan, &long_index)) !=
+	       -1) {
+		switch (opt) {
+		case DECT_SHELL_RSSI_SCAN_CMD_FRAMES: {
+			params.frame_count_to_scan = atoi(optarg);
+			if (params.frame_count_to_scan > UINT8_MAX) {
+				desh_error("Invalid number of frames: %d (max %d)",
+					   params.frame_count_to_scan, UINT8_MAX);
+				goto show_usage;
+			}
+			break;
+		}
+		case 'b': {
+			params.band = atoi(optarg);
+			break;
+		}
+		case 'c': {
+			char *ch_string = strtok(optarg, ",");
+
+			if (ch_string == NULL) {
+				params.channel_list[0] = atoi(optarg);
+				params.channel_count = 1;
+			} else {
+				while (ch_string != NULL && params.channel_count < 20) {
+					params.channel_list[params.channel_count++] =
+						atoi(ch_string);
+					ch_string = strtok(NULL, ",");
+				}
+			}
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	if ((params.band == 0) && (params.channel_count == 0)) {
+		desh_error("Either channels or band must be given. See usage:");
+		goto show_usage;
+	}
+
+	if (params.band != 0) {
+		params.channel_count = 0;
+	}
+	ret = net_mgmt(NET_REQUEST_DECT_RSSI_SCAN, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("RSSI scan request failed");
+		return;
+	}
+
+	desh_print("RSSI scan initiated.");
+
+	return;
+
+show_usage:
+	desh_print("%s", dect_shell_rssi_scan_usage_str);
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_scan_usage_str[] =
+	"Usage: dect scan <options>\n\n"
+	"Options:\n"
+	"  -t  --scan_time <int>          Time to wait in a channel for beacons [1, 60000] ms.\n"
+	"                                 Default: 3000.\n"
+	"  -c  --channels <int,int,..>    Channel list (comma separated), MAX 4 channels.\n"
+	"  -b  --band <int>               Band number. If given, given channels ignored and "
+	"scanning\n"
+	"                                 whole band).\n";
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_nw_scan[] = {{"scan_time", required_argument, 0, 't'},
+					       {"channels", required_argument, 0, 'c'},
+					       {"band", required_argument, 0, 'b'},
+					       {0, 0, 0, 0}};
+
+static void dect_shell_scan_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct dect_scan_params params;
+	int long_index = 0;
+	int ret, opt, tmp_value;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	struct net_if *iface = net_if_get_by_index(
+		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
+
+	if (!iface) {
+		desh_error("Interface not found");
+		return;
+	}
+
+	optreset = 1;
+	optind = 1;
+
+	params.band = 0;
+	params.channel_count = 0;
+	params.channel_scan_time_ms = 3000;
+
+	while ((opt = getopt_long(argc, argv, "t:c:b:h", long_options_nw_scan, &long_index)) !=
+	       -1) {
+		switch (opt) {
+		case 't': {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 1 || tmp_value > 60000) {
+				desh_error("Invalid scan time: %d ms (valid range: [1, 60000])",
+					   tmp_value);
+				goto show_usage;
+			}
+			params.channel_scan_time_ms = tmp_value;
+			break;
+		}
+		case 'b': {
+			params.band = atoi(optarg);
+			break;
+		}
+		case 'c': {
+			char *ch_string = strtok(optarg, ",");
+
+			if (ch_string == NULL) {
+				params.channel_list[0] = atoi(optarg);
+				params.channel_count = 1;
+			} else {
+				while (ch_string != NULL) {
+					if (params.channel_count >= 4) {
+						desh_error("Maximum of 4 channels supported.");
+						goto show_usage;
+					}
+					params.channel_list[params.channel_count++] =
+						atoi(ch_string);
+					ch_string = strtok(NULL, ",");
+				}
+			}
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	if ((params.band == 0) && (params.channel_count == 0)) {
+		desh_error("Either channels or band must be given. See usage:");
+		goto show_usage;
+	}
+
+	if (params.band != 0) {
+		params.channel_count = 0;
+	}
+	ret = net_mgmt(NET_REQUEST_DECT_SCAN, iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Scan request failed");
+		return;
+	}
+
+	desh_print("Scan initiated.");
+
+	return;
+
+show_usage:
+	desh_print("%s", dect_shell_scan_usage_str);
+}
+
+/**************************************************************************************************/
+
+static int dect_shell_tx_rx_cmd_setup_socket(int *sockfd, struct sockaddr_ll *sa)
+{
+	int ret;
+
+	/* Using SOCK_DGRAM instead of SOCK_RAW because dst address is
+	 * passed down in a stack (in zephyr net_context.c)
+	 */
+	*sockfd = socket(AF_PACKET, SOCK_DGRAM, htons(ETH_P_ALL));
+	if (*sockfd < 0) {
+		desh_error("Unable to create a socket %d (%s)", errno, strerror(errno));
+		return -1;
+	}
+
+	sa->sll_family = AF_PACKET;
+	sa->sll_ifindex = net_if_get_by_iface(context.iface);
+
+	/* Bind the socket */
+	ret = bind(*sockfd, (struct sockaddr *)sa, sizeof(struct sockaddr_ll));
+	if (ret < 0) {
+		desh_error("Error: Unable to bind socket to the network interface:%d", errno);
+		close(*sockfd);
+		return -1;
+	}
+
+	return 0;
+}
+
+static const char dect_shell_tx_cmd_usage_str[] =
+	"Usage: dect tx <options>\n\n"
+	"Options:\n"
+	"  -t  --target <int>          Target long RD ID.\n"
+	"  -d  --data <string>,        Data string to send.\n";
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_tx[] = {
+	{"target", required_argument, 0, 't'}, {"data", required_argument, 0, 'd'}, {0, 0, 0, 0}};
+
+#define DECT_TX_CMD_MAX_SEND_DATA_LEN DECT_NRP_MTU
+
+static void dect_shell_tx_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct sockaddr_ll dst = {0};
+	int long_index = 0;
+	int opt;
+	int sockfd, ret;
+	char tx_data_buf[DECT_TX_CMD_MAX_SEND_DATA_LEN];
+	int tx_data_len;
+	uint32_t target_long_rd_id = 0;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+
+	optreset = 1;
+	optind = 1;
+
+	memset(tx_data_buf, 0, 1280);
+
+	while ((opt = getopt_long(argc, argv, "d:t:h", long_options_tx, &long_index)) != -1) {
+		switch (opt) {
+		case 'd':
+			tx_data_len = strlen(optarg) + 1;
+			if (tx_data_len > DECT_TX_CMD_MAX_SEND_DATA_LEN) {
+				desh_error("Data length (%d) exceeded the maximum (%d). "
+					   "Given data: %s",
+					   tx_data_len, DECT_TX_CMD_MAX_SEND_DATA_LEN, optarg);
+				return;
+			}
+			strcpy(tx_data_buf, optarg);
+			break;
+		case 't': {
+			target_long_rd_id = (uint32_t)atoll(optarg);
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	if (target_long_rd_id == 0) {
+		desh_error("Target long RD ID needs to be given. See usage:");
+		goto show_usage;
+	}
+
+	ret = dect_shell_tx_rx_cmd_setup_socket(&sockfd, &dst);
+	if (ret < 0) {
+		desh_error("Setting socket for raw pkt transmission failed %d", ret);
+		return;
+	}
+
+	target_long_rd_id = htonl(target_long_rd_id);
+	memcpy(&dst.sll_addr, &target_long_rd_id, sizeof(target_long_rd_id));
+	dst.sll_halen = sizeof(uint32_t);
+
+	ret = sendto(sockfd, tx_data_buf, tx_data_len, 0, (const struct sockaddr *)&dst,
+		     sizeof(struct sockaddr_ll));
+	if (ret < 0) {
+		desh_error("Unable to send data: %s", strerror(errno));
+	} else {
+		desh_print("Send initiated.");
+	}
+	close(sockfd);
+
+	return;
+
+show_usage:
+	desh_print("%s", dect_shell_tx_cmd_usage_str);
+}
+
+/**************************************************************************************************/
+
+int dect_shell_rx_sockfd = -1;
+#define DATA_RX_POLL_TIMEOUT_MS 1000 /* Milliseconds */
+static char rx_data_buf[DECT_NRP_MTU];
+
+static void dect_shell_rx_thread_handler(void)
+{
+	int recv_len, ret;
+	struct pollfd fds[1];
+	struct sockaddr_ll src;
+	socklen_t fromlen;
+
+	fromlen = sizeof(src);
+	while (true) {
+		if (dect_shell_rx_sockfd < 0) {
+			/* Wait for sockets to be created */
+			k_sem_take(&dect_shell_rx_thread_sem, K_FOREVER);
+			continue;
+		}
+
+		fds[0].fd = dect_shell_rx_sockfd;
+		fds[0].events = POLLIN;
+		fds[0].revents = 0;
+
+		ret = poll(fds, 1, DATA_RX_POLL_TIMEOUT_MS);
+		if (ret < 0) {
+			printk("Error: poll failed %d\n", errno);
+			continue;
+		} else if (ret == 0) {
+			continue;
+		}
+
+		recv_len = recvfrom(dect_shell_rx_sockfd, rx_data_buf, DECT_NRP_MTU, 0,
+				    (struct sockaddr *)&src, &fromlen);
+		if (recv_len < 0) {
+			printk("Error: Unable to receive data from the network interface: %d\n",
+			       errno);
+			break;
+		}
+		rx_data_buf[recv_len] = '\0';
+
+		/* Get source from ll addr */
+		uint32_t src_long_rd_id = 0;
+
+		src_long_rd_id = ntohl(*(uint32_t *)&src.sll_addr);
+
+		desh_print("Received data (len %d, src long RD ID %d):", recv_len, src_long_rd_id);
+		desh_print("  %s", rx_data_buf);
+	}
+}
+
+#define DECT_SHELL_RX_THREAD_STACK_SIZE 1024
+#define DECT_SHELL_RX_THREAD_PRIORITY	5
+K_THREAD_DEFINE(dect_shell_rx_thread, DECT_SHELL_RX_THREAD_STACK_SIZE, dect_shell_rx_thread_handler,
+		NULL, NULL, NULL, DECT_SHELL_RX_THREAD_PRIORITY, 0, 0);
+
+/**************************************************************************************************/
+
+void dect_shell_rx_stop(void)
+{
+	if (dect_shell_rx_sockfd >= 0) {
+		close(dect_shell_rx_sockfd);
+		dect_shell_rx_sockfd = -1;
+	}
+	k_sem_reset(&dect_shell_rx_thread_sem);
+	desh_print("RX stopped");
+}
+
+void dect_shell_rx_start(void)
+{
+	struct sockaddr_ll dst = {0};
+	int ret;
+
+	if (dect_shell_rx_sockfd >= 0) {
+		desh_error("RX already started");
+		return;
+	}
+
+	ret = dect_shell_tx_rx_cmd_setup_socket(&dect_shell_rx_sockfd, &dst);
+	if (ret < 0) {
+		desh_error("Setting socket for raw pkt rcv failed %d", ret);
+		return;
+	}
+	desh_print("RX started");
+	k_sem_give(&dect_shell_rx_thread_sem);
+}
+
+static const char dect_shell_rx_cmd_usage_str[] = "Usage: dect rx start | stop\n";
+
+static void dect_shell_rx_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+
+	if (argv[1] != NULL && !strcmp(argv[1], "stop")) {
+		dect_shell_rx_stop();
+	} else if (argv[1] != NULL && !strcmp(argv[1], "start")) {
+		dect_shell_rx_start();
+	} else {
+		desh_print("%s", dect_shell_rx_cmd_usage_str);
+	}
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_sett_associate_usage_str[] =
+	"Usage: dect associate <options>\n"
+	"Options:\n"
+	"  -t  --target <int>          Target long RD ID of the FT device.\n";
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_associate[] = {{"target", required_argument, 0, 't'},
+						 {0, 0, 0, 0}};
+
+static int dect_shell_associate_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct dect_associate_req_params params;
+	int long_index = 0;
+	int opt;
+	int ret;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	optreset = 1;
+	optind = 1;
+
+	/* Set defaults */
+	params.target_long_rd_id = 0;
+	while ((opt = getopt_long(argc, argv, "t:h", long_options_associate, &long_index)) != -1) {
+		switch (opt) {
+		case 't': {
+			params.target_long_rd_id = (uint32_t)atoll(optarg);
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	if (!params.target_long_rd_id) {
+		desh_error("Target long RD ID needs to be given. See usage:");
+		goto show_usage;
+	}
+
+	ret = net_mgmt(NET_REQUEST_DECT_ASSOCIATION, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Association request failed: %d", ret);
+		return -1;
+	}
+
+	return 0;
+
+show_usage:
+	desh_print("%s", dect_shell_sett_associate_usage_str);
+	return 0;
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_sett_dissociate_usage_str[] =
+	"Usage: dect dissociate <options>\n"
+	"Options:\n"
+	"  -t  --target <int>          Target long RD ID of the FT device.\n";
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_dissociate[] = {{"target", required_argument, 0, 't'},
+						  {0, 0, 0, 0}};
+
+static int dect_shell_dissociate_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct dect_associate_rel_params params;
+	int long_index = 0;
+	int opt;
+	int ret;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	optreset = 1;
+	optind = 1;
+
+	/* Set defaults */
+	params.target_long_rd_id = 0;
+	while ((opt = getopt_long(argc, argv, "t:h", long_options_dissociate, &long_index)) != -1) {
+		switch (opt) {
+		case 't': {
+			params.target_long_rd_id = (uint32_t)atoll(optarg);
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	if (!params.target_long_rd_id) {
+		desh_error("Target long RD ID needs to be given. See usage:");
+		goto show_usage;
+	}
+
+	ret = net_mgmt(NET_REQUEST_DECT_ASSOCIATION_RELEASE, context.iface, &params,
+		       sizeof(params));
+	if (ret) {
+		desh_error("Association Release request failed: %d", ret);
+		return -1;
+	}
+
+	return 0;
+
+show_usage:
+	desh_print("%s", dect_shell_sett_dissociate_usage_str);
+	return 0;
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_sett_common_usage_str[] =
+	"Usage: dect sett <options>\n"
+	"Options:\n"
+	"  -r, --read,                  Read current common settings.\n"
+	"      --reset,                 Reset to driver default settings.\n"
+	"  -n, --nw_id <#>,             Set network id (32bit).\n"
+	"  -t, --tx_id <#>,             Set transmitter id (long RD ID).\n"
+	"      --region <eu/us/global>, Set region or variant. Impacts e.g. in channel access.\n"
+	"  -b, --band_nbr <#>,          Set used band.\n"
+	"      --max_tx_pwr <dbm>,      Set max TX power (dBm).\n"
+	"      --max_mcs <uint>,         Set max used MCS.\n"
+	"      --power_save <on/off>,  \"on\" to enable power save on modem, \"off\" to disable.\n"
+	"                               Note: PT device only.\n"
+	"      --dev_type <dev_type>    Set device type. dev_type: \"FT\" or \"PT\".\n";
+static const char dect_shell_sett_auto_start_usage_str[] =
+	"      --auto_activate <on/off>, \"on\" to enable activation at bootup, \"off\" to "
+	"disable.\n"
+	"                                Default: on.\n"
+	"      --nw_join_target <#>,     Set target transmitter id (long RD ID) of FT\n"
+	"                                for nw_join of the PT device. Default: 0 (=any).\n";
+static const char dect_shell_sett_rssi_scan_usage_str[] =
+	"RSSI measurement settings:\n"
+	"      --rssi_scan_time <msecs>,   Channel access: set the time (msec) that is used for\n"
+	"                                  scanning per channel for RSSI measurements.\n"
+	"      --rssi_scan_free_th <dbm>,  Channel access: considered as free:\n"
+	"                                  measured signal level <= <value>.\n"
+	"                                  Set a threshold for RSSI scan free threshold (dBm).\n"
+	"      --rssi_scan_busy_th <dbm>,  Channel access: considered as busy:\n"
+	"                                  measured signal level > <value>.\n"
+	"                                  Set a threshold for RSSI scan busy threshold (dBm).\n"
+	"                                  Channel access: considered as possible:\n"
+	"                                  rssi_scan_busy_th >= measured signal level >\n"
+	"                                  rssi_scan_free_th\n"
+	"      --rssi_scan_suitable_percent <int>,  SCAN_SUITABLE% as per spec.\n";
+static const char dect_shell_sett_association_usage_str[] =
+	"Association related settings\n"
+	"      --max_beacon_rx_fails <int>, Set maximum number of consecutive missed cluster\n"
+	"                                   beacons. Note: set to modem when creating association\n"
+	"                                   and has impact when FT device is considered as out of\n"
+	"                                   range or FT is turned off, resulting the automatic\n"
+	"                                   disassociation of the FT device.\n"
+	"                                   Value 0 means that no limit and no automatic\n"
+	"				    disassociation is done.\n";
+static const char dect_shell_sett_beacon_usage_str[] =
+	"Cluster beacon settings\n"
+	"      --cluster_beacon_period <#>,   Set cluster beacon period in ms. Possible values:\n"
+	"                                     10, 50, 100, 500, 1000, 1500, 2000, 4000, 8000,\n"
+	"                                     16000 and 32000\n"
+	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range: [-12,23].\n"
+	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range: [-40,23]\n"
+	"Network beacon settings\n"
+	"      --nw_beacon_period <#>,        Set network beacon period in ms. Possible values:\n"
+	"                                     50, 100, 500, 1000, 1500, 2000 and 4000.\n"
+	"      --nw_beacon_channel <#>,       Set channel to be used for the network beacon.\n"
+	"                                     This has impact only in network_create.\n"
+	"                                     Default: disabled.\n";
+static const char dect_shell_sett_sec_conf_usage_str[] =
+	"Security configuration settings\n"
+	"      --sec_mode <none/mode_1>,      Set security mode.\n"
+	"                                     Default: mode_1.\n"
+	"      --sec_integ_key <key>,         Set security key (hex string). Length 16.\n"
+	"                                     Example: 0123456789abcdef0123456789abcdef\n"
+	"      --sec_cipher_key <key>,        Set cipher key (hex string). Length 16.\n"
+	"                                     Example: 0123456789abcdef0123456789abcdef\n";
+
+/* The following do not have short options:: */
+enum {
+	DECT_SHELL_SETT_CMD_RESET_ALL,
+	DECT_SHELL_SETT_CMD_AUTO_ACTIVATE,
+	DECT_SHELL_SETT_CMD_NW_JOIN_TARGET,
+	DECT_SHELL_SETT_CMD_DEV_TYPE,
+	DECT_SHELL_SETT_CMD_REGION,
+	DECT_SHELL_SETT_CMD_RSSI_SCAN_TIME_PER_CHANNEL,
+	DECT_SHELL_SETT_CMD_RSSI_SCAN_FREE_THRESHOLD,
+	DECT_SHELL_SETT_CMD_RSSI_SCAN_BUSY_THRESHOLD,
+	DECT_SHELL_SETT_CMD_RSSI_SCAN_SUITABLE_PERCENT,
+	DECT_SHELL_SETT_CMD_CLUSTER_BEACON_PERIOD,
+	DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR,
+	DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR,
+	DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS,
+	DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD,
+	DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL,
+	DECT_SHELL_SETT_CMD_PWR_SAVE,
+	DECT_SHELL_SETT_CMD_MAX_MCS,
+	DECT_SHELL_SETT_CMD_MAX_TX_PWR,
+	DECT_SHELL_SETT_CMD_SEC_MODE,
+	DECT_SHELL_SETT_CMD_SEC_INTEG_KEY,
+	DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY,
+};
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_sett_cmd[] = {
+	{"nw_id", required_argument, 0, 'n'},
+	{"tx_id", required_argument, 0, 't'},
+	{"band_nbr", required_argument, 0, 'b'},
+	{"reset", no_argument, 0, DECT_SHELL_SETT_CMD_RESET_ALL},
+	{"region", required_argument, 0, DECT_SHELL_SETT_CMD_REGION},
+	{"auto_activate", required_argument, 0, DECT_SHELL_SETT_CMD_AUTO_ACTIVATE},
+	{"nw_join_target", required_argument, 0, DECT_SHELL_SETT_CMD_NW_JOIN_TARGET},
+	{"dev_type", required_argument, 0, DECT_SHELL_SETT_CMD_DEV_TYPE},
+	{"power_save", required_argument, 0, DECT_SHELL_SETT_CMD_PWR_SAVE},
+	{"max_mcs", required_argument, 0, DECT_SHELL_SETT_CMD_MAX_MCS},
+	{"max_tx_pwr", required_argument, 0, DECT_SHELL_SETT_CMD_MAX_TX_PWR},
+	{"rssi_scan_time", required_argument, 0, DECT_SHELL_SETT_CMD_RSSI_SCAN_TIME_PER_CHANNEL},
+	{"rssi_scan_free_th", required_argument, 0, DECT_SHELL_SETT_CMD_RSSI_SCAN_FREE_THRESHOLD},
+	{"rssi_scan_busy_th", required_argument, 0, DECT_SHELL_SETT_CMD_RSSI_SCAN_BUSY_THRESHOLD},
+	{"rssi_scan_suitable_percent", required_argument, 0,
+	 DECT_SHELL_SETT_CMD_RSSI_SCAN_SUITABLE_PERCENT},
+	{"cluster_beacon_period", required_argument, 0, DECT_SHELL_SETT_CMD_CLUSTER_BEACON_PERIOD},
+	{"cluster_max_beacon_tx_pwr", required_argument, 0,
+	 DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR},
+	{"cluster_max_tx_pwr", required_argument, 0, DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR},
+	{"nw_beacon_period", required_argument, 0, DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD},
+	{"nw_beacon_channel", required_argument, 0, DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL},
+	{"max_beacon_rx_fails", required_argument, 0,
+	 DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS},
+	{"sec_mode", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_MODE},
+	{"sec_integ_key", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_INTEG_KEY},
+	{"sec_cipher_key", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY},
+	{0, 0, 0, 0}};
+
+static int dect_common_utils_settings_ms_to_mac_cluster_beacon_period_in_ms(int period_in_msecs)
+{
+	switch (period_in_msecs) {
+	case 10:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_10MS;
+	case 50:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_50MS;
+	case 100:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_100MS;
+	case 500:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_500MS;
+	case 1000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_1000MS;
+	case 1500:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_1500MS;
+	case 2000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS;
+	case 4000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_4000MS;
+	case 8000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_8000MS;
+	case 16000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_16000MS;
+	case 32000:
+		return DECT_MAC_CLUSTER_BEACON_PERIOD_32000MS;
+	default:
+		return -1;
+	}
+}
+
+static int dect_common_utils_settings_ms_to_mac_nw_beacon_period_in_ms(int period_in_msecs)
+{
+	switch (period_in_msecs) {
+	case 50:
+		return DECT_MAC_NW_BEACON_PERIOD_50MS;
+	case 100:
+		return DECT_MAC_NW_BEACON_PERIOD_100MS;
+	case 500:
+		return DECT_MAC_NW_BEACON_PERIOD_500MS;
+	case 1000:
+		return DECT_MAC_NW_BEACON_PERIOD_1000MS;
+	case 1500:
+		return DECT_MAC_NW_BEACON_PERIOD_1500MS;
+	case 2000:
+		return DECT_MAC_NW_BEACON_PERIOD_2000MS;
+	case 4000:
+		return DECT_MAC_NW_BEACON_PERIOD_4000MS;
+	default:
+		return -1;
+	}
+}
+
+static char *dect_common_utils_settings_region_to_string(enum dect_settings_region region)
+{
+	switch (region) {
+	case DECT_SETTINGS_REGION_EU:
+		return "eu";
+	case DECT_SETTINGS_REGION_US:
+		return "us";
+	case DECT_SETTINGS_REGION_GLOBAL:
+		return "global";
+	default:
+		return "Unknown";
+	}
+}
+
+static int dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
+	enum dect_settings_mac_nw_beacon_period period)
+{
+	switch (period) {
+	case DECT_MAC_NW_BEACON_PERIOD_50MS:
+		return 50;
+	case DECT_MAC_NW_BEACON_PERIOD_100MS:
+		return 100;
+	case DECT_MAC_NW_BEACON_PERIOD_500MS:
+		return 500;
+	case DECT_MAC_NW_BEACON_PERIOD_1000MS:
+		return 1000;
+	case DECT_MAC_NW_BEACON_PERIOD_1500MS:
+		return 1500;
+	case DECT_MAC_NW_BEACON_PERIOD_2000MS:
+		return 2000;
+	case DECT_MAC_NW_BEACON_PERIOD_4000MS:
+		return 4000;
+	default:
+		return -1;
+	}
+}
+
+static int dect_common_utils_settings_mac_pdu_cluster_beacon_period_in_ms(
+	enum dect_settings_mac_cluster_beacon_period period)
+{
+	switch (period) {
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_10MS:
+		return 10;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_50MS:
+		return 50;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_100MS:
+		return 100;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_500MS:
+		return 500;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_1000MS:
+		return 1000;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_1500MS:
+		return 1500;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS:
+		return 2000;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_4000MS:
+		return 4000;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_8000MS:
+		return 8000;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_16000MS:
+		return 16000;
+	case DECT_MAC_CLUSTER_BEACON_PERIOD_32000MS:
+		return 32000;
+	default:
+		return -1;
+	}
+}
+
+static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
+{
+	desh_print("DECT settings:");
+	desh_print("  Network ID:                           %u (0x%08x)",
+		   dect_sett->identities.network_id, dect_sett->identities.network_id);
+	desh_print("  Transmitter Long RD ID:               %d (0x%08x)",
+		   dect_sett->identities.transmitter_long_rd_id,
+		   dect_sett->identities.transmitter_long_rd_id);
+	desh_print("  Region/variant:                       %s",
+		   dect_common_utils_settings_region_to_string(dect_sett->region));
+	desh_print("  Band:                                 %d", dect_sett->band_nbr);
+	desh_print("  Auto activate:                        %s",
+		   dect_sett->auto_start.activate ? "on" : "off");
+	desh_print("  Device type:                          %s",
+		   dect_sett->device_type == DECT_DEVICE_TYPE_FT ? "FT" : "PT");
+	desh_print("  Max TX power:                         %d dBm", dect_sett->tx.max_power_dbm);
+	desh_print("  Max MCS:                              %d", dect_sett->tx.max_mcs);
+	desh_print("  Power save:                           %s",
+		   dect_sett->power_save ? "on" : "off");
+
+	desh_print("Common RSSI scanning settings:");
+	desh_print("  ch access: RSSI scan (msecs) per ch:  %d",
+		   dect_sett->rssi_scan.time_per_channel_ms);
+	desh_print("  ch access: RSSI scan busy (dBm):      signal level > %d",
+		   dect_sett->rssi_scan.busy_threshold_dbm);
+	desh_print("  ch access: RSSI scan possible (dBm):  %d >= signal level > %d",
+		   dect_sett->rssi_scan.busy_threshold_dbm,
+		   dect_sett->rssi_scan.free_threshold_dbm);
+	desh_print("  ch access: RSSI scan free (dBm):      signal level <= %d",
+		   dect_sett->rssi_scan.free_threshold_dbm);
+	desh_print("  ch access: SCAN_SUITABLE%%             %d%%",
+		   dect_sett->rssi_scan.scan_suitable_percent);
+	desh_print("  Association related:");
+	desh_print("   Max cluster beacon RX fails:         %d",
+		   dect_sett->association.max_beacon_rx_failures);
+	desh_print("  Cluster beacon:");
+	desh_print("   Period:                              %d ms",
+		   dect_common_utils_settings_mac_pdu_cluster_beacon_period_in_ms(
+			   dect_sett->cluster_beacon.period));
+	desh_print("   Max beacon TX power:                 %d dBm",
+		   dect_sett->cluster_beacon.max_beacon_tx_power_dbm);
+	desh_print("   Max cluster TX power:                %d dBm",
+		   dect_sett->cluster_beacon.max_cluster_power_dbm);
+	desh_print("  Max num of neighbors:                 %d",
+		   dect_sett->cluster_beacon.max_num_neighbors);
+	desh_print("  Network beacon:");
+	desh_print("   Period:                              %d ms",
+		   dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
+			   dect_sett->nw_beacon.period));
+	if (dect_sett->nw_beacon.channel != DECT_MAC_NW_BEACON_CHANNEL_NOT_USED) {
+		desh_print("   Channel:                             %d",
+			   dect_sett->nw_beacon.channel);
+	}
+	desh_print("  Network join:");
+	if (dect_sett->network_join.target_ft_long_rd_id == DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY) {
+		desh_print("   Target FT:                           Any FT");
+	} else {
+		desh_print("   Target FT:                           %d (0x%08x)",
+			   dect_sett->network_join.target_ft_long_rd_id,
+			   dect_sett->network_join.target_ft_long_rd_id);
+	}
+	desh_print("  Security configuration:");
+	desh_print("   Security mode:                       %s",
+		   dect_sett->sec_conf.mode == DECT_MAC_SECURITY_MODE_NONE ? "none" : "mode_1");
+	if (dect_sett->sec_conf.mode == DECT_MAC_SECURITY_MODE_1) {
+		int sec_key_len = DECT_MAC_INTEGRITY_KEY_LENGTH * 2 + 1;
+		char sec_key_str[sec_key_len];
+		int err;
+
+		/* Print security keys as hex strings */
+		err = dect_shell_util_htoa(dect_sett->sec_conf.integrity_key,
+					   DECT_MAC_INTEGRITY_KEY_LENGTH, sec_key_str, sec_key_len);
+		if (err < 0) {
+			desh_error("Error converting integrity key to hex string: %d", err);
+		} else {
+			/* TODO: is it ok to print these?
+			 * Also, they are stored in unsecure settings
+			 */
+			desh_print("   Security integrity key:              %s", sec_key_str);
+		}
+		err = dect_shell_util_htoa(dect_sett->sec_conf.cipher_key,
+					   DECT_MAC_CIPHER_KEY_LENGTH, sec_key_str, sec_key_len);
+		if (err < 0) {
+			desh_error("Error converting cipher key to hex string: %d", err);
+		} else {
+			desh_print("   Security cipher key:                 %s", sec_key_str);
+		}
+	}
+}
+
+static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	struct dect_settings current_settings;
+	struct dect_settings newsettings;
+
+	int long_index = 0;
+	int opt, tmp_value;
+	int ret;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+
+	optreset = 1;
+	optind = 1;
+
+	/* We need to read current settings first because we do not mandate that user must give
+	 * all of the settings in scope
+	 */
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, context.iface, &current_settings,
+		       sizeof(current_settings));
+	if (ret) {
+		desh_error("Cannot read current settings: %d", ret);
+		return;
+	}
+	newsettings = current_settings;
+	newsettings.cmd_params.reset_to_driver_defaults = false;
+	newsettings.cmd_params.write_scope_bitmap = 0;
+
+	while ((opt = getopt_long(argc, argv, "n:t:b:rh", long_options_sett_cmd, &long_index)) !=
+	       -1) {
+		switch (opt) {
+		case 'r': {
+			dect_shell_sett_cmd_print(&current_settings);
+			return;
+		}
+		case DECT_SHELL_SETT_CMD_RESET_ALL: {
+			newsettings.cmd_params.reset_to_driver_defaults = true;
+			break;
+		}
+		case 'n': {
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || !dect_nrp_utils_32bit_network_id_validate(tmp_value)) {
+				desh_error("%u (0x%08x) is not a valid network id.\n"
+					   "The network ID shall be set to a value where "
+					   "neither\n"
+					   "the 8 LSB bits are 0x00 nor the 24 MSB bits "
+					   "are 0x000000.",
+					   tmp_value, tmp_value);
+				return;
+			}
+			newsettings.identities.network_id = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_IDENTITIES;
+			break;
+		}
+		case 't': {
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret) {
+				desh_error("Give decent tx id (> 0)");
+				return;
+			}
+			newsettings.identities.transmitter_long_rd_id = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_IDENTITIES;
+			break;
+		}
+		case 'b': {
+			tmp_value = atoi(optarg);
+			if (tmp_value == 1 || tmp_value == 2 || tmp_value == 4 || tmp_value == 9 ||
+			    tmp_value == 22) {
+				newsettings.band_nbr = tmp_value;
+				newsettings.cmd_params.write_scope_bitmap |=
+					DECT_SETTINGS_WRITE_SCOPE_BAND_NBR;
+			} else {
+				desh_error("Band #%d is not supported.", tmp_value);
+				return;
+			}
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_REGION: {
+			if (!strcmp(optarg, "eu")) {
+				newsettings.region = DECT_SETTINGS_REGION_EU;
+			} else if (!strcmp(optarg, "us")) {
+				newsettings.region = DECT_SETTINGS_REGION_US;
+			} else if (!strcmp(optarg, "global")) {
+				newsettings.region = DECT_SETTINGS_REGION_GLOBAL;
+			} else {
+				desh_error("Invalid region: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_REGION;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_AUTO_ACTIVATE: {
+			if (!strcmp(optarg, "on")) {
+				newsettings.auto_start.activate = true;
+			} else if (!strcmp(optarg, "off")) {
+				newsettings.auto_start.activate = false;
+			} else {
+				desh_error("Invalid auto_activate value: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_AUTO_START;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_NW_JOIN_TARGET: {
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret) {
+				desh_error("Give decent auto start target tx id (> 0)");
+				return;
+			}
+			newsettings.network_join.target_ft_long_rd_id = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_DEV_TYPE: {
+			if (!strcmp(optarg, "FT")) {
+				newsettings.device_type = DECT_DEVICE_TYPE_FT;
+			} else if (!strcmp(optarg, "PT")) {
+				newsettings.device_type = DECT_DEVICE_TYPE_PT;
+			} else {
+				desh_error("Invalid device type: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_DEVICE_TYPE;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_RSSI_SCAN_TIME_PER_CHANNEL: {
+			newsettings.rssi_scan.time_per_channel_ms = atoi(optarg);
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_RSSI_SCAN_FREE_THRESHOLD: {
+			tmp_value = atoi(optarg);
+			if (tmp_value >= 0) {
+				desh_error("Give decent value (value < 0)");
+				return;
+			}
+			newsettings.rssi_scan.free_threshold_dbm = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_RSSI_SCAN_BUSY_THRESHOLD: {
+			tmp_value = atoi(optarg);
+			if (tmp_value >= 0) {
+				desh_error("Give decent value (value < 0)");
+				return;
+			}
+			newsettings.rssi_scan.busy_threshold_dbm = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_RSSI_SCAN_SUITABLE_PERCENT: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 0 || tmp_value > 100) {
+				desh_error("Give decent value (0-100)");
+				return;
+			}
+			newsettings.rssi_scan.scan_suitable_percent = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
+			break;
+		}
+
+		case DECT_SHELL_SETT_CMD_CLUSTER_BEACON_PERIOD: {
+			tmp_value = atoi(optarg);
+			tmp_value =
+				dect_common_utils_settings_ms_to_mac_cluster_beacon_period_in_ms(
+					tmp_value);
+			if (tmp_value < 0) {
+				desh_error("Invalid cluster beacon period: %s", optarg);
+				return;
+			}
+			newsettings.cluster_beacon.period = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < -40 || tmp_value > 23) {
+				desh_error("Invalid cluster beacon TX power: %s", optarg);
+				return;
+			}
+
+			newsettings.cluster_beacon.max_beacon_tx_power_dbm = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < -12 || tmp_value > 23) {
+				desh_error("Invalid cluster max TX power: %s", optarg);
+				return;
+			}
+
+			newsettings.cluster_beacon.max_cluster_power_dbm = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD: {
+			tmp_value = atoi(optarg);
+			tmp_value = dect_common_utils_settings_ms_to_mac_nw_beacon_period_in_ms(
+				tmp_value);
+			if (tmp_value < 0) {
+				desh_error("Invalid network beacon period: %s", optarg);
+				return;
+			}
+			newsettings.nw_beacon.period = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_NW_BEACON;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 0 || tmp_value > UINT16_MAX) {
+				desh_error("Invalid network beacon channel: %s", optarg);
+				return;
+			}
+			newsettings.nw_beacon.channel = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_NW_BEACON;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 0 || tmp_value > UINT8_MAX) {
+				desh_error("Give decent value (value > 0 AND <= %d)", UINT8_MAX);
+				return;
+			}
+			newsettings.association.max_beacon_rx_failures = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_PWR_SAVE: {
+			if (!strcmp(optarg, "on")) {
+				newsettings.power_save = true;
+			} else if (!strcmp(optarg, "off")) {
+				newsettings.power_save = false;
+			} else {
+				desh_error("Invalid power_save value: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_POWER_SAVE;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_MAX_MCS: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 0) {
+				desh_error("Give decent value (value >= 0)");
+				return;
+			}
+			newsettings.tx.max_mcs = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_TX;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_MAX_TX_PWR: {
+			newsettings.tx.max_power_dbm = atoi(optarg);
+			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_TX;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_SEC_MODE: {
+			if (!strcmp(optarg, "none")) {
+				newsettings.sec_conf.mode = DECT_MAC_SECURITY_MODE_NONE;
+			} else if (!strcmp(optarg, "mode_1")) {
+				newsettings.sec_conf.mode = DECT_MAC_SECURITY_MODE_1;
+			} else {
+				desh_error("Invalid security mode: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_SEC_INTEG_KEY: {
+			if (dect_shell_util_atoh(optarg, strlen(optarg),
+						 newsettings.sec_conf.integrity_key,
+						 sizeof(newsettings.sec_conf.integrity_key)) !=
+			    DECT_MAC_INTEGRITY_KEY_LENGTH) {
+				desh_error("Invalid security integrity key: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY: {
+			if (dect_shell_util_atoh(optarg, strlen(optarg),
+						 newsettings.sec_conf.cipher_key,
+						 sizeof(newsettings.sec_conf.cipher_key)) !=
+			    DECT_MAC_CIPHER_KEY_LENGTH) {
+				desh_error("Invalid security cipher key: %s", optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION;
+			break;
+		}
+
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+	if (newsettings.cmd_params.write_scope_bitmap == 0 &&
+	    !newsettings.cmd_params.reset_to_driver_defaults) {
+		desh_error("No settings to write. See usage:");
+		goto show_usage;
+	}
+
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_WRITE, context.iface, &newsettings,
+		       sizeof(newsettings));
+	if (ret) {
+		desh_error("Cannot write new settings: %d", ret);
+	} else {
+		desh_print("Settings updated.");
+	}
+
+	return;
+
+show_usage:
+	/* Split into many because of limited size of CONFIG_DESH_PRINT_BUFFER_SIZE */
+	desh_print("%s", dect_shell_sett_common_usage_str);
+	desh_print("%s", dect_shell_sett_auto_start_usage_str);
+	desh_print("%s", dect_shell_sett_rssi_scan_usage_str);
+	desh_print("%s", dect_shell_sett_association_usage_str);
+	desh_print("%s", dect_shell_sett_beacon_usage_str);
+	desh_print("%s", dect_shell_sett_sec_conf_usage_str);
+}
+
+/**************************************************************************************************/
+
+static void dect_shell_cluster_start_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	struct dect_cluster_start_req_params params;
+
+	ret = net_mgmt(NET_REQUEST_DECT_CLUSTER_START, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Cannot start cluster: %d", ret);
+	} else {
+		desh_print("Cluster start initiated.");
+	}
+}
+
+static void dect_shell_cluster_info_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_CLUSTER_INFO, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot initiate reqquest for cluster info: %d", ret);
+	} else {
+		desh_print("Cluster information request initiated.");
+	}
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_nw_beacon_start_usage_str[] =
+	"Usage: dect nw_beacon_start -c <channel_nbr> [--add_channels <list>]\n\n"
+	"Options:\n"
+	"  -c  <int>                       Network beacon channel on a set band.\n"
+	"      --add_channels <int,int,..> Additional Network beacon channels list.\n"
+	"                                  At most 3 additional channels can be listed.\n"
+	"                                  Channels are listed in sent Network beacon.\n ";
+
+/* The following do not have short options: */
+enum {
+	DECT_SHELL_NW_BEACON_START_CMD_ADD_CHANNELS,
+};
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_nw_beacon_start[] = {
+	{"add_channels", required_argument, 0, DECT_SHELL_NW_BEACON_START_CMD_ADD_CHANNELS},
+	{"channel", required_argument, 0, 'c'},
+	{0, 0, 0, 0}};
+
+static void dect_shell_nw_beacon_start_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	struct dect_nw_beacon_start_req_params params;
+	int long_index = 0;
+	int opt;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	optreset = 1;
+	optind = 1;
+
+	params.additional_ch_count = 0;
+	params.channel = 0;
+
+	while ((opt = getopt_long(argc, argv, "c:h", long_options_nw_beacon_start, &long_index)) !=
+	       -1) {
+		switch (opt) {
+		case 'c': {
+			params.channel = atoi(optarg);
+			break;
+		}
+
+		case DECT_SHELL_NW_BEACON_START_CMD_ADD_CHANNELS: {
+			char *ch_string = strtok(optarg, ",");
+
+			if (ch_string == NULL) {
+				params.additional_ch_list[0] = atoi(optarg);
+				params.additional_ch_count = 1;
+			} else {
+				while (ch_string != NULL && params.additional_ch_count < 3) {
+					params.additional_ch_list[params.additional_ch_count++] =
+						atoi(ch_string);
+					ch_string = strtok(NULL, ",");
+				}
+			}
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+	if (params.channel == 0) {
+		desh_error("Network beacon channel needs to be given. See usage:");
+		goto show_usage;
+	}
+
+	ret = net_mgmt(NET_REQUEST_DECT_NW_BEACON_START, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Cannot start cluster: %d", ret);
+	} else {
+		desh_print("Network beacon start initiated.");
+	}
+	return;
+
+show_usage:
+	desh_print("%s", dect_shell_nw_beacon_start_usage_str);
+}
+
+/**************************************************************************************************/
+
+static void dect_shell_nw_beacon_stop_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	struct dect_nw_beacon_stop_req_params params;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NW_BEACON_STOP, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Cannot initiate network beacon stopping: %d", ret);
+	} else {
+		desh_print("Network beacon stop initiated.");
+	}
+}
+
+/**************************************************************************************************/
+
+static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
+{
+	desh_print("DECT NR+ status:");
+	desh_print("  Modem FW version:             %s", dect_status->fw_version_str);
+	desh_print("  Modem activated:              %s", dect_status->mdm_activated ? "yes" : "no");
+	desh_print("  Cluster running:              %s",
+		   dect_status->cluster_running ? "yes" : "no");
+	if (dect_status->cluster_running) {
+		desh_print("  Cluster channel:              %d", dect_status->cluster_channel);
+	}
+	desh_print("  Network beacon running:       %s",
+		   dect_status->nw_beacon_running ? "yes" : "no");
+	if (dect_status->parent_count || dect_status->child_count) {
+		desh_print("  Associations:");
+	}
+	if (dect_status->parent_count > 0) {
+		for (int i = 0; i < dect_status->parent_count; i++) {
+			desh_print("    Parent long RD ID:              %d (0x%08x)",
+				   dect_status->parent_associations[i].long_rd_id,
+				   dect_status->parent_associations[i].long_rd_id);
+			desh_print("      Local IPv6 address:           %s",
+				   net_sprint_ipv6_addr(
+					   &dect_status->parent_associations[i].local_ipv6_addr));
+			if (dect_status->parent_associations[i].global_ipv6_addr_set) {
+				desh_print("      Global IPv6 address:          %s",
+					   net_sprint_ipv6_addr(&dect_status->parent_associations[i]
+									 .global_ipv6_addr));
+			}
+		}
+	}
+	if (dect_status->child_count > 0) {
+		for (int i = 0; i < dect_status->child_count; i++) {
+			desh_print("    Child #%d long RD ID:       %d (0x%08x)", i + 1,
+				   dect_status->child_associations[i].long_rd_id,
+				   dect_status->child_associations[i].long_rd_id);
+			desh_print("      Local IPv6 address:       %s",
+				   net_sprint_ipv6_addr(
+					   &dect_status->child_associations[i].local_ipv6_addr));
+			if (dect_status->child_associations[i].global_ipv6_addr_set) {
+				desh_print("      Global IPv6 address:      %s",
+					   net_sprint_ipv6_addr(&dect_status->child_associations[i]
+									 .global_ipv6_addr));
+			}
+		}
+	}
+#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
+	char ifname[CONFIG_NET_INTERFACE_NAME_LEN + 1] = { 0 };
+	int ret;
+
+	desh_print("  Border router and sink information:");
+	if (dect_status->br_net_iface) {
+		ret = net_if_get_name(dect_status->br_net_iface, ifname, sizeof(ifname) - 1);
+		if (ret < 0) {
+			desh_print("    Border router network interface:             %p",
+				dect_status->br_net_iface);
+		} else {
+			desh_print("    Border router network interface:             %s (%p)",
+				   ifname, dect_status->br_net_iface);
+		}
+	} else {
+		desh_print("    Border router network interface:   not set");
+	}
+	if (dect_status->br_global_ipv6_addr_prefix_set) {
+		desh_print("    Border router global IPv6 address prefix/%d: %s",
+			dect_status->br_global_ipv6_addr_prefix_len * 8,
+			net_sprint_ipv6_addr(&dect_status->br_global_ipv6_addr_prefix));
+		desh_print("      Connection to Internet should be available.");
+	} else {
+		desh_print("    Border router global IPv6 address: not set");
+	}
+#endif
+}
+
+static void dect_shell_status_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	struct dect_status_info dect_status;
+
+	ret = net_mgmt(NET_REQUEST_DECT_STATUS_INFO_GET, context.iface, &dect_status,
+		       sizeof(dect_status));
+	if (ret) {
+		desh_error("Cannot get status information: %d", ret);
+	} else {
+		dect_shell_status_cmd_print(&dect_status);
+	}
+}
+
+/**************************************************************************************************/
+
+static void dect_shell_activate_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_ACTIVATE, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot activate dect nr+ stack: %d", ret);
+	} else {
+		desh_print("DECT NR+ stack activation initiated.");
+	}
+}
+
+static void dect_shell_deactivate_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_DEACTIVATE, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot de-activate dect nr+ stack: %d", ret);
+	} else {
+		desh_print("DECT NR+ stack de-activation initiated.");
+	}
+}
+
+static void dect_shell_neighbor_list_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NEIGHBOR_LIST, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot get neighbor list: %d", ret);
+	} else {
+		desh_print("Neighbor list request initiated.");
+	}
+}
+
+static void dect_shell_neighbor_info_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+	struct dect_neighbor_info_req_params params;
+
+	if (argc < 2) {
+		desh_error("Alert data not provided");
+		return;
+	}
+	int err = 0;
+	int long_rd_id = shell_strtoul(argv[1], 10, &err);
+
+	if (err) {
+		desh_error("Invalid long RD ID: %s", argv[1]);
+		return;
+	}
+	params.long_rd_id = long_rd_id;
+	ret = net_mgmt(NET_REQUEST_DECT_NEIGHBOR_INFO, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Cannot get neighbor info: %d", ret);
+	} else {
+		desh_print("Neighbor info request initiated.");
+	}
+}
+
+static void dect_shell_nw_create_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot initiate request for creating a network: %d", ret);
+	} else {
+		desh_print("Network creation initiated.");
+	}
+}
+
+static void dect_shell_nw_remove_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot initiate request for removing a network: %d", ret);
+	} else {
+		desh_print("Network removal initiated.");
+	}
+}
+
+static void dect_shell_nw_join_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot initiate request for joining a network: %d", ret);
+	} else {
+		desh_print("Network joining initiated.");
+	}
+}
+
+static void dect_shell_nw_unjoin_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, context.iface, NULL, 0);
+	if (ret) {
+		desh_error("Cannot initiate request unjoining from a network: %d", ret);
+	} else {
+		desh_print("Unjoining from a network initiated.");
+	}
+}
+
+static void dect_shell_connect_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+#if defined(CONFIG_NET_CONNECTION_MANAGER)
+	int ret;
+
+	ret = conn_mgr_if_connect(context.iface);
+	if (ret < 0) {
+		desh_error("conn_mgr_if_connect failed: %d", ret);
+		return;
+	}
+	desh_print("connect initiated.");
+#else
+	struct dect_settings current_settings;
+	int err;
+
+	err = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, context.iface, &current_settings,
+		       sizeof(current_settings));
+	if (err) {
+		desh_error("Cannot read current settings: %d", err);
+		return;
+	}
+	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+		err = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, context.iface, NULL, 0);
+		if (err) {
+			desh_error("cannot initiate request for joining "
+				   "a network: %d",
+				   err);
+		} else {
+			desh_print("network joining initiated.");
+		}
+
+	} else {
+		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		err = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, context.iface, NULL, 0);
+		if (err) {
+			desh_error("cannot initiate request for creating "
+				   "a network: %d",
+				   err);
+		} else {
+			desh_print("network creation initiated.");
+		}
+	}
+
+#endif
+}
+
+static void dect_shell_disconnect_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+#if defined(CONFIG_NET_CONNECTION_MANAGER)
+	int ret = conn_mgr_if_disconnect(context.iface);
+
+	if (ret < 0) {
+		desh_error("Failed to initiate a disconnect: %d", ret);
+		return;
+	}
+	desh_print("disconnect initiated.");
+#else
+	struct dect_settings current_settings;
+	int ret;
+
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, context.iface, &current_settings,
+		       sizeof(current_settings));
+	if (ret) {
+		desh_error("Cannot read current settings: %d\n", ret);
+		return;
+	}
+	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, context.iface, NULL, 0);
+		if (ret) {
+			desh_error("cannot initiate request for unjoining "
+				   "a network: %d\n",
+				   ret);
+		} else {
+			desh_print("network unjoining initiated.\n");
+		}
+
+	} else {
+		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, context.iface, NULL, 0);
+		if (ret) {
+			desh_error("cannot initiate request for removing "
+				   "a network: %d\n",
+				   ret);
+		} else {
+			desh_print("network removal initiated.\n");
+		}
+	}
+#endif
+}
+
+/**************************************************************************************************/
+
+SHELL_SUBCMD_SET_CREATE(dect_commands, (dect));
+
+SHELL_SUBCMD_ADD((dect), activate, NULL,
+		 "Activate dect nr+ stack.\n"
+		 " Usage: dect activate",
+		 dect_shell_activate_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), deactivate, NULL,
+		 "De-activate dect nr+ stack.\n"
+		 " Usage: dect deactivate",
+		 dect_shell_deactivate_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), status, NULL,
+		 "Get status information.\n"
+		 " Usage: dect status",
+		 dect_shell_status_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), rssi_scan, &dect_commands,
+		 "Execute a RSSI scan.\n"
+		 "[-h, --help] : Print out the help for the rssi_scan command.\n",
+		 dect_shell_rssi_scan_cmd, 1, 8);
+SHELL_SUBCMD_ADD((dect), scan, &dect_commands,
+		 "Scan for dect nr+ beacons.\n"
+		 "[-h, --help] : Print out the help for the scan command.\n",
+		 dect_shell_scan_cmd, 1, 8);
+SHELL_SUBCMD_ADD((dect), tx, &dect_commands,
+		 "Send data to target device.\n"
+		 "[-h, --help] : Print out the help for the tx command.\n",
+		 dect_shell_tx_cmd, 1, 8);
+SHELL_SUBCMD_ADD((dect), rx, &dect_commands,
+		 "Receive DLC data.\n"
+		 "[-h, --help] : Print out the help for the rx command.\n",
+		 dect_shell_rx_cmd, 1, 8);
+SHELL_SUBCMD_ADD((dect), associate, &dect_commands,
+		 "Performs association procedure with given FT-device\n"
+		 " Usage: mac associate [options: see: mac associate -h]",
+		 dect_shell_associate_cmd, 1, 3);
+SHELL_SUBCMD_ADD((dect), dissociate, &dect_commands,
+		 "Releases association with a given FT-device\n"
+		 " Usage: dect dissociate [options: see: mac associate -h]",
+		 dect_shell_dissociate_cmd, 1, 3);
+SHELL_SUBCMD_ADD((dect), cluster_start, NULL,
+		 "Start FT's cluster based on settings.\n"
+		 " Usage: dect cluster_start\n",
+		 dect_shell_cluster_start_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), cluster_info, NULL,
+		 "Request for cluster information.\n"
+		 " Usage: dect cluster_info\n",
+		 dect_shell_cluster_info_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), nw_beacon_start, NULL,
+		 "Start network beacon.\n"
+		 "[-h, --help] : Print out the help for the nw_beacon_start command.\n",
+		 dect_shell_nw_beacon_start_cmd, 2, 3);
+SHELL_SUBCMD_ADD((dect), nw_beacon_stop, NULL,
+		 "Stop network beacon.\n"
+		 " Usage: dect nw_beacon_stop",
+		 dect_shell_nw_beacon_stop_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), neighbor_list, NULL,
+		 "Request for a neighbor list.\n"
+		 " Usage: dect neigbor_list",
+		 dect_shell_neighbor_list_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), neighbor_info, NULL,
+		 "Request for neighbor information.\n"
+		 " Usage: dect neigbor_info <neighbor_long_rd_id>\n",
+		 dect_shell_neighbor_info_cmd, 2, 0);
+SHELL_SUBCMD_ADD((dect), nw_create, NULL,
+		 "Request to create dect nr+ network based on settings.\n"
+		 " Usage: dect nw_create\n",
+		 dect_shell_nw_create_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), nw_remove, NULL,
+		 "Request to remove dect nr+ network.\n"
+		 " Usage: dect nw_remove\n",
+		 dect_shell_nw_remove_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), nw_join, NULL,
+		 "Request to join into dect nr+ network based on settings.\n"
+		 " Usage: dect nw_join\n",
+		 dect_shell_nw_join_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), nw_unjoin, NULL,
+		 "Request to unjoin from a dect nr+ network.\n"
+		 " Usage: dect nw_unjoin\n",
+		 dect_shell_nw_unjoin_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), connect, NULL,
+		 "Request to connect into dect nr+ network based on settings.\n"
+		 "Usage: dect connect\n"
+		 " FT: same as nw_create, i.e. performs RSSI scan and creates cluster to free "
+		 " channel at set band.\n"
+		 " PT: same as nw_join, Performs network scan on a set band and associates with "
+		 " FT device as set in nw_join settings.\n",
+		 dect_shell_connect_cmd, 1, 0);
+SHELL_SUBCMD_ADD(
+	(dect), disconnect, NULL,
+	"Request to disconnect from dect nr+ network.\n"
+	"Usage: dect disconnect\n"
+	" FT: same as nw_remove, i.e. removes cluster and network.\n"
+	" PT: same as nw_unjoin, i.e. unjoins from network and releases association with FT "
+	" device.\n",
+	dect_shell_disconnect_cmd, 1, 0);
+SHELL_SUBCMD_ADD((dect), sett, &dect_commands,
+		 "Set and read common dect settings\n"
+		 "[-h, --help] : Print out the help for the scan command.\n",
+		 dect_shell_sett_cmd, 1, 19);
+
+SHELL_CMD_REGISTER(dect, &dect_commands, "DECT NR+ commands", NULL);
+
+/**************************************************************************************************/
+
+static int dect_shell_init(void)
+{
+
+	dect_shell_rx_sockfd = -1;
+	context.iface = net_if_get_by_index(
+		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
+	if (!context.iface) {
+		printk("Interface nrf91_dect not found\n");
+	}
+	net_mgmt_init_event_callback(&dect_shell_mgmt_cb, dect_shell_net_mgmt_event_handler,
+				     DECT_SHELL_MGMT_EVENTS);
+
+	net_mgmt_add_event_callback(&dect_shell_mgmt_cb);
+
+	return 0;
+}
+
+SYS_INIT(dect_shell_init, APPLICATION, CONFIG_KERNEL_INIT_PRIORITY_DEFAULT);

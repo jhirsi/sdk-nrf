@@ -1,0 +1,98 @@
+#
+# Copyright (c) 2025 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+source "Kconfig.zephyr"
+
+menu "Nordic Dect NR+ Phy Shell config"
+
+config DESH_PRINT_BUFFER_SIZE
+	int "Buffer size used when printing shell output"
+	default 1024
+	help
+	  If the printed string exceeds this buffer, an error message is printed first and
+	  then the requested string cut into the length of this buffer.
+
+config DESH_COMMON_WORKQUEUE_STACK_SIZE
+	int "Stack size for the common work queue"
+	default 3072
+
+config DESH_DECT_ICMP_PING
+	bool "ICMP ping support"
+	default y
+	depends on NET_SOCKETS_INET_RAW
+	help
+	  Enable support for ICMP ping.
+
+config DESH_IPERF3
+	bool "iPerf3"
+	default n
+	select NRF_IPERF3
+
+config DESH_CLOUD_MQTT
+	bool "MQTT connection to nRF Cloud"
+	depends on  NRF_CLOUD_MQTT
+	help
+	  MQTT connection to nRF Cloud.
+
+config DESH_CLOUD_COAP
+	bool "COAP connection to nRF Cloud"
+	depends on  NRF_CLOUD_COAP
+	help
+	  COAP connection to nRF Cloud.
+
+config DESH_CLOUD_REST
+	bool "REST connection to nRF Cloud"
+	depends on  NRF_CLOUD_REST
+	help
+	  REST connection to nRF Cloud. Note: ipv6 not supported by nrf cloud on REST
+
+config DESH_AT_CMD_MODE
+	bool "Specific AT command mode"
+	default y
+
+if DESH_AT_CMD_MODE
+choice
+	prompt "Command termination"
+	default DESH_AT_CMD_MODE_CR_LF_TERMINATION
+	help
+		Sets the command termination ending from the serial terminal
+		Levels are:
+		-  NULL Termination
+		-  CR Termination
+		-  LF Termination
+		-  CR+LF Termination
+	config DESH_AT_CMD_MODE_NULL_TERMINATION
+		bool "NULL Termination"
+	config DESH_AT_CMD_MODE_CR_TERMINATION
+		bool "CR Termination"
+	config DESH_AT_CMD_MODE_LF_TERMINATION
+		bool "LF Termination"
+	config DESH_AT_CMD_MODE_CR_LF_TERMINATION
+		bool "CR+LF Termination"
+endchoice
+config DESH_AT_CMD_MODE_TERMINATION
+	int
+	default 0 if DESH_AT_CMD_MODE_NULL_TERMINATION
+	default 1 if DESH_AT_CMD_MODE_CR_TERMINATION
+	default 2 if DESH_AT_CMD_MODE_LF_TERMINATION
+	default 3 if DESH_AT_CMD_MODE_CR_LF_TERMINATION
+endif
+
+config DESH_L2_SHELL
+	bool "DECT NR+ Shell for nRF91 Modem MAC"
+	depends on NET_MGMT
+	depends on NET_MGMT_EVENT
+	depends on NET_MGMT_EVENT_INFO
+	depends on NET_L2_DECT_MGMT
+	depends on GETOPT_LIB
+	depends on DECT_NRP_LIB
+	default y
+	help
+	  Enable support for DECT NR+ Net Management interface.
+
+rsource "src/native_tls/Kconfig"
+
+endmenu
