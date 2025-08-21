@@ -911,7 +911,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 		while (retry_count < 20 &&
 		       data_sent == false) { /* TODO: time (with Kconfig) instead of count */
 			ret = dect_nrf91_ctrl_tx_cmd(&tx_params);
-			if (ret == -ENOMEM) {
+			if (ret == -ENOMEM || ret == -EACCES) {
 				k_sleep(K_MSEC(sleep_ms));
 				retry_count++;
 			} else if (ret == -EBUSY) {

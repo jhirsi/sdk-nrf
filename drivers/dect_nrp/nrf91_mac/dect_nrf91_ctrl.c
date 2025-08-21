@@ -504,17 +504,15 @@ int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params)
 	if (ctrl_data.tx_mdm_flow_ctrl_on) {
 		LOG_DBG("Flow control is enabled, tx not allowed");
 		k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-		return -ENOMEM;
+		return -EACCES;
 	}
 #if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
 	int arr_index = params->transaction_id - DECT_MAC_DATA_TX_HANDLE_START;
 
 	if (ctrl_data.total_unacked_tx_data_amount + params->data_len >
 	    CONFIG_NRF_MODEM_LIB_SHMEM_TX_SIZE) {
-		LOG_DBG("Too much unacked TX data: %d bytes",
+		LOG_WRN("Too much unacked TX data: %d bytes - continue but flow ctrl might occur",
 			ctrl_data.total_unacked_tx_data_amount);
-		k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-		return -ENOMEM;
 	}
 	if (ctrl_data.total_unacked_req_amount >= DECT_MAC_DATA_TX_HANDLE_COUNT) {
 		LOG_WRN("Too many unacked TX requests: %d", ctrl_data.total_unacked_req_amount);
@@ -545,6 +543,9 @@ int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params)
 		} else {
 			LOG_ERR("nrf_modem_dect_dlc_data_tx returned error: %d", ret);
 		}
+#if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
+		ctrl_data.dlc_data_tx_infos[arr_index].req_on_going = false;
+#endif
 	} else {
 #if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
 		k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER);
