@@ -2064,10 +2064,27 @@ send_events:
 			 */
 			if (ctrl_data.ass_config.pt_association_state ==
 			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+				__ASSERT_NO_MSG(
+					ctrl_data.ass_config.parent_long_rd_id ==
+						evt_data->long_rd_id);
 				dect_nrf91_ctrl_associate_release_cmd(
 					ctrl_data.ass_config.parent_long_rd_id);
-				/* TODO: a rescan for the former parent */
 			}
+			break;
+		}
+		case DECT_NRF91_CTRL_OP_NEIGHBOR_PAGING_FAILURE: {
+			/* Message is an indication that a neighbor is tried to be paged for
+			 * incoming data but there was no answer. We release the association.
+			 */
+			struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *params =
+				(struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *)
+					event.data;
+
+			LOG_WRN("Neighbor paging failure: long_rd_id %u (0x%X) - "
+				"releasing association",
+				params->long_rd_id, params->long_rd_id);
+
+			dect_nrf91_ctrl_associate_release_cmd(params->long_rd_id);
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_INFO: {
@@ -2269,9 +2286,9 @@ send_events:
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("DLC data response failed with err %s (%d), "
+				LOG_ERR("DLC data response failed to rd id %d with err %s (%d), "
 					"transaction id %d",
-					tmp_str, evt_data->status,
+					evt_data->long_rd_id, tmp_str, evt_data->status,
 					evt_data->acked_data[0].transaction_id);
 			}
 
@@ -2292,7 +2309,9 @@ send_events:
 				ctrl_data.total_unacked_req_amount--;
 			}
 			k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-			LOG_DBG("DLC data response: %d bytes unacked left, req count %d",
+			LOG_DBG("DLC data response (towards RD ID %d): "
+				"total %d bytes unacked left, total req count %d",
+				evt_data->long_rd_id,
 				ctrl_data.total_unacked_tx_data_amount,
 				ctrl_data.total_unacked_req_amount);
 #endif
@@ -2732,7 +2751,10 @@ static void dect_nrf91_ctrl_mdm_cluster_beacon_receive_stop_cb(
 static void dect_nrf91_ctrl_mdm_neighbor_paging_failure_ntf_cb(
 	struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *params)
 {
-	printk("Paging failure, Long RD ID: %d (0x%X)\n", params->long_rd_id, params->long_rd_id);
+	dect_nrf91_ctrl_msgq_data_op_add(
+		DECT_NRF91_CTRL_OP_NEIGHBOR_PAGING_FAILURE, params,
+		sizeof(struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params));
+
 }
 
 static void dect_nrf91_ctrl_mdm_cluster_beacon_rx_fail_ntf_cb(
