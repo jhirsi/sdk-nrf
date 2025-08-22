@@ -178,7 +178,56 @@ int dect_shell_util_htoa(const uint8_t *hex, uint16_t hex_len, char *ascii, uint
 
 	return (hex_len * 2);
 }
+/**************************************************************************************************/
 
+static char *dect_shell_util_association_release_cause_to_string(
+	enum dect_association_release_cause cause, char *out_str_buff, size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+
+	switch (cause) {
+	case DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION:
+		strncpy(out_str_buff, "Connection termination", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_MOBILITY:
+		strncpy(out_str_buff, "Mobility", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY:
+		strncpy(out_str_buff, "Long inactivity", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION:
+		strncpy(out_str_buff, "Incompatible configuration", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES:
+		strncpy(out_str_buff, "Insufficient HW/memory resources", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES:
+		strncpy(out_str_buff, "Insufficient radio resources", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY:
+		strncpy(out_str_buff, "Bad radio quality", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR:
+		strncpy(out_str_buff, "Security error", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_OTHER_ERROR:
+		strncpy(out_str_buff, "Other error", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_OTHER_REASON:
+		strncpy(out_str_buff, "Other reason", out_str_buff_len);
+		break;
+	case DECT_MAC_RELEASE_CAUSE_CUSTOM_RACH_RESOURCE_FAILURE:
+		strncpy(out_str_buff, "RACH resource failure", out_str_buff_len);
+		break;
+	default:
+		snprintf(out_str_buff, out_str_buff_len, "Unknown (%d)", cause);
+		break;
+	}
+
+	return out_str_buff;
+}
 /**************************************************************************************************/
 
 #define ANSI_RESET_ALL	  "\x1b[0m"
@@ -407,10 +456,16 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 		break;
 	}
 	case NET_EVENT_DECT_ASSOCIATION_RELEASED: {
-		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
+		const struct dect_association_released_evt *evt_data =
+			(const struct dect_association_released_evt *)cb->info;
+		char err_str[128] = {0};
 
 		desh_print("NET_EVENT_DECT_ASSOCIATION_RELEASED");
-		desh_print("Association released with long RD ID %u", *long_rd_id);
+		desh_print(" Association released with long RD ID: %u", evt_data->long_rd_id);
+		desh_print(" Release cause:                        %s (%d)",
+			dect_shell_util_association_release_cause_to_string(
+				evt_data->release_cause, err_str, sizeof(err_str)),
+			evt_data->release_cause);
 		break;
 	}
 	case NET_EVENT_DECT_CLUSTER_CREATED_RESULT: {
