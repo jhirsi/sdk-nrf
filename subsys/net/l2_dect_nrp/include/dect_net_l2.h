@@ -234,6 +234,43 @@ struct dect_association_req_result_evt {
 	enum dect_association_reject_cause reject_cause;
 };
 
+/**
+ * @brief Association release causes (MAC spec table 6.4.2.6-1).
+ */
+enum dect_association_release_cause {
+	/** Connection termination */
+	DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION = 0,
+	/** Mobility */
+	DECT_MAC_RELEASE_CAUSE_MOBILITY,
+	/** Radio device has been inactive for too long */
+	DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY,
+	/** Incompatible configuration */
+	DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION,
+	/** Insufficient hardware resources */
+	DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES,
+	/** Insufficient radio resources */
+	DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES,
+	/** Bad radio quality */
+	DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY,
+	/** Security error */
+	DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR,
+	/** Other error */
+	DECT_MAC_RELEASE_CAUSE_OTHER_ERROR,
+	/** Other reason */
+	DECT_MAC_RELEASE_CAUSE_OTHER_REASON,
+	/** RACH resource failure (additional cause, not from mac spec) */
+	DECT_MAC_RELEASE_CAUSE_CUSTOM_RACH_RESOURCE_FAILURE,
+};
+
+/** @brief dect association released event
+ */
+struct dect_association_released_evt {
+	/** Long Radio Device ID of neighbor */
+	uint32_t long_rd_id;
+
+	/** Cause of the association release */
+	enum dect_association_release_cause release_cause;
+};
 /** @brief dect cluster start resp event
  */
 struct dect_cluster_start_resp_evt {
@@ -936,6 +973,7 @@ void dect_net_l2_child_association_created(struct net_if *iface, uint32_t target
  *
  * @param iface Network interface
  */
-void dect_net_l2_association_removed(struct net_if *iface, uint32_t long_rd_id);
+void dect_net_l2_association_removed(
+	struct net_if *iface, uint32_t long_rd_id, enum dect_association_release_cause cause);
 
 #endif /* ZEPHYR_INCLUDE_NET_NET_DECT_L2_H_ */

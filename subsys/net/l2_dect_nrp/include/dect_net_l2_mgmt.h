@@ -384,8 +384,8 @@ enum net_event_dect_cmd {
 
 /**
  * Signals the result of the @ref NET_REQUEST_DECT_ASSOCIATION_RELEASE net management command when
- * association has been release but sent also unsolitedly e.g. peer initiated releasing.
- * uint32_t long_rd_id is included in an event indicating the long radio device ID of the child.
+ * association has been released but sent also when unsolitedly released.
+ * See @ref dect_association_released_evt for event parameters.
  */
 #define NET_EVENT_DECT_ASSOCIATION_RELEASED                                                        \
 	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ASSOCIATION_RELEASED)
@@ -467,7 +467,8 @@ void dect_mgmt_parent_association_created_evt(struct net_if *iface, uint32_t lon
 void dect_mgmt_child_association_created_evt(struct net_if *iface, uint32_t long_rd_id);
 void dect_mgmt_association_req_result_evt(struct net_if *iface,
 					  struct dect_association_req_result_evt resp_data);
-void dect_mgmt_association_released_evt(struct net_if *iface, uint32_t long_rd_id);
+void dect_mgmt_association_released_evt(
+	struct net_if *iface, struct dect_association_released_evt evt_data);
 
 /** Send NET_EVENT_DECT_CLUSTER_CREATED_RESULT
  * @param iface Network interface

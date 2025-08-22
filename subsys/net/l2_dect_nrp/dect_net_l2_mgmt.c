@@ -93,10 +93,11 @@ void dect_mgmt_child_association_created_evt(struct net_if *iface, uint32_t long
 					&long_rd_id, sizeof(long_rd_id));
 }
 
-void dect_mgmt_association_released_evt(struct net_if *iface, uint32_t long_rd_id)
+void dect_mgmt_association_released_evt(
+	struct net_if *iface, struct dect_association_released_evt evt_data)
 {
-	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_RELEASED, iface, &long_rd_id,
-					sizeof(long_rd_id));
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_RELEASED, iface, &evt_data,
+					sizeof(struct dect_association_released_evt));
 }
 
 void dect_mgmt_cluster_created_evt(struct net_if *iface,
