@@ -152,7 +152,8 @@ int dect_nrf91_ctrl_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *p
 				struct net_if *iface, dect_scan_result_cb_t cb);
 int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params);
 int dect_nrf91_ctrl_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params);
-int dect_nrf91_ctrl_associate_release_cmd(uint32_t long_rd_id);
+int dect_nrf91_ctrl_associate_release_cmd(
+	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause);
 
 int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params);
 

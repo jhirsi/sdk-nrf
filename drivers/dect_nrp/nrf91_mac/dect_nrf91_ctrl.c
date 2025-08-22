@@ -122,7 +122,9 @@ static struct dect_nrf91_ctrl_data {
 	ctrl_ft_network_state_t ft_network_state;
 	ctrl_ft_nw_beacon_state_t ft_nw_beacon_state;
 	ctrl_mdm_activation_state_t mdm_activation_state;
+
 	ctrl_pt_association_config_t ass_config;
+	enum nrf_modem_dect_mac_release_cause last_rel_cause;
 
 	struct dect_nrf91_ctrl_rssi_scan_data rssi_scan_data;
 	struct dect_nrf91_ctrl_scan_data scan_data;
@@ -726,7 +728,9 @@ int dect_nrf91_ctrl_network_unjoin_req_cmd(void)
 		LOG_ERR("Not joined");
 		return -EALREADY;
 	}
-	int err = dect_nrf91_ctrl_associate_release_cmd(ctrl_data.ass_config.parent_long_rd_id);
+	int err = dect_nrf91_ctrl_associate_release_cmd(
+		ctrl_data.ass_config.parent_long_rd_id,
+		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 
 	if (err) {
 		LOG_ERR("dect_nrf91_ctrl_associate_release_cmd returned err: %d", err);
@@ -773,10 +777,11 @@ int dect_nrf91_ctrl_associate_req_cmd(struct nrf_modem_dect_mac_association_para
 	return err;
 }
 
-int dect_nrf91_ctrl_associate_release_cmd(uint32_t long_rd_id)
+int dect_nrf91_ctrl_associate_release_cmd(
+	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
 {
 	struct nrf_modem_dect_mac_association_release_params params = {
-		.release_cause = NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION,
+		.release_cause = rel_cause,
 		.long_rd_id = long_rd_id,
 	};
 	int err = nrf_modem_dect_mac_association_release(&params);
@@ -784,6 +789,7 @@ int dect_nrf91_ctrl_associate_release_cmd(uint32_t long_rd_id)
 	if (err) {
 		LOG_ERR("%s: initiation association release failed, err: %d", (__func__), err);
 	}
+	ctrl_data.last_rel_cause = rel_cause;
 
 	return err;
 }
@@ -2068,7 +2074,8 @@ send_events:
 					ctrl_data.ass_config.parent_long_rd_id ==
 						evt_data->long_rd_id);
 				dect_nrf91_ctrl_associate_release_cmd(
-					ctrl_data.ass_config.parent_long_rd_id);
+					ctrl_data.ass_config.parent_long_rd_id,
+					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
 			}
 			break;
 		}
@@ -2084,7 +2091,9 @@ send_events:
 				"releasing association",
 				params->long_rd_id, params->long_rd_id);
 
-			dect_nrf91_ctrl_associate_release_cmd(params->long_rd_id);
+			dect_nrf91_ctrl_associate_release_cmd(
+				params->long_rd_id,
+				NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY);
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_INFO: {
@@ -2425,9 +2434,11 @@ send_events:
 			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_NONE;
-				dect_nrf91_parent_association_removed(params->long_rd_id);
+				dect_nrf91_parent_association_removed(
+					params->long_rd_id, ctrl_data.last_rel_cause);
 			} else if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-				dect_nrf91_child_association_removed(params->long_rd_id);
+				dect_nrf91_child_association_removed(
+					params->long_rd_id, ctrl_data.last_rel_cause);
 			}
 			break;
 		}
@@ -2441,12 +2452,14 @@ send_events:
 				params->long_rd_id, params->long_rd_id);
 
 			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-				dect_nrf91_child_association_removed(params->long_rd_id);
+				dect_nrf91_child_association_removed(
+					params->long_rd_id, params->release_cause);
 			} else {
 				/* Network kicked us out? */
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_NONE;
-				dect_nrf91_parent_association_removed(params->long_rd_id);
+				dect_nrf91_parent_association_removed(
+					params->long_rd_id, params->release_cause);
 			}
 			break;
 		}

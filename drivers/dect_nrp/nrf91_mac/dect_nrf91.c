@@ -82,6 +82,58 @@ BUILD_ASSERT((NRF_MODEM_DECT_MAC_SECURITY_MODE_1 ==
 	     "NRF_MODEM_DECT_MAC_SECURITY_MODE_1 != "
 	     "DECT_MAC_SECURITY_MODE_1");
 
+/* Sanity check between dect_association_release_cause and nrf_modem_dect_mac_release_cause*/
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION ==
+	      (enum dect_association_release_cause)
+		      NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION),
+	     "DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_MOBILITY ==
+	      (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_MOBILITY),
+	     "DECT_MAC_RELEASE_CAUSE_MOBILITY != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_MOBILITY");
+BUILD_ASSERT(
+	(DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY ==
+	 (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY),
+	"DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY != "
+	"NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION ==
+	      (enum dect_association_release_cause)
+		      NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION),
+	     "DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INCOMPATIBLE_CONFIGURATION");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES ==
+	      (enum dect_association_release_cause)
+		      NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES),
+	     "DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES ==
+	      (enum dect_association_release_cause)
+		      NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES),
+	     "DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_RADIO_RESOURCES");
+BUILD_ASSERT(
+	(DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY ==
+	 (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY),
+	"DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY != "
+	"NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR ==
+	      (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR),
+	     "DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_SECURITY_ERROR");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_OTHER_ERROR ==
+	      (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_ERROR),
+	     "DECT_MAC_RELEASE_CAUSE_OTHER_ERROR != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_ERROR");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_OTHER_REASON ==
+	      (enum dect_association_release_cause)NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON),
+	     "DECT_MAC_RELEASE_CAUSE_OTHER_REASON != "
+	     "NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON");
+BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_CUSTOM_RACH_RESOURCE_FAILURE ==
+	      (enum dect_association_release_cause)DECT_MAC_RELEASE_CAUSE_RACH_RESOURCE_FAILURE),
+	     "DECT_MAC_RELEASE_CAUSE_CUSTOM_RACH_RESOURCE_FAILURE != "
+	     "DECT_MAC_RELEASE_CAUSE_RACH_RESOURCE_FAILURE");
+
 /* Sanity check for the 1st and for the last error cause values */
 BUILD_ASSERT((DECT_MAC_STATUS_OK == (enum dect_status_values)NRF_MODEM_DECT_MAC_STATUS_OK),
 	     "NRF_MODEM_DECT_MAC_STATUS_OK != DECT_MAC_STATUS_OK");
@@ -667,7 +719,8 @@ int dect_nrf91_driver_associate_release(const struct device *dev,
 {
 	int ret;
 
-	ret = dect_nrf91_ctrl_associate_release_cmd(params->target_long_rd_id);
+	ret = dect_nrf91_ctrl_associate_release_cmd(
+		params->target_long_rd_id, NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 	if (ret) {
 		LOG_ERR("%s: error in Association Release: err %d", (__func__), ret);
 	} else {
@@ -992,7 +1045,8 @@ static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
 			if (ctx->child_associations[i].in_use) {
 				/* We are shooting all without waiting an answer */
 				ret = dect_nrf91_ctrl_associate_release_cmd(
-					ctx->child_associations[i].target_long_rd_id);
+					ctx->child_associations[i].target_long_rd_id,
+					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 				if (ret) {
 					LOG_ERR("%s: error in Association Release: err %d",
 						(__func__), ret);
@@ -1097,7 +1151,8 @@ void dect_nrf91_parent_association_created(
 
 association_release:
 	dect_nrf91_parent_association_list_remove(target_long_rd_id);
-	dect_nrf91_ctrl_associate_release_cmd(target_long_rd_id);
+	dect_nrf91_ctrl_associate_release_cmd(
+		target_long_rd_id, NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES);
 }
 
 void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
@@ -1124,15 +1179,19 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 
 association_release:
 	dect_nrf91_child_association_list_remove(target_long_rd_id);
-	dect_nrf91_ctrl_associate_release_cmd(target_long_rd_id);
+	dect_nrf91_ctrl_associate_release_cmd(
+		target_long_rd_id,
+		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES);
 }
 
-void dect_nrf91_parent_association_removed(uint32_t long_rd_id)
+void dect_nrf91_parent_association_removed(
+	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
 {
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 
-	dect_net_l2_association_removed(iface, long_rd_id);
+	dect_net_l2_association_removed(
+		iface, long_rd_id, (enum dect_association_release_cause)rel_cause);
 
 	/* We are orphan now. The only possible parent is gone. */
 	struct net_if_addr *ifaddr;
@@ -1198,13 +1257,15 @@ void dect_nrf91_parent_association_removed(uint32_t long_rd_id)
 	dect_nrf91_parent_association_list_remove(long_rd_id);
 }
 
-void dect_nrf91_child_association_removed(uint32_t long_rd_id)
+void dect_nrf91_child_association_removed(
+	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
 {
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
 	struct dect_nrf91_association_data *ass_list_item =
 		dect_nrf91_child_association_list_item_get(long_rd_id);
 
-	dect_net_l2_association_removed(iface, long_rd_id);
+	dect_net_l2_association_removed(
+		iface, long_rd_id, (enum dect_association_release_cause)rel_cause);
 
 	if (ass_list_item) {
 		if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
@@ -1230,7 +1291,9 @@ void dect_nrf91_child_association_all_removed(void)
 	for (int i = 0; i < ARRAY_SIZE(ctx->child_associations); i++) {
 		if (ctx->child_associations[i].in_use) {
 			dect_net_l2_association_removed(
-				ctx->iface, ctx->child_associations[i].target_long_rd_id);
+				ctx->iface,
+				ctx->child_associations[i].target_long_rd_id,
+				DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 			dect_nrf91_child_association_list_remove(
 				ctx->child_associations[i].target_long_rd_id);
 		}
