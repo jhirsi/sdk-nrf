@@ -34,6 +34,7 @@ static const struct dect_settings_cluster_beacon cluster_beacon_data = {
 	.max_beacon_tx_power_dbm = 4,
 	.max_cluster_power_dbm = 0,
 	.max_num_neighbors = CONFIG_DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT,
+	.channel_loaded_percent = 80,
 	/* TODO: channel? */
 };
 
@@ -164,6 +165,8 @@ dect_nrf91_settings_write(struct dect_nrf91_settings *dect_sett_in)
 			new_sett->cluster_beacon.max_beacon_tx_power_dbm;
 		current_sett->cluster_beacon.max_num_neighbors =
 			new_sett->cluster_beacon.max_num_neighbors;
+		current_sett->cluster_beacon.channel_loaded_percent =
+			new_sett->cluster_beacon.channel_loaded_percent;
 	}
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_NW_BEACON) {
 		current_sett->nw_beacon.period = new_sett->nw_beacon.period;

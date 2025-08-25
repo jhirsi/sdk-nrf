@@ -118,9 +118,11 @@ static struct dect_nrf91_ctrl_data {
 
 	struct nrf_modem_dect_mac_capability_ntf_cb_params mdm_capas;
 
+	/* TODO: do we need both of following two?*/
 	ctrl_ft_cluster_state_t ft_cluster_state;
 	ctrl_ft_network_state_t ft_network_state;
 	ctrl_ft_nw_beacon_state_t ft_nw_beacon_state;
+
 	ctrl_mdm_activation_state_t mdm_activation_state;
 
 	ctrl_pt_association_config_t ass_config;
@@ -688,7 +690,8 @@ int dect_nrf91_ctrl_network_create_req_cmd(void)
 
 bool dect_nrf91_ctrl_network_remove_req_cmd_allowed(void)
 {
-	if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_NONE) {
+	if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_NONE &&
+	    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_NONE) {
 		return false;
 	}
 	return true;
@@ -970,10 +973,10 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 					? true
 					: false;
 
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
 			ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
 			ctrl_data.configure_params.channel = 0;
-			if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
+			if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE ||
+			    ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_NONE) {
 				struct dect_network_status_evt network_status_data = {
 					.network_status = DECT_NETWORK_STATUS_REMOVED,
 				};
@@ -988,6 +991,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
 			}
 			ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
 			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
 			ctrl_data.configure_params.auto_start = false;
 
@@ -1012,7 +1016,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 		case DECT_NRF91_CTRL_OP_CLUSTER_START_REQ: {
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
 			dect_nrf91_ctrl_msgq_non_data_op_add(
-				DECT_NRF91_CTRL_OP_RSSI_START_REQ_FROM_SETTINGS);
+				DECT_NRF91_CTRL_OP_AUTO_START);
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP: {
@@ -1084,10 +1088,28 @@ send_events:
 			struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *evt_data =
 				(struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *)
 					event.data;
+			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 			LOG_INF("Cluster channel load changed: channel %u, busy_percentage %d",
 				evt_data->rssi_result.channel,
 				evt_data->rssi_result.busy_percentage);
+
+			/* TODO: trigger a new channel selection procedure RSSI scan for
+			 * neighbor channels
+			 */
+			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
+			    (set_ptr->net_mgmt_common.cluster_beacon.channel_loaded_percent &&
+				evt_data->rssi_result.busy_percentage >
+					set_ptr->net_mgmt_common
+						.cluster_beacon.channel_loaded_percent)) {
+				LOG_WRN("Cluster channel load exceeded threshold (%d%%): "
+					"channel %u, "
+					"busy_percentage %d - TODO: channel reselection!!!",
+					set_ptr->net_mgmt_common
+						.cluster_beacon.channel_loaded_percent,
+					evt_data->rssi_result.channel,
+					evt_data->rssi_result.busy_percentage);
+			}
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY: {
@@ -1097,6 +1119,10 @@ send_events:
 
 			LOG_INF("Neighbor inactivity: long_rd_id %u (0x%X)", evt_data->long_rd_id,
 				evt_data->long_rd_id);
+
+			/* TODO? FT: if child has been too long as inactive -> drop it?
+			 * Or just count on paging failure as currently
+			 */
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_AUTO_START: {
