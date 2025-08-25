@@ -604,6 +604,12 @@ struct dect_settings_cluster_beacon {
 	int8_t max_cluster_power_dbm;
 	enum dect_settings_mac_cluster_beacon_period period;
 	uint16_t max_num_neighbors;
+
+	/** FT: Threshold when an operating channel load (=busy percentage) is so high that
+	 *      the RD should start Operating Channel(s) and Subslot(s) selection.
+	 *      Setting to zero disables the feature.
+	 */
+	uint8_t channel_loaded_percent;
 };
 
 struct dect_settings_network_beacon {
