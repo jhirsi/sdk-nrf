@@ -65,6 +65,9 @@ enum net_request_dect_cmd {
 	/** FT device type: start a cluster */
 	NET_REQUEST_DECT_CMD_CLUSTER_START_REQ,
 
+	/** FT device type: manually reconfigure a cluster */
+	NET_REQUEST_DECT_CMD_CLUSTER_RECONFIG_REQ,
+
 	/** FT device type: start a network beacon */
 	NET_REQUEST_DECT_CMD_NW_BEACON_START_REQ,
 
@@ -162,6 +165,11 @@ NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_DECT_ASSOCIATION_RELEASE);
 /** FT device type: start a cluster as configured in related settings. */
 #define NET_REQUEST_DECT_CLUSTER_START (_NET_DECT_BASE | NET_REQUEST_DECT_CMD_CLUSTER_START_REQ)
 NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_DECT_CLUSTER_START);
+
+/** FT device type: reconfigure a cluster */
+#define NET_REQUEST_DECT_CLUSTER_RECONFIGURE                                                       \
+	(_NET_DECT_BASE | NET_REQUEST_DECT_CMD_CLUSTER_RECONFIG_REQ)
+NET_MGMT_DEFINE_REQUEST_HANDLER(NET_REQUEST_DECT_CLUSTER_RECONFIGURE);
 
 /** FT device type: stop a cluster  */
 #define NET_REQUEST_DECT_CLUSTER_STOP (_NET_DECT_BASE | NET_REQUEST_DECT_CMD_CLUSTER_STOP_REQ)
@@ -391,8 +399,8 @@ enum net_event_dect_cmd {
 	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ASSOCIATION_RELEASED)
 
 /**
- * Signals the result of the @ref NET_REQUEST_DECT_CLUSTER_START net management command and also
- * unsolitedly e.g. when connecting with network beacon .
+ * Signals the result of the @ref NET_REQUEST_DECT_CLUSTER_START and
+ * @ref NET_REQUEST_DECT_CLUSTER_RECONFIGURE net management commands.
  */
 #define NET_EVENT_DECT_CLUSTER_CREATED_RESULT                                                      \
 	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_CLUSTER_START_RESP)
@@ -477,9 +485,9 @@ void dect_mgmt_association_released_evt(
 void dect_mgmt_cluster_created_evt(struct net_if *iface,
 				   struct dect_cluster_start_resp_evt resp_data);
 
-/** Send NET_EVENT_DECT_NW_BEACON_START_RESULT
+/** Send NET_EVENT_DECT_CLUSTER_INFO
  * @param iface Network interface
- * @param resp_data Response data of the network beacon start request.
+ * @param resp_data Cluster information.
  */
 void dect_mgmt_cluster_info_evt(struct net_if *iface, struct dect_cluster_info_evt resp_data);
 

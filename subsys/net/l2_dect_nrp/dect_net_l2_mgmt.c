@@ -417,6 +417,23 @@ static int dect_mgmt_cluster_start_req(uint32_t mgmt_request, struct net_if *ifa
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_CLUSTER_START, dect_mgmt_cluster_start_req);
 
+static int dect_mgmt_cluster_reconfig_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+					   size_t len)
+{
+	const struct device *dev = net_if_get_device(iface);
+	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
+	struct dect_cluster_reconfig_req_params *params = data;
+
+	if (len != sizeof(struct dect_cluster_reconfig_req_params) || api == NULL ||
+	    api->cluster_reconfig_req == NULL) {
+		return -ENOTSUP;
+	}
+
+	return api->cluster_reconfig_req(dev, params);
+}
+NET_MGMT_REGISTER_REQUEST_HANDLER(
+	NET_REQUEST_DECT_CLUSTER_RECONFIGURE, dect_mgmt_cluster_reconfig_req);
+
 static int dect_mgmt_cluster_stop_req(uint32_t mgmt_request, struct net_if *iface, void *data,
 				      size_t len)
 {

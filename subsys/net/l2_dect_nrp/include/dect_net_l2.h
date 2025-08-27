@@ -55,6 +55,36 @@ enum dect_status_values {
 
 /**************************************************************************************************/
 
+/* MAC spec: Table 6.4.2.2-1: Network Beacon period */
+enum dect_nw_beacon_period {
+	DECT_MAC_NW_BEACON_PERIOD_50MS = 0,
+	DECT_MAC_NW_BEACON_PERIOD_100MS = 1,
+	DECT_MAC_NW_BEACON_PERIOD_500MS = 2,
+	DECT_MAC_NW_BEACON_PERIOD_1000MS = 3,
+	DECT_MAC_NW_BEACON_PERIOD_1500MS = 4,
+	DECT_MAC_NW_BEACON_PERIOD_2000MS = 5,
+	DECT_MAC_NW_BEACON_PERIOD_4000MS = 6,
+	/* rest are reserved */
+};
+
+/* MAC spec: Table 6.4.2.2-1: Cluster Beacon period */
+enum dect_cluster_beacon_period {
+	DECT_MAC_CLUSTER_BEACON_PERIOD_10MS = 0,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_50MS = 1,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_100MS = 2,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_500MS = 3,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_1000MS = 4,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_1500MS = 5,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS = 6,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_4000MS = 7,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_8000MS = 8,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_16000MS = 9,
+	DECT_MAC_CLUSTER_BEACON_PERIOD_32000MS = 10,
+	/* rest are reserved */
+};
+
+/**************************************************************************************************/
+
 #define DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN	   20
 #define DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ  4
 #define DECT_MAC_MAX_ADDITIONAL_NW_BEACON_CHANNELS 3
@@ -152,7 +182,17 @@ struct dect_associate_rel_params {
 
 /**************************************************************************************************/
 
+/** Any suitable channel on set band */
+#define DECT_CLUSTER_CHANNEL_ANY 0
 struct dect_cluster_start_req_params {
+	uint16_t channel;
+};
+
+struct dect_cluster_reconfig_req_params {
+	uint16_t channel;
+	int8_t max_beacon_tx_power_dbm;
+	int8_t max_cluster_power_dbm;
+	enum dect_cluster_beacon_period period;
 };
 
 struct dect_cluster_stop_req_params {
@@ -571,50 +611,23 @@ struct dect_settings_cmd_params {
 
 #define DECT_MAC_NW_BEACON_CHANNEL_NOT_USED UINT16_MAX
 
-/* MAC spec: Table 6.4.2.2-1: Network Beacon period */
-enum dect_settings_mac_nw_beacon_period {
-	DECT_MAC_NW_BEACON_PERIOD_50MS = 0,
-	DECT_MAC_NW_BEACON_PERIOD_100MS = 1,
-	DECT_MAC_NW_BEACON_PERIOD_500MS = 2,
-	DECT_MAC_NW_BEACON_PERIOD_1000MS = 3,
-	DECT_MAC_NW_BEACON_PERIOD_1500MS = 4,
-	DECT_MAC_NW_BEACON_PERIOD_2000MS = 5,
-	DECT_MAC_NW_BEACON_PERIOD_4000MS = 6,
-	/* rest are reserved */
-};
-
-/* MAC spec: Table 6.4.2.2-1: Cluster Beacon period */
-enum dect_settings_mac_cluster_beacon_period {
-	DECT_MAC_CLUSTER_BEACON_PERIOD_10MS = 0,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_50MS = 1,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_100MS = 2,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_500MS = 3,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_1000MS = 4,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_1500MS = 5,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS = 6,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_4000MS = 7,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_8000MS = 8,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_16000MS = 9,
-	DECT_MAC_CLUSTER_BEACON_PERIOD_32000MS = 10,
-	/* rest are reserved */
-};
-
 struct dect_settings_cluster_beacon {
 	int8_t max_beacon_tx_power_dbm;
 	int8_t max_cluster_power_dbm;
-	enum dect_settings_mac_cluster_beacon_period period;
+	enum dect_cluster_beacon_period period;
 	uint16_t max_num_neighbors;
 
 	/** FT: Threshold when an operating channel load (=busy percentage) is so high that
 	 *      the RD should start Operating Channel(s) and Subslot(s) selection.
-	 *      Setting to zero disables the feature.
+	 *      Setting to zero disables the feature and the RD will not perform any
+	 *      channel reselection automatically.
 	 */
 	uint8_t channel_loaded_percent;
 };
 
 struct dect_settings_network_beacon {
 	uint16_t channel;
-	enum dect_settings_mac_nw_beacon_period period;
+	enum dect_nw_beacon_period period;
 };
 
 struct dect_settings_association {
@@ -877,6 +890,16 @@ struct dect_nrp_hal_api {
 	 */
 	int (*cluster_start_req)(const struct device *dev,
 				 struct dect_cluster_start_req_params *params);
+
+	/** FT: Reconfigure a cluster
+	 *
+	 * @param dev Pointer to the device structure for the driver instance.
+	 * @param params Cluster reconfiguration parameters
+	 *
+	 * @return 0 if ok, < 0 if error
+	 */
+	int (*cluster_reconfig_req)(const struct device *dev,
+				    struct dect_cluster_reconfig_req_params *params);
 
 	/** FT: Stop a cluster
 	 *
