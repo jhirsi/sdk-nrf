@@ -1344,13 +1344,20 @@ static const char dect_shell_sett_association_usage_str[] =
 	"                                   disassociation of the FT device.\n"
 	"                                   Value 0 means that no limit and no automatic\n"
 	"				    disassociation is done.\n";
-static const char dect_shell_sett_beacon_usage_str[] =
+static const char dect_shell_sett_cluster_beacon_usage_str[] =
 	"Cluster beacon settings\n"
 	"      --cluster_beacon_period <#>,   Set cluster beacon period in ms. Possible values:\n"
 	"                                     10, 50, 100, 500, 1000, 1500, 2000, 4000, 8000,\n"
 	"                                     16000 and 32000\n"
 	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range: [-12,23].\n"
 	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range: [-40,23]\n"
+	"      --cluster_ch_reselection_th <int>, CHANNEL_LOADED percent per MAC spec.\n"
+	"                                     Threshold percent when an operating channel\n"
+	"                                     load is so high that the RD should start\n"
+	"                                     Operating Channel(s) and Subslot(s) reselection.\n"
+	"                                     Setting to zero disables the feature and FT is not\n"
+	"                                     initiating channel reselection automatically.\n";
+static const char dect_shell_sett_network_beacon_usage_str[] =
 	"Network beacon settings\n"
 	"      --nw_beacon_period <#>,        Set network beacon period in ms. Possible values:\n"
 	"                                     50, 100, 500, 1000, 1500, 2000 and 4000.\n"
@@ -1378,6 +1385,7 @@ enum {
 	DECT_SHELL_SETT_CMD_RSSI_SCAN_BUSY_THRESHOLD,
 	DECT_SHELL_SETT_CMD_RSSI_SCAN_SUITABLE_PERCENT,
 	DECT_SHELL_SETT_CMD_CLUSTER_BEACON_PERIOD,
+	DECT_SHELL_SETT_CMD_CLUSTER_CHANNEL_LOADED_PERCENT,
 	DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR,
 	DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR,
 	DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS,
@@ -1412,6 +1420,8 @@ static struct option long_options_sett_cmd[] = {
 	{"cluster_beacon_period", required_argument, 0, DECT_SHELL_SETT_CMD_CLUSTER_BEACON_PERIOD},
 	{"cluster_max_beacon_tx_pwr", required_argument, 0,
 	 DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR},
+	{"cluster_ch_reselection_th", required_argument, 0,
+	 DECT_SHELL_SETT_CMD_CLUSTER_CHANNEL_LOADED_PERCENT},
 	{"cluster_max_tx_pwr", required_argument, 0, DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR},
 	{"nw_beacon_period", required_argument, 0, DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD},
 	{"nw_beacon_channel", required_argument, 0, DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL},
@@ -1489,7 +1499,7 @@ static char *dect_common_utils_settings_region_to_string(enum dect_settings_regi
 }
 
 static int dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
-	enum dect_settings_mac_nw_beacon_period period)
+	enum dect_nw_beacon_period period)
 {
 	switch (period) {
 	case DECT_MAC_NW_BEACON_PERIOD_50MS:
@@ -1512,7 +1522,7 @@ static int dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
 }
 
 static int dect_common_utils_settings_mac_pdu_cluster_beacon_period_in_ms(
-	enum dect_settings_mac_cluster_beacon_period period)
+	enum dect_cluster_beacon_period period)
 {
 	switch (period) {
 	case DECT_MAC_CLUSTER_BEACON_PERIOD_10MS:
@@ -1585,8 +1595,15 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 		   dect_sett->cluster_beacon.max_beacon_tx_power_dbm);
 	desh_print("   Max cluster TX power:                %d dBm",
 		   dect_sett->cluster_beacon.max_cluster_power_dbm);
-	desh_print("  Max num of neighbors:                 %d",
+	desh_print("   Max num of neighbors:                 %d",
 		   dect_sett->cluster_beacon.max_num_neighbors);
+	if (dect_sett->cluster_beacon.channel_loaded_percent) {
+		desh_print("   Channel reselection:                 enabled");
+		desh_print("   Channel reselection threshold:       %d%%",
+			   dect_sett->cluster_beacon.channel_loaded_percent);
+	} else {
+		desh_print("   Channel reselection:                 disabled");
+	}
 	desh_print("  Network beacon:");
 	desh_print("   Period:                              %d ms",
 		   dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
@@ -1842,6 +1859,17 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 				DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON;
 			break;
 		}
+		case DECT_SHELL_SETT_CMD_CLUSTER_CHANNEL_LOADED_PERCENT: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < 0 || tmp_value > 100) {
+				desh_error("Give decent value (0-100)");
+				return;
+			}
+			newsettings.cluster_beacon.channel_loaded_percent = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON;
+			break;
+		}
 		case DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD: {
 			tmp_value = atoi(optarg);
 			tmp_value = dect_common_utils_settings_ms_to_mac_nw_beacon_period_in_ms(
@@ -1978,7 +2006,8 @@ show_usage:
 	desh_print("%s", dect_shell_sett_auto_start_usage_str);
 	desh_print("%s", dect_shell_sett_rssi_scan_usage_str);
 	desh_print("%s", dect_shell_sett_association_usage_str);
-	desh_print("%s", dect_shell_sett_beacon_usage_str);
+	desh_print("%s", dect_shell_sett_cluster_beacon_usage_str);
+	desh_print("%s", dect_shell_sett_network_beacon_usage_str);
 	desh_print("%s", dect_shell_sett_sec_conf_usage_str);
 }
 
@@ -1986,8 +2015,21 @@ show_usage:
 
 static void dect_shell_cluster_start_cmd(const struct shell *shell, size_t argc, char **argv)
 {
-	int ret;
+	int ret = 0;
 	struct dect_cluster_start_req_params params;
+
+	/* Is there optional channel parameter */
+	if (argc >= 2) {
+		int channel = shell_strtoul(argv[1], 10, &ret);
+
+		if (ret || channel < 0 || channel > UINT16_MAX) {
+			desh_error("Invalid channel: %s", argv[1]);
+			return;
+		}
+		params.channel = channel;
+	} else {
+		params.channel = DECT_CLUSTER_CHANNEL_ANY;
+	}
 
 	ret = net_mgmt(NET_REQUEST_DECT_CLUSTER_START, context.iface, &params, sizeof(params));
 	if (ret) {
@@ -1995,6 +2037,137 @@ static void dect_shell_cluster_start_cmd(const struct shell *shell, size_t argc,
 	} else {
 		desh_print("Cluster start initiated.");
 	}
+}
+
+/**************************************************************************************************/
+
+static const char dect_shell_cluster_reconfig_usage_str[] =
+	"Usage: dect cluster_reconfig [optional options]\n"
+	"Options:\n"
+	"  -c  <int>                          New channel on a set band.\n"
+	"                                     Default: any suitable channel.\n"
+	"      --cluster_beacon_period <#>,   Set cluster beacon period in ms. Possible values:\n"
+	"                                     10, 50, 100, 500, 1000, 1500, 2000, 4000, 8000,\n"
+	"                                     16000 and 32000.\n"
+	"                                     Default: from current cluster setting.\n"
+	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range: [-12,23].\n"
+	"                                     Default: from current cluster setting.\n"
+	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range: [-40,23]\n"
+	"                                         Default: from current cluster setting.\n";
+
+/* The following do not have short options: */
+enum {
+	DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_BEACON_PERIOD,
+	DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_BEACON_TX_PWR,
+	DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_TX_PWR,
+};
+
+/* Specifying the expected options (both long and short): */
+static struct option long_options_cluster_reconfig_cmd[] = {
+	{"cluster_beacon_period", required_argument, 0,
+		DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_BEACON_PERIOD},
+	{"cluster_max_beacon_tx_pwr", required_argument, 0,
+		DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_BEACON_TX_PWR},
+	{"cluster_max_tx_pwr", required_argument, 0,
+		DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_TX_PWR},
+	{0, 0, 0, 0}};
+
+static void dect_shell_cluster_reconfig_cmd(const struct shell *shell, size_t argc, char **argv)
+{
+	int ret = 0;
+	struct dect_cluster_reconfig_req_params params;
+	struct dect_settings current_settings;
+	int long_index = 0;
+	int opt, tmp_value;
+
+	if (argc < 2) {
+		goto show_usage;
+	}
+	optreset = 1;
+	optind = 1;
+
+	params.channel = DECT_CLUSTER_CHANNEL_ANY;
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, context.iface, &current_settings,
+		       sizeof(current_settings));
+	if (ret) {
+		desh_error("Cannot read current settings: %d", ret);
+		return;
+	}
+	params.max_beacon_tx_power_dbm = current_settings.cluster_beacon.max_beacon_tx_power_dbm;
+	params.max_cluster_power_dbm = current_settings.cluster_beacon.max_cluster_power_dbm;
+	params.period = current_settings.cluster_beacon.period;
+
+	while ((opt = getopt_long(
+		argc, argv, "c:h", long_options_cluster_reconfig_cmd, &long_index)) != -1) {
+		switch (opt) {
+		case 'c': {
+			int channel = shell_strtoul(optarg, 10, &ret);
+
+			if (ret || channel < 0 || channel > UINT16_MAX) {
+				desh_error("Invalid channel: %s", optarg);
+				return;
+			}
+			params.channel = channel;
+			break;
+		}
+
+		case DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_BEACON_PERIOD: {
+			tmp_value = atoi(optarg);
+			tmp_value =
+				dect_common_utils_settings_ms_to_mac_cluster_beacon_period_in_ms(
+					tmp_value);
+			if (tmp_value < 0) {
+				desh_error("Invalid cluster beacon period: %s", optarg);
+				return;
+			}
+			params.period = tmp_value;
+			break;
+		}
+		case DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_BEACON_TX_PWR: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < -40 || tmp_value > 23) {
+				desh_error("Invalid cluster beacon TX power: %s", optarg);
+				return;
+			}
+
+			params.max_beacon_tx_power_dbm = tmp_value;
+			break;
+		}
+		case DECT_SHELL_CLUSTER_RECONFIG_CMD_CLUSTER_MAX_TX_PWR: {
+			tmp_value = atoi(optarg);
+			if (tmp_value < -12 || tmp_value > 23) {
+				desh_error("Invalid cluster max TX power: %s", optarg);
+				return;
+			}
+
+			params.max_cluster_power_dbm = tmp_value;
+			break;
+		}
+		case 'h':
+			goto show_usage;
+		case '?':
+		default:
+			desh_error("Unknown option (%s). See usage:", argv[optind - 1]);
+			goto show_usage;
+		}
+	}
+
+	if (optind < argc) {
+		desh_error("Arguments without '-' not supported: %s", argv[argc - 1]);
+		goto show_usage;
+	}
+
+	ret = net_mgmt(
+		NET_REQUEST_DECT_CLUSTER_RECONFIGURE, context.iface, &params, sizeof(params));
+	if (ret) {
+		desh_error("Cannot reconfigure cluster: %d", ret);
+	} else {
+		desh_print("Cluster reconfiguration initiated.");
+	}
+	return;
+
+show_usage:
+	desh_print("%s", dect_shell_cluster_reconfig_usage_str);
 }
 
 static void dect_shell_cluster_info_cmd(const struct shell *shell, size_t argc, char **argv)
@@ -2446,8 +2619,12 @@ SHELL_SUBCMD_ADD((dect), dissociate, &dect_commands,
 		 dect_shell_dissociate_cmd, 1, 3);
 SHELL_SUBCMD_ADD((dect), cluster_start, NULL,
 		 "Start FT's cluster based on settings.\n"
-		 " Usage: dect cluster_start\n",
-		 dect_shell_cluster_start_cmd, 1, 0);
+		 " Usage: dect cluster_start [channel]\n",
+		 dect_shell_cluster_start_cmd, 1, 1);
+SHELL_SUBCMD_ADD((dect), cluster_reconfig, NULL,
+		 "Reconfigure FT's running cluster based on given parameters and/or settings.\n"
+		 "[-h, --help] : Print out the help for the cluster_reconfig command.\n",
+		 dect_shell_cluster_reconfig_cmd, 1, 4);
 SHELL_SUBCMD_ADD((dect), cluster_info, NULL,
 		 "Request for cluster information.\n"
 		 " Usage: dect cluster_info\n",
