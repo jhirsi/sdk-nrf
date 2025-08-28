@@ -27,11 +27,12 @@ typedef enum {
 	DECT_NRF91_CTRL_OP_MDM_DEACTIVATED,
 	DECT_NRF91_CTRL_OP_AUTO_START,
 	DECT_NRF91_CTRL_OP_CLUSTER_START_REQ,
+	DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ,
 	DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP,
 	DECT_NRF91_CTRL_OP_CLUSTER_CH_LOAD_CHANGED,
 	DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY,
-	DECT_NRF91_CTRL_OP_RSSI_START_REQ_WITH_PARAMS,
-	DECT_NRF91_CTRL_OP_RSSI_START_REQ_FROM_SETTINGS,
+	DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD,
+	DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
 	DECT_NRF91_CTRL_OP_MDM_RSSI_RESULT,
 	DECT_NRF91_CTRL_OP_MDM_RSSI_COMPLETE,
 	DECT_NRF91_CTRL_OP_MDM_RSSI_STOPPED,
@@ -158,6 +159,7 @@ int dect_nrf91_ctrl_associate_release_cmd(
 int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params);
 
 int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *params);
+int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params);
 int dect_nrf91_ctrl_cluster_info_req_cmd(void);
 
 int dect_nrf91_ctrl_network_create_req_cmd(void);

@@ -122,6 +122,11 @@ static struct dect_nrf91_ctrl_data {
 	ctrl_ft_cluster_state_t ft_cluster_state;
 	ctrl_ft_network_state_t ft_network_state;
 	ctrl_ft_nw_beacon_state_t ft_nw_beacon_state;
+	uint16_t ft_requested_cluster_channel;
+
+	uint16_t ft_cluster_reconfig_prev_cluster_channel;
+	struct dect_cluster_reconfig_req_params ft_cluster_reconfig_params;
+	bool ft_cluster_reconfig_ongoing;
 
 	ctrl_mdm_activation_state_t mdm_activation_state;
 
@@ -157,6 +162,7 @@ static void dect_nrf91_ctrl_rssi_scan_data_init(bool actual_command)
 static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
 	struct dect_rssi_scan_result_data *new_rssi_data)
 {
+	/* TODO: better to have a list of all channels ? Tee tämä muutenkin uusiksi*/
 	if (!ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored) {
 		goto update_needed;
 	}
@@ -182,7 +188,9 @@ static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
 	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.scan_suitable_percent) {
 		goto update_needed;
 	}
-	if (new_rssi_data->possible_subslot_cnt <
+	if (new_rssi_data->busy_subslot_cnt ==
+	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_subslot_cnt &&
+	    new_rssi_data->possible_subslot_cnt <
 	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.possible_subslot_cnt) {
 		goto update_needed;
 	}
@@ -577,8 +585,38 @@ int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *
 		LOG_ERR("Cluster already started/starting");
 		return -EALREADY;
 	}
+	/* Validate params */
+	if (params->channel != DECT_CLUSTER_CHANNEL_ANY &&
+	    dect_common_utils_channel_is_supported_by_band(
+		set_ptr->net_mgmt_common.band_nbr, params->channel) == false) {
+		LOG_ERR("Channel %d not supported by band %d", params->channel,
+			set_ptr->net_mgmt_common.band_nbr);
+		return -EINVAL;
+	}
+	return dect_nrf91_ctrl_msgq_data_op_add(
+		DECT_NRF91_CTRL_OP_CLUSTER_START_REQ, params,
+		sizeof(struct dect_cluster_start_req_params));
+}
 
-	return dect_nrf91_ctrl_msgq_non_data_op_add(DECT_NRF91_CTRL_OP_CLUSTER_START_REQ);
+int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params)
+{
+	/* Validate params */
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	if (params->channel != DECT_CLUSTER_CHANNEL_ANY &&
+	    dect_common_utils_channel_is_supported_by_band(
+		    set_ptr->net_mgmt_common.band_nbr, params->channel) == false) {
+		LOG_ERR("Channel %d not supported by band %d", params->channel,
+			set_ptr->net_mgmt_common.band_nbr);
+		return -EINVAL;
+	}
+	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
+		LOG_ERR("Cluster not started");
+		return -EINVAL;
+	}
+
+	return dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, params,
+						sizeof(struct dect_cluster_reconfig_req_params));
 }
 
 int dect_nrf91_ctrl_cluster_info_req_cmd(void)
@@ -993,6 +1031,9 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
 			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+			ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+			ctrl_data.ft_cluster_reconfig_params.channel = DECT_CLUSTER_CHANNEL_ANY;
+			ctrl_data.ft_cluster_reconfig_ongoing = false;
 			ctrl_data.configure_params.auto_start = false;
 
 			if (reactivate) {
@@ -1013,8 +1054,35 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 
 			break;
 		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_START_REQ: {
+		case DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ: {
+			struct dect_cluster_reconfig_req_params *params =
+				(struct dect_cluster_reconfig_req_params *)event.data;
+
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+
+			/* Only channel supported currently */
+			ctrl_data.ft_requested_cluster_channel = params->channel;
+			ctrl_data.ft_cluster_reconfig_params = *params;
+
+			ctrl_data.ft_cluster_reconfig_ongoing = true;
+
+			/* Store current channel in case of cluster_reconfig failure */
+			ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
+				ctrl_data.configure_params.channel;
+
+			ctrl_data.configure_params.channel = 0;
+
+			dect_nrf91_ctrl_msgq_non_data_op_add(
+				DECT_NRF91_CTRL_OP_AUTO_START);
+			break;
+		}
+		case DECT_NRF91_CTRL_OP_CLUSTER_START_REQ: {
+			struct dect_cluster_start_req_params *params =
+				(struct dect_cluster_start_req_params *)event.data;
+
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+			ctrl_data.ft_requested_cluster_channel = params->channel;
+
 			dect_nrf91_ctrl_msgq_non_data_op_add(
 				DECT_NRF91_CTRL_OP_AUTO_START);
 			break;
@@ -1028,7 +1096,23 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			};
 			struct dect_network_status_evt network_status_data;
 
+			ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+
 			if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+				if (ctrl_data.ft_cluster_reconfig_ongoing &&
+				    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+					/* Reconfig failure, existing cluster config
+					 * still running
+					 */
+					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
+					ctrl_data.ft_cluster_reconfig_ongoing = false;
+					ctrl_data.ft_requested_cluster_channel =
+						DECT_CLUSTER_CHANNEL_ANY;
+					ctrl_data.configure_params.channel =
+						ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
+					break;
+				}
+
 				network_status_data.network_status = DECT_NETWORK_STATUS_FAILURE;
 				network_status_data.dect_err_cause =
 					dect_nrf91_utils_modem_status_to_net_mgmt_status(
@@ -1050,13 +1134,13 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
 			resp_evt.cluster_channel = ctrl_data.configure_params.channel;
+			ctrl_data.ft_cluster_reconfig_ongoing = false;
 send_events:
 			dect_mgmt_cluster_created_evt(ctrl_data.iface, resp_evt);
 			ctrl_data.configure_params.auto_start =
 				false; /* TODO: is this right if creating nw and going to start
 					* network beacon also?
 					*/
-
 			if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_STARTING) {
 				if (set_ptr->net_mgmt_common.nw_beacon.channel !=
 				    DECT_MAC_NW_BEACON_CHANNEL_NOT_USED) {
@@ -1089,6 +1173,9 @@ send_events:
 				(struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *)
 					event.data;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+			struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
+				&evt_data->rssi_result;
+			struct dect_rssi_scan_result_data rssi_data;
 
 			LOG_INF("Cluster channel load changed: channel %u, busy_percentage %d",
 				evt_data->rssi_result.channel,
@@ -1097,18 +1184,52 @@ send_events:
 			/* TODO: trigger a new channel selection procedure RSSI scan for
 			 * neighbor channels
 			 */
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
-			    (set_ptr->net_mgmt_common.cluster_beacon.channel_loaded_percent &&
-				evt_data->rssi_result.busy_percentage >
-					set_ptr->net_mgmt_common
-						.cluster_beacon.channel_loaded_percent)) {
-				LOG_WRN("Cluster channel load exceeded threshold (%d%%): "
-					"channel %u, "
-					"busy_percentage %d - TODO: channel reselection!!!",
+			if (set_ptr->net_mgmt_common.cluster_beacon.channel_loaded_percent == 0) {
+				/* Channel reselection/reconfigure disabled, no worth to continue */
+				break;
+			}
+			if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
+				/* Cluster not started - cannot reconfigure */
+				break;
+			}
+			int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(mdm_rssi_res,
+										    &rssi_data);
+
+			if (err) {
+				LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
+				break;
+			}
+			uint8_t channel_loaded_percent = 100 - rssi_data.scan_suitable_percent;
+
+			if (channel_loaded_percent > set_ptr->net_mgmt_common
+				.cluster_beacon.channel_loaded_percent) {
+				LOG_WRN("Cluster channel load (%u%%) exceeded threshold (%d%%): "
+					"channel %u",
+					channel_loaded_percent,
 					set_ptr->net_mgmt_common
 						.cluster_beacon.channel_loaded_percent,
-					evt_data->rssi_result.channel,
-					evt_data->rssi_result.busy_percentage);
+					evt_data->rssi_result.channel);
+				if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+					struct dect_nrf91_settings *set_ptr =
+						dect_nrf91_settings_ref_get();
+					struct dect_cluster_reconfig_req_params params = {
+						.channel = DECT_CLUSTER_CHANNEL_ANY,
+						.max_beacon_tx_power_dbm =
+							set_ptr->net_mgmt_common.cluster_beacon
+								.max_beacon_tx_power_dbm,
+						.max_cluster_power_dbm = set_ptr->net_mgmt_common
+							.cluster_beacon.max_cluster_power_dbm,
+						.period = set_ptr->net_mgmt_common
+							.cluster_beacon.period,
+					};
+
+					LOG_INF("FT: starting channel reselection procedure");
+
+					/* Trigger a channel reselection procedure */
+					dect_nrf91_ctrl_msgq_data_op_add(
+						DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, &params,
+						sizeof(struct dect_cluster_reconfig_req_params));
+				}
 			}
 			break;
 		}
@@ -1133,15 +1254,29 @@ send_events:
 				struct nrf_modem_dect_mac_network_scan_params params = {
 					.network_id_filter_mode =
 						NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_NONE,
+					.band = set_ptr->net_mgmt_common.band_nbr,
 					.scan_time = 2200, /* TODO: a config setting for this one?*/
 					.num_channels = 0,
-					.band = set_ptr->net_mgmt_common.band_nbr,
 				};
 
-				LOG_INF("FT device auto start for cluster start: "
-					"starting NW scanning to see where other clusters are");
+				if (ctrl_data.ft_requested_cluster_channel !=
+				    DECT_CLUSTER_CHANNEL_ANY) {
+					params.num_channels = 1;
+					params.channel_list[0] =
+						ctrl_data.ft_requested_cluster_channel;
+				}
 
-				err = nrf_modem_dect_mac_network_scan(&params);
+				if (ctrl_data.ft_cluster_reconfig_ongoing) {
+					/* Do not initiate nw scan if cluster is already running and
+					 * doing reconfig
+					 */
+					err = -EALREADY;
+				} else {
+					LOG_INF("FT device auto start for cluster start: "
+						"starting NW scanning to see where other "
+						"clusters are");
+					err = nrf_modem_dect_mac_network_scan(&params);
+				}
 				if (!err) {
 					ctrl_data.scan_data.on_going = true;
 					ctrl_data.scan_data.scan_result_cb = NULL;
@@ -1150,10 +1285,47 @@ send_events:
 					       sizeof(ctrl_data.scan_data.cluster_channels));
 					ctrl_data.scan_data.current_cluster_channel_index = 0;
 				} else {
-					LOG_WRN("Error initiating NW scan: err %d -"
-						"starting directly RSSI scan", err);
-					dect_nrf91_ctrl_msgq_non_data_op_add(
-						DECT_NRF91_CTRL_OP_RSSI_START_REQ_FROM_SETTINGS);
+					/* As a default RSSI params from settings  */
+					struct nrf_modem_dect_mac_rssi_scan_params params = {
+						.channel_scan_length =
+							set_ptr->net_mgmt_common.rssi_scan
+								.time_per_channel_ms /
+							10,
+						.threshold_min = set_ptr->net_mgmt_common.rssi_scan
+									 .free_threshold_dbm,
+						.threshold_max = set_ptr->net_mgmt_common.rssi_scan
+									 .busy_threshold_dbm,
+						.num_channels = 0,
+						.band = set_ptr->net_mgmt_common.band_nbr,
+					};
+
+					__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
+							DECT_DEVICE_TYPE_FT);
+					if (ctrl_data.ft_requested_cluster_channel !=
+					    DECT_CLUSTER_CHANNEL_ANY) {
+						params.num_channels = 1;
+						params.channel_list[0] =
+							ctrl_data.ft_requested_cluster_channel;
+					}
+					if (ctrl_data.ft_cluster_reconfig_ongoing) {
+						/* Only one frame RSSI measurement if reconfiguring
+						 */
+						params.channel_scan_length = 1;
+					} else {
+						LOG_WRN("Error initiating NW scan: err %d -"
+							"starting directly RSSI scan",
+							err);
+					}
+
+					/* Clear seen cluster channels */
+					memset(ctrl_data.scan_data.cluster_channels, 0,
+					       sizeof(ctrl_data.scan_data.cluster_channels));
+					ctrl_data.scan_data.current_cluster_channel_index = 0;
+
+					dect_nrf91_ctrl_msgq_data_op_add(
+						DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
+						&params,
+						sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
 				}
 			} else {
 				LOG_INF("PT device auto start: starting network scan");
@@ -1185,12 +1357,12 @@ send_events:
 			}
 			break;
 		}
-		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_WITH_PARAMS: {
+		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD: {
 			struct nrf_modem_dect_mac_rssi_scan_params *params =
 				(struct nrf_modem_dect_mac_rssi_scan_params *)event.data;
 			int err;
 
-			LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_WITH_PARAMS: "
+			LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD: "
 				"channel_scan_length %hu, num_channels %hu, band %hhu, "
 				"min_threshold %hhd, max_threshold %hhd",
 				params->channel_scan_length, params->num_channels, params->band,
@@ -1227,46 +1399,55 @@ send_events:
 			break;
 		}
 
-		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_FROM_SETTINGS: {
+		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: {
+			struct nrf_modem_dect_mac_rssi_scan_params *params =
+				(struct nrf_modem_dect_mac_rssi_scan_params *)event.data;
+
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-			LOG_INF("Starting RSSI scanning for set band #%d",
-				set_ptr->net_mgmt_common.band_nbr);
-			struct nrf_modem_dect_mac_rssi_scan_params params = {
-				.channel_scan_length =
-					set_ptr->net_mgmt_common.rssi_scan.time_per_channel_ms / 10,
-				.threshold_min =
-					set_ptr->net_mgmt_common.rssi_scan.free_threshold_dbm,
-				.threshold_max =
-					set_ptr->net_mgmt_common.rssi_scan.busy_threshold_dbm,
-				.num_channels = 0, /* As a default scanning whole band,
-						    * except in EU & in band 1
-						    */
-				.band = set_ptr->net_mgmt_common.band_nbr,
-			};
-			if (dect_common_utils_use_harmonized_std(
-				    set_ptr->net_mgmt_common.band_nbr) == true) {
+			LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: "
+				"channel_scan_length %hu, num_channels %hu, band %hhu, "
+				"min_threshold %hhd, max_threshold %hhd",
+				params->channel_scan_length, params->num_channels, params->band,
+				params->threshold_min, params->threshold_max);
+
+			if (params->num_channels == 0 &&
+			    dect_common_utils_use_harmonized_std(
+				set_ptr->net_mgmt_common.band_nbr) == true) {
 				/* Per harmonized std: only odd number channels at band #1:
 				 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
 				 */
 				bool array_filled = false;
 
-				params.num_channels = DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN;
+				params->num_channels = DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN;
 				array_filled = dect_common_utils_harmonized_band_channel_array_get(
-					set_ptr->net_mgmt_common.band_nbr, params.channel_list,
-					&params.num_channels);
+					set_ptr->net_mgmt_common.band_nbr, params->channel_list,
+					&params->num_channels);
 				if (!array_filled) {
 					LOG_ERR("RSSI scanning start: "
 						"error in channel array filling");
 					break;
 				}
 			}
-			err = nrf_modem_dect_mac_rssi_scan(&params);
+			err = nrf_modem_dect_mac_rssi_scan(params);
 			if (err) {
 				dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
 				LOG_ERR("Enrf_modem_dect_mac_rssi_scan failed: %s (%d)", tmp_str,
 					err);
-				ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+				if (ctrl_data.ft_cluster_reconfig_ongoing &&
+				    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+					/* Reconfig failure, existing cluster config
+					 * still running
+					 */
+					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
+					ctrl_data.configure_params.channel =
+						ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
+					/* TODO send failure event?*/
+				} else {
+					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+				}
+				ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+				ctrl_data.ft_cluster_reconfig_ongoing = false;
 				dect_mgmt_rssi_scan_done_evt(ctrl_data.iface,
 							     DECT_MAC_STATUS_OS_ERROR);
 			} else {
@@ -1274,8 +1455,8 @@ send_events:
 				LOG_INF("RSSI scan started with params: "
 					"channel_scan_length %hu, num_channels %hu, band %hhu, "
 					"min_threshold %hhd, max_threshold %hhd",
-					params.channel_scan_length, params.num_channels,
-					params.band, params.threshold_min, params.threshold_max);
+					params->channel_scan_length, params->num_channels,
+					params->band, params->threshold_min, params->threshold_max);
 			}
 			break;
 		}
@@ -1408,9 +1589,28 @@ send_events:
 					*status);
 
 				if (ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+					if (ctrl_data.ft_cluster_reconfig_ongoing) {
+						/* RSSI failure during reconfig, prev cluster conf
+						 * still running
+						 */
+						ctrl_data.ft_cluster_state =
+							CTRL_FT_CLUSTER_STATE_STARTED;
+						ctrl_data.ft_cluster_reconfig_ongoing = false;
+						ctrl_data.ft_requested_cluster_channel =
+							DECT_CLUSTER_CHANNEL_ANY;
+						ctrl_data.configure_params.channel =
+							ctrl_data
+							.ft_cluster_reconfig_prev_cluster_channel;
+
+						LOG_WRN("RSSI scan failed on reconfig - "
+							"keeping cluster running");
+						break;
+					}
 					/* TODO: check if last best stored could be used? */
 					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
 					ctrl_data.configure_params.channel = 0;
+					ctrl_data.ft_requested_cluster_channel =
+						DECT_CLUSTER_CHANNEL_ANY;
 					dect_mgmt_cluster_created_evt(
 						ctrl_data.iface,
 						(struct dect_cluster_start_resp_evt){
@@ -1439,188 +1639,229 @@ send_events:
 				ctrl_data.rssi_scan_data.cmd_on_going = false;
 				break;
 			}
+			if (!(ctrl_data.configure_params.auto_start ||
+			    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING)) {
+				/* Not auto start or cluster start req - nothing to do here more */
+				break;
 
-			if (ctrl_data.configure_params.auto_start ||
-			    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
-				if (ctrl_data.configure_params.channel == 0) {
-					if (dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_ok(
-					    )) {
-						ctrl_data.configure_params.channel =
-							ctrl_data.rssi_scan_data
-								.rssi_scan_result_last_best.channel;
-					} else {
-						LOG_ERR("No free enough channel found in RSSI scan,"
-							" cannot start cluster");
-						ctrl_data.ft_cluster_state =
-							CTRL_FT_CLUSTER_STATE_NONE;
-						dect_mgmt_cluster_created_evt(
-							ctrl_data.iface,
-							(struct dect_cluster_start_resp_evt){
-								.status =
-								DECT_MAC_STATUS_NO_RESOURCES,
-								.cluster_channel = 0,
-							});
-						ctrl_data.ft_network_state =
-							CTRL_FT_NETWORK_STATE_NONE;
-						dect_mgmt_network_status_evt(
-							ctrl_data.iface,
-							(struct dect_network_status_evt){
-								.network_status =
-									DECT_NETWORK_STATUS_FAILURE,
-								.dect_err_cause =
-								DECT_MAC_STATUS_NO_RESOURCES,
-							});
-					break;
-					}
-				}
+			}
 
-				/* TODO: own op evt for this: */
-				LOG_INF("%s: starting a cluster on a channel %d.",
-					ctrl_data.configure_params.auto_start ? "auto start"
-									      : "cluster_start_req",
-					ctrl_data.configure_params.channel);
-
-				/* Start a cluster in a chosen channel */
-				struct nrf_modem_dect_mac_cluster_config cluster_config = {
-					.flags = {
-							.has_max_tx_power = true,
-							.has_rach_config = true,
-						},
-					.count_to_trigger = NRF_MODEM_DECT_MAC_COUNT_TO_TRIGGER_2,
-					.relative_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
-					.min_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
-					.beacon_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-						set_ptr->net_mgmt_common.cluster_beacon
-							.max_beacon_tx_power_dbm),
-					.cluster_max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-						set_ptr->net_mgmt_common.cluster_beacon
-							.max_cluster_power_dbm),
-					.cluster_beacon_period =
-						set_ptr->net_mgmt_common.cluster_beacon.period,
-					.cluster_channel = ctrl_data.configure_params.channel,
-					.network_id = ctrl_data.configure_params.network_id,
-					.rach_configuration = {
-						 .policy =
-							 NRF_MODEM_DECT_MAC_RACH_CONFIG_POLICY_FILL,
-						 .common = {
-								 .response_window_length = 8,
-								 .max_transmission_length = 8,
-								 .cw_min_sig = 2,
-								 .cw_max_sig = 7,
-							 },
-						 .config = { .fill = {
-									.percentage = 100,
-								}}},
-					.triggers = {
-							.busy_threshold = 20,
-						}
-
-				};
-				struct nrf_modem_dect_mac_association_config ass_config = {
-					.max_num_neighbours =
-						set_ptr->net_mgmt_common.cluster_beacon
-							.max_num_neighbors,
-					.max_num_ft_neighbours = 2,
-					.neighbor_info_triggers = {
-							.inactivity_timer = 10000,
-						},
-					.default_tx_flow_config = {
-						{
-							.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						},
-						{
-							.dlc_service_type =
-								NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						},
-						{
-							.priority = 3,
-							.dlc_service_type =
-								NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						},
-						{
-							.priority = 4,
-							.dlc_service_type =
-								NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						},
-						{
-							.priority = 5,
-							.dlc_service_type =
-								NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						},
-						{
-							.priority = 6,
-							.dlc_service_type =
-								NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-							.num_arq_retx = 2,
-							.dlc_sdu_lifetime =
-							NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-						}},
-				};
-				struct nrf_modem_dect_mac_cluster_configure_params params = {
-					.include_load_info = false,
-					.include_route_info = false,
-					.cluster_period_start_offset = 0,
-					.association_config = &ass_config,
-					.cluster_config = &cluster_config,
-				};
-
-				/* Set our IPv6 address prefix to modem to be passed to children */
-				struct dect_nrf91_ipv6_prefix global_prefix;
-
-				if (dect_nrf91_sink_ipv6_prefix_get(&global_prefix)) {
-					/* Pass prefix to children */
-					__ASSERT_NO_MSG(global_prefix.len == 8);
-					memcpy(&cluster_config.ipv6_config.address,
-					       global_prefix.prefix.s6_addr, global_prefix.len);
-
-					cluster_config.ipv6_config.type =
-						NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
+			if (ctrl_data.configure_params.channel == 0) {
+				if (dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_ok()) {
+					ctrl_data.configure_params.channel =
+						ctrl_data.rssi_scan_data
+							.rssi_scan_result_last_best.channel;
 				} else {
-					/* Using link local (already set to us)*/
-					cluster_config.ipv6_config.type =
-						NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
-					LOG_WRN("%s: no IPv6 prefix to set - using link local only",
-						__func__);
-				}
-
-				err = nrf_modem_dect_mac_cluster_configure(&params);
-				if (err) {
-					LOG_ERR("nrf_modem_dect_mac_cluster_configure returned err "
-						"%d",
-						err);
-					if (ctrl_data.ft_network_state !=
-					    CTRL_FT_NETWORK_STATE_NONE) {
-						ctrl_data.ft_network_state =
-							CTRL_FT_NETWORK_STATE_NONE;
-						dect_mgmt_network_status_evt(
-							ctrl_data.iface,
-							(struct dect_network_status_evt){
-								.network_status =
-									DECT_NETWORK_STATUS_FAILURE,
-								.dect_err_cause =
-									DECT_MAC_STATUS_OS_ERROR,
-								.os_err_cause = err,
-							});
+					if (ctrl_data.ft_cluster_reconfig_ongoing) {
+						/* Reconfig failure, existing cluster config
+						 * still running
+						 */
+						LOG_WRN("No free enough channel found in "
+							"RSSI scan,"
+							" cannot reconfigure cluster");
+						ctrl_data.ft_cluster_reconfig_ongoing =
+							false;
+						ctrl_data.ft_cluster_state =
+							CTRL_FT_CLUSTER_STATE_STARTED;
+						ctrl_data.configure_params.channel =
+						ctrl_data
+						.ft_cluster_reconfig_prev_cluster_channel;
+						break;
 					}
+					LOG_ERR("No free enough channel found in RSSI scan,"
+						" cannot start cluster");
+					ctrl_data.ft_cluster_state =
+						CTRL_FT_CLUSTER_STATE_NONE;
+					dect_mgmt_cluster_created_evt(
+						ctrl_data.iface,
+						(struct dect_cluster_start_resp_evt){
+							.status =
+							DECT_MAC_STATUS_NO_RESOURCES,
+							.cluster_channel = 0,
+						});
+					ctrl_data.ft_network_state =
+						CTRL_FT_NETWORK_STATE_NONE;
+					ctrl_data.ft_requested_cluster_channel =
+						DECT_CLUSTER_CHANNEL_ANY;
+					dect_mgmt_network_status_evt(
+						ctrl_data.iface,
+						(struct dect_network_status_evt){
+							.network_status =
+								DECT_NETWORK_STATUS_FAILURE,
+							.dect_err_cause =
+							DECT_MAC_STATUS_NO_RESOURCES,
+						});
+					break;
 				}
 			}
-			break;
+			/* TODO: own op evt for this: */
+			LOG_INF("%s: starting a cluster on a channel %d.",
+				ctrl_data.configure_params.auto_start ? "auto start"
+								      : "cluster_start_req",
+				ctrl_data.configure_params.channel);
+			/* Start a cluster in a chosen channel */
+			struct nrf_modem_dect_mac_cluster_config cluster_config = {
+				.flags = {
+						.has_max_tx_power = true,
+						.has_rach_config = true,
+					},
+				.count_to_trigger = NRF_MODEM_DECT_MAC_COUNT_TO_TRIGGER_2,
+				.relative_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
+				.min_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
+				.beacon_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
+					set_ptr->net_mgmt_common.cluster_beacon
+						.max_beacon_tx_power_dbm),
+				.cluster_max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
+					set_ptr->net_mgmt_common.cluster_beacon
+						.max_cluster_power_dbm),
+				.cluster_beacon_period =
+					set_ptr->net_mgmt_common.cluster_beacon.period,
+				.cluster_channel = ctrl_data.configure_params.channel,
+				.network_id = ctrl_data.configure_params.network_id,
+				.rach_configuration = {
+					 .policy =
+						 NRF_MODEM_DECT_MAC_RACH_CONFIG_POLICY_FILL,
+					 .common = {
+							 .response_window_length = 8,
+							 .max_transmission_length = 8,
+							 .cw_min_sig = 2,
+							 .cw_max_sig = 7,
+						 },
+					 .config = { .fill = {
+								.percentage = 100,
+							}}},
+				.triggers = {
+						.busy_threshold = 20,
+					}
+			};
+			struct nrf_modem_dect_mac_association_config ass_config = {
+				.max_num_neighbours =
+					set_ptr->net_mgmt_common.cluster_beacon
+						.max_num_neighbors,
+				.max_num_ft_neighbours = 2,
+				.neighbor_info_triggers = {
+						.inactivity_timer = 10000,
+					},
+				.default_tx_flow_config = {
+					{
+						.dlc_service_type =
+						NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					},
+					{
+						.dlc_service_type =
+							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					},
+					{
+						.priority = 3,
+						.dlc_service_type =
+							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					},
+					{
+						.priority = 4,
+						.dlc_service_type =
+							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					},
+					{
+						.priority = 5,
+						.dlc_service_type =
+							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					},
+					{
+						.priority = 6,
+						.dlc_service_type =
+							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+						.num_arq_retx = 2,
+						.dlc_sdu_lifetime =
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+					}},
+			};
+			struct nrf_modem_dect_mac_cluster_configure_params params = {
+				.include_load_info = false,
+				.include_route_info = false,
+				.cluster_period_start_offset = 0,
+				.association_config = &ass_config,
+				.cluster_config = &cluster_config,
+			};
+			/* Set our IPv6 address prefix to modem to be passed to children */
+			struct dect_nrf91_ipv6_prefix global_prefix;
+
+			if (dect_nrf91_sink_ipv6_prefix_get(&global_prefix)) {
+				/* Pass prefix to children */
+				__ASSERT_NO_MSG(global_prefix.len == 8);
+				memcpy(&cluster_config.ipv6_config.address,
+				       global_prefix.prefix.s6_addr, global_prefix.len);
+				cluster_config.ipv6_config.type =
+					NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
+			} else {
+				/* Using link local (already set to us)*/
+				cluster_config.ipv6_config.type =
+					NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
+				LOG_WRN("%s: no IPv6 prefix to set - using link local only",
+					__func__);
+			}
+			if (ctrl_data.ft_cluster_reconfig_ongoing) {
+				/* Use reconfigure params for certain cluster configs */
+				cluster_config.beacon_tx_power =
+					dect_nrp_utils_dbm_to_phy_tx_power(
+						ctrl_data.ft_cluster_reconfig_params
+							.max_beacon_tx_power_dbm);
+				cluster_config.cluster_max_tx_power =
+					dect_nrp_utils_dbm_to_phy_tx_power(
+						ctrl_data.ft_cluster_reconfig_params
+							.max_cluster_power_dbm);
+				cluster_config.cluster_beacon_period =
+					ctrl_data.ft_cluster_reconfig_params.period;
+			}
+			err = nrf_modem_dect_mac_cluster_configure(&params);
+			if (err) {
+				LOG_ERR("nrf_modem_dect_mac_cluster_configure returned err "
+					"%d",
+					err);
+				if (ctrl_data.ft_cluster_reconfig_ongoing &&
+				    ctrl_data.ft_cluster_state ==
+					CTRL_FT_CLUSTER_STATE_STARTING) {
+					/* Reconfig failure, existing cluster config
+					 * still running
+					 */
+					ctrl_data.ft_cluster_state =
+						CTRL_FT_CLUSTER_STATE_STARTED;
+					ctrl_data.configure_params.channel =
+						ctrl_data
+						.ft_cluster_reconfig_prev_cluster_channel;
+				} else if (ctrl_data.ft_network_state !=
+				    CTRL_FT_NETWORK_STATE_NONE) {
+					ctrl_data.ft_network_state =
+						CTRL_FT_NETWORK_STATE_NONE;
+					dect_mgmt_network_status_evt(
+						ctrl_data.iface,
+						(struct dect_network_status_evt){
+							.network_status =
+								DECT_NETWORK_STATUS_FAILURE,
+							.dect_err_cause =
+								DECT_MAC_STATUS_OS_ERROR,
+							.os_err_cause = err,
+						});
+				}
+				ctrl_data.ft_cluster_reconfig_ongoing = false;
+				ctrl_data.ft_requested_cluster_channel =
+					DECT_CLUSTER_CHANNEL_ANY;
+			}
+		break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_RSSI_STOPPED: {
 			enum nrf_modem_dect_mac_err *status =
@@ -1977,11 +2218,36 @@ send_events:
 					LOG_WRN("No cluster found with NW scan");
 				}
 			} else {
+				struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+				/* As a default RSSI params from settings  */
+				struct nrf_modem_dect_mac_rssi_scan_params params = {
+					.channel_scan_length =
+						set_ptr->net_mgmt_common.rssi_scan
+							.time_per_channel_ms / 10,
+					.threshold_min =
+						set_ptr->net_mgmt_common.rssi_scan
+							.free_threshold_dbm,
+					.threshold_max =
+						set_ptr->net_mgmt_common.rssi_scan
+							.busy_threshold_dbm,
+					.num_channels = 0,
+					.band = set_ptr->net_mgmt_common.band_nbr,
+				};
+
 				__ASSERT_NO_MSG(
 					set_ptr->net_mgmt_common.device_type ==
 						DECT_DEVICE_TYPE_FT);
-				dect_nrf91_ctrl_msgq_non_data_op_add(
-					DECT_NRF91_CTRL_OP_RSSI_START_REQ_FROM_SETTINGS);
+				if (ctrl_data.ft_requested_cluster_channel !=
+					DECT_CLUSTER_CHANNEL_ANY) {
+					params.num_channels = 1;
+					params.channel_list[0] =
+						ctrl_data.ft_requested_cluster_channel;
+				}
+
+				dect_nrf91_ctrl_msgq_data_op_add(
+					DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
+					&params,
+					sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
 			}
 			break;
 		}
@@ -2018,6 +2284,7 @@ send_events:
 					LOG_WRN("No cluster found with Cluster beacon receive");
 				}
 			}
+			/* TODO some event to detect channel & other changes */
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_INFO: {

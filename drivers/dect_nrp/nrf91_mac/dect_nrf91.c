@@ -616,7 +616,7 @@ static int dect_nrf91_driver_rssi_scan(const struct device *dev,
 		scan_params.channel_list[i] = params->channel_list[i];
 	}
 
-	err = dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_RSSI_START_REQ_WITH_PARAMS,
+	err = dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD,
 					       &scan_params,
 					       sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
 	if (err) {
@@ -735,6 +735,12 @@ int dect_nrf91_driver_cluster_start_req(const struct device *dev,
 					struct dect_cluster_start_req_params *params)
 {
 	return dect_nrf91_ctrl_cluster_start_req_cmd(params);
+}
+
+int dect_nrf91_driver_cluster_reconfig_req(const struct device *dev,
+					   struct dect_cluster_reconfig_req_params *params)
+{
+	return dect_nrf91_ctrl_cluster_reconfig_req_cmd(params);
 }
 
 /**************************************************************************************************/
@@ -1096,6 +1102,7 @@ static const struct dect_nrp_hal_api dect_nrf91_api = {
 	.associate_req = dect_nrf91_driver_associate_req,
 	.associate_release = dect_nrf91_driver_associate_release,
 	.cluster_start_req = dect_nrf91_driver_cluster_start_req,
+	.cluster_reconfig_req = dect_nrf91_driver_cluster_reconfig_req,
 	.nw_beacon_start_req = dect_nrf91_driver_nw_beacon_start_req,
 	.nw_beacon_stop_req = dect_nrf91_driver_nw_beacon_stop_req,
 	.settings_read = dect_nrf91_driver_settings_read,
