@@ -847,9 +847,9 @@ static void dect_mac_ctrl_trigger_association(void)
 			.flow_id = 1,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
 			.num_arq_retx = 2,
-			.dlc_sdu_lifetime = 255,
+			.dlc_sdu_lifetime = NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
 		},
-		{
+		{ /* TODO: onko turhia? */
 			.flow_id = 2,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
 			.num_arq_retx = 2,
@@ -1748,7 +1748,7 @@ send_events:
 						NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
 						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+						NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
 					},
 					{
 						.dlc_service_type =
@@ -2588,7 +2588,7 @@ send_events:
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("DLC data response failed to rd id %d with err %s (%d), "
+				LOG_ERR("DLC data TX response failed to rd id %d with err %s (%d), "
 					"transaction id %d",
 					evt_data->long_rd_id, tmp_str, evt_data->status,
 					evt_data->acked_data[0].transaction_id);
