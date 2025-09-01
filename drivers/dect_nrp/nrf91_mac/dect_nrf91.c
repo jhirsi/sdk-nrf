@@ -1068,7 +1068,7 @@ static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
 				}
 			}
 		}
-		k_sleep(K_MSEC(1000)); /* Wait for a while that all association are released */
+		k_sleep(K_MSEC(2000)); /* Wait for a while that all association are released */
 		return dect_nrf91_ctrl_network_remove_req_cmd();
 	} else {
 		return -ENOTSUP;

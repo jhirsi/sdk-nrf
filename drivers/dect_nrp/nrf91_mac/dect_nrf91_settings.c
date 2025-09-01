@@ -25,17 +25,17 @@ static const struct dect_settings_association association_data = {
 };
 
 static const struct dect_settings_network_beacon nw_beacon_data = {
-	.period = DECT_MAC_NW_BEACON_PERIOD_2000MS,
+	.beacon_period = DECT_MAC_NW_BEACON_PERIOD_2000MS,
 	.channel = DECT_MAC_NW_BEACON_CHANNEL_NOT_USED,
 };
 
-static const struct dect_settings_cluster_beacon cluster_beacon_data = {
-	.period = DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS,
+static const struct dect_settings_cluster cluster_beacon_data = {
+	.beacon_period = DECT_MAC_CLUSTER_BEACON_PERIOD_2000MS,
 	.max_beacon_tx_power_dbm = 4,
 	.max_cluster_power_dbm = 0,
 	.max_num_neighbors = CONFIG_DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT,
 	.channel_loaded_percent = 80,
-	/* TODO: channel? */
+	.neighbor_inactivity_disconnect_timer_ms = 1800000, /* 30 min */
 };
 
 static const struct dect_settings_auto_start auto_start_data = {
@@ -68,7 +68,7 @@ static const struct dect_settings common_settings_data = {
 	.tx.max_power_dbm = 0,
 	.tx.max_mcs = 4,
 	.rssi_scan = rssi_scan_data,
-	.cluster_beacon = cluster_beacon_data,
+	.cluster = cluster_beacon_data,
 	.nw_beacon = nw_beacon_data,
 	.association = association_data,
 	.sec_conf = security_configuration_data,
@@ -157,19 +157,21 @@ dect_nrf91_settings_write(struct dect_nrf91_settings *dect_sett_in)
 		current_sett->rssi_scan.busy_threshold_dbm = new_sett->rssi_scan.busy_threshold_dbm;
 		current_sett->rssi_scan.free_threshold_dbm = new_sett->rssi_scan.free_threshold_dbm;
 	}
-	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON) {
-		current_sett->cluster_beacon.period = new_sett->cluster_beacon.period;
-		current_sett->cluster_beacon.max_cluster_power_dbm =
-			new_sett->cluster_beacon.max_cluster_power_dbm;
-		current_sett->cluster_beacon.max_beacon_tx_power_dbm =
-			new_sett->cluster_beacon.max_beacon_tx_power_dbm;
-		current_sett->cluster_beacon.max_num_neighbors =
-			new_sett->cluster_beacon.max_num_neighbors;
-		current_sett->cluster_beacon.channel_loaded_percent =
-			new_sett->cluster_beacon.channel_loaded_percent;
+	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_CLUSTER) {
+		current_sett->cluster.beacon_period = new_sett->cluster.beacon_period;
+		current_sett->cluster.max_cluster_power_dbm =
+			new_sett->cluster.max_cluster_power_dbm;
+		current_sett->cluster.max_beacon_tx_power_dbm =
+			new_sett->cluster.max_beacon_tx_power_dbm;
+		current_sett->cluster.max_num_neighbors =
+			new_sett->cluster.max_num_neighbors;
+		current_sett->cluster.channel_loaded_percent =
+			new_sett->cluster.channel_loaded_percent;
+		current_sett->cluster.neighbor_inactivity_disconnect_timer_ms =
+			new_sett->cluster.neighbor_inactivity_disconnect_timer_ms;
 	}
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_NW_BEACON) {
-		current_sett->nw_beacon.period = new_sett->nw_beacon.period;
+		current_sett->nw_beacon.beacon_period = new_sett->nw_beacon.beacon_period;
 		current_sett->nw_beacon.channel = new_sett->nw_beacon.channel;
 	}
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION) {

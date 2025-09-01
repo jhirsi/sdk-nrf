@@ -1184,7 +1184,7 @@ send_events:
 			/* TODO: trigger a new channel selection procedure RSSI scan for
 			 * neighbor channels
 			 */
-			if (set_ptr->net_mgmt_common.cluster_beacon.channel_loaded_percent == 0) {
+			if (set_ptr->net_mgmt_common.cluster.channel_loaded_percent == 0) {
 				/* Channel reselection/reconfigure disabled, no worth to continue */
 				break;
 			}
@@ -1202,12 +1202,12 @@ send_events:
 			uint8_t channel_loaded_percent = 100 - rssi_data.scan_suitable_percent;
 
 			if (channel_loaded_percent > set_ptr->net_mgmt_common
-				.cluster_beacon.channel_loaded_percent) {
+				.cluster.channel_loaded_percent) {
 				LOG_WRN("Cluster channel load (%u%%) exceeded threshold (%d%%): "
 					"channel %u",
 					channel_loaded_percent,
 					set_ptr->net_mgmt_common
-						.cluster_beacon.channel_loaded_percent,
+						.cluster.channel_loaded_percent,
 					evt_data->rssi_result.channel);
 				if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
 					struct dect_nrf91_settings *set_ptr =
@@ -1215,12 +1215,12 @@ send_events:
 					struct dect_cluster_reconfig_req_params params = {
 						.channel = DECT_CLUSTER_CHANNEL_ANY,
 						.max_beacon_tx_power_dbm =
-							set_ptr->net_mgmt_common.cluster_beacon
+							set_ptr->net_mgmt_common.cluster
 								.max_beacon_tx_power_dbm,
 						.max_cluster_power_dbm = set_ptr->net_mgmt_common
-							.cluster_beacon.max_cluster_power_dbm,
+							.cluster.max_cluster_power_dbm,
 						.period = set_ptr->net_mgmt_common
-							.cluster_beacon.period,
+							.cluster.beacon_period,
 					};
 
 					LOG_INF("FT: starting channel reselection procedure");
@@ -1237,13 +1237,26 @@ send_events:
 			struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *evt_data =
 				(struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *)
 					event.data;
+			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 			LOG_INF("Neighbor inactivity: long_rd_id %u (0x%X)", evt_data->long_rd_id,
 				evt_data->long_rd_id);
 
-			/* TODO? FT: if child has been too long as inactive -> drop it?
-			 * Or just count on paging failure as currently
+			/* If inactivity timer is supported and child has been too long as inactive
+			 * -> drop it
 			 */
+			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
+			    set_ptr->net_mgmt_common.cluster
+				.neighbor_inactivity_disconnect_timer_ms) {
+				LOG_WRN("Neighbor inactive for too long - "
+					"releasing association: long_rd_id %u (0x%X)",
+					evt_data->long_rd_id, evt_data->long_rd_id);
+
+				/* Release association for this child neighbor */
+				dect_nrf91_ctrl_associate_release_cmd(
+					evt_data->long_rd_id,
+					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
+			}
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_AUTO_START: {
@@ -1709,13 +1722,11 @@ send_events:
 				.relative_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
 				.min_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
 				.beacon_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-					set_ptr->net_mgmt_common.cluster_beacon
-						.max_beacon_tx_power_dbm),
+					set_ptr->net_mgmt_common.cluster.max_beacon_tx_power_dbm),
 				.cluster_max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-					set_ptr->net_mgmt_common.cluster_beacon
-						.max_cluster_power_dbm),
+					set_ptr->net_mgmt_common.cluster.max_cluster_power_dbm),
 				.cluster_beacon_period =
-					set_ptr->net_mgmt_common.cluster_beacon.period,
+					set_ptr->net_mgmt_common.cluster.beacon_period,
 				.cluster_channel = ctrl_data.configure_params.channel,
 				.network_id = ctrl_data.configure_params.network_id,
 				.rach_configuration = {
@@ -1736,11 +1747,12 @@ send_events:
 			};
 			struct nrf_modem_dect_mac_association_config ass_config = {
 				.max_num_neighbours =
-					set_ptr->net_mgmt_common.cluster_beacon
-						.max_num_neighbors,
+					set_ptr->net_mgmt_common.cluster.max_num_neighbors,
 				.max_num_ft_neighbours = 2,
 				.neighbor_info_triggers = {
-						.inactivity_timer = 10000,
+						.inactivity_timer = set_ptr->net_mgmt_common
+							.cluster
+							.neighbor_inactivity_disconnect_timer_ms,
 					},
 				.default_tx_flow_config = {
 					{
@@ -1883,7 +1895,8 @@ send_events:
 			struct nrf_modem_dect_mac_network_beacon_configure_params beacon_params = {
 				.channel = params->channel,
 				.num_additional_channels = 0,
-				.nw_beacon_period = set_ptr->net_mgmt_common.nw_beacon.period,
+				.nw_beacon_period = set_ptr->net_mgmt_common
+							.nw_beacon.beacon_period,
 			};
 
 			beacon_params.num_additional_channels = params->additional_ch_count;
@@ -2062,6 +2075,7 @@ send_events:
 				     DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
 			     set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
 				     params->transmitter_long_rd_id)) {
+				/* TODO check signal threshold & other cluster selection reqs */
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
 				ctrl_data.ass_config.network_id = params->network_id;
