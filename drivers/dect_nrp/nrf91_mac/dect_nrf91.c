@@ -891,8 +891,14 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 
 		ret_status = dect_nrf91_settings_write(&settings);
 	}
-	if (ret_status.status == 0 && ret_status.reactivate) {
-		if (dect_nrf91_ctrl_mdm_reactivate()) {
+	if (ret_status.status == 0) {
+		struct dect_nrf91_settings *current_settings = dect_nrf91_settings_ref_get();
+
+		/* Inform L2 about new settings */
+		dect_net_l2_settings_changed(
+			dect_nrf91_mac_dev_context_data.iface,
+			&current_settings->net_mgmt_common);
+		if (ret_status.reactivate && dect_nrf91_ctrl_mdm_reactivate()) {
 			LOG_INF("Couldn't reconfigure/activate modem to apply new settings - "
 				"reactivate is needed");
 		}
