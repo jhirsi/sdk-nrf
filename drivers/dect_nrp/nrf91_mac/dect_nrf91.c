@@ -221,7 +221,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 		LOG_ERR("%s: no association data", (__func__));
 		return false;
 	}
-	/* Add child as a neigbor, both local and global */
+	/* Add child as a neighbor, both local and global */
 	if (dect_nrf91_sink_ipv6_prefix_get(&sink_global_prefix)) {
 		memcpy(&prefix, sink_global_prefix.prefix.s6_addr, sink_global_prefix.len);
 
@@ -244,7 +244,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 			added = true;
 			ass_list_item->local_ipv6_addr = child_addr;
 			LOG_INF("(%s): child (long rd id %d) local addr %s (link addr %s) added "
-				"as a neigbor to dect iface",
+				"as a neighbor to dect iface",
 				(__func__), ass_list_item->target_long_rd_id,
 				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
 				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
@@ -255,7 +255,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 			prefix, set_ptr->net_mgmt_common.identities.transmitter_long_rd_id,
 			ass_list_item->target_long_rd_id, &child_addr);
 		if (child_addr_generated) {
-			/* global: add a child as a neigbor to dect iface */
+			/* global: add a child as a neighbor to dect iface */
 			if (!net_ipv6_nbr_add(iface, &child_addr, net_if_get_link_addr(iface),
 					      false, NET_IPV6_NBR_STATE_REACHABLE)) {
 				LOG_WRN("(%s): global: Cannot add child (long rd id %d) as a nbr "
@@ -266,7 +266,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 				ass_list_item->global_ipv6_addr = child_addr;
 				ass_list_item->global_ipv6_addr_set = true;
 				LOG_INF("(%s): child (long rd id %d) global addr %s (link addr %s) "
-					"added as a neigbor to dect iface",
+					"added as a neighbor to dect iface",
 					(__func__), ass_list_item->target_long_rd_id,
 					net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr),
 					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
@@ -361,8 +361,6 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 	}
 	struct in6_addr global_addr = {};
 	struct in6_addr prefix_local = {};
-	struct in6_addr parent_addr = {};
-	bool parent_addr_generated = false;
 	bool add_global = false;
 
 	UNALIGNED_PUT(htonl(0xfe800000), &prefix_local.s6_addr32[0]);
@@ -403,18 +401,23 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 		}
 	}
 
-	/* Add local addr as a neigbor and a router */
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	bool parent_addr_generated;
+	struct in6_addr parent_addr = {};
+
+	/* Add local addr as a neighbor and a router */
 	parent_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
 		prefix_local, ass_list_item->target_long_rd_id, ass_list_item->target_long_rd_id,
 		&parent_addr);
 	if (parent_addr_generated) {
-		/* local: add a parent as a neigbor to dect iface */
+		/* local: add a parent as a neighbor to dect iface */
 		if (!net_ipv6_nbr_add(iface, &parent_addr, net_if_get_link_addr(iface), false,
 				      NET_IPV6_NBR_STATE_REACHABLE)) {
-			LOG_ERR("(%s): local: cannot add child as a nbr to dect iface", (__func__));
+			LOG_ERR("(%s): cannot add parents local addr as nbr to dect iface",
+				(__func__));
 		} else {
 			ass_list_item->local_ipv6_addr = parent_addr;
-			LOG_INF("(%s): local addr %s (link addr %s) added as a neigbor to dect "
+			LOG_INF("(%s): local addr %s (link addr %s) added as a neighbor to dect "
 				"iface",
 				(__func__), net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
 				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
@@ -426,14 +429,14 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 				global_addr, ass_list_item->target_long_rd_id,
 				ass_list_item->target_long_rd_id, &parent_addr);
 		if (parent_addr_generated) {
-			/* global: add a parent as a neigbor to dect iface */
+			/* global: add a parent as a neighbor to dect iface */
 			if (!net_ipv6_nbr_add(iface, &parent_addr, net_if_get_link_addr(iface),
 					      true, NET_IPV6_NBR_STATE_REACHABLE)) {
-				LOG_ERR("(%s): local: cannot add parent as a nbr to dect iface",
+				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
 					(__func__));
 			} else {
 				LOG_INF("(%s): parent global addr %s (link addr %s) added as "
-					"a neigbor to dect iface",
+					"a neighbor to dect iface",
 					(__func__),
 					net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
 					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
@@ -442,6 +445,7 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 			ass_list_item->global_ipv6_addr_set = true;
 		}
 	}
+#endif /* CONFIG_NET_IPV6_NBR_CACHE */
 }
 /**************************************************************************************************/
 
@@ -1182,7 +1186,7 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 		goto association_release;
 	}
 
-	/* Add child as a neigbor for a dect iface */
+	/* Add child as a neighbor for a dect iface */
 	if (!dect_nrf91_child_association_list_nbr_add(association_list_item)) {
 		LOG_WRN("Cannot add child (long rd id %d) to neighbor list - continue",
 			association_list_item->target_long_rd_id);
