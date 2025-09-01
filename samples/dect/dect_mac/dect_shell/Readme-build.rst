@@ -100,6 +100,13 @@ https://docs.nordicsemi.com/bundle/ncs-latest/page/nrf/samples/cellular/nrf_clou
 
 Certs creation by using default approach with device uuid: see Readme-certs.txt for internal scripts.
 
+.. important::
+   Connecting to nRF Cloud using DECT NR+ currently requires that device credentials are used insecurely.
+
+   The provided overlays for DECT NR+ connectivity use the :ref:`TLS Credentials Subsystem <zephyr:sockets_tls_credentials_subsys>` (with the :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_VOLATILE`) to store credentials when not in use
+   and settings subsystem to store certs in NVS without secure storage. Using of these is not recommended in production.
+   :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_PROTECTED_STORAGE` would be more secure but private key still has to be loaded into unprotected memory during TLS connections.
+
 MQTT
 ----
 
