@@ -595,7 +595,7 @@ enum dect_settings_cmd_params_write_scope {
 	DECT_SETTINGS_WRITE_SCOPE_POWER_SAVE = 0x0020,
 	DECT_SETTINGS_WRITE_SCOPE_BAND_NBR = 0x0040,
 	DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN = 0x0080,
-	DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON = 0x0100,
+	DECT_SETTINGS_WRITE_SCOPE_CLUSTER = 0x0100,
 	DECT_SETTINGS_WRITE_SCOPE_NW_BEACON = 0x0200,
 	DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION = 0x0400,
 	DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN = 0x0800,
@@ -611,23 +611,32 @@ struct dect_settings_cmd_params {
 
 #define DECT_MAC_NW_BEACON_CHANNEL_NOT_USED UINT16_MAX
 
-struct dect_settings_cluster_beacon {
+/** FT device: cluster settings */
+struct dect_settings_cluster {
+	/** TX power used for cluster and network beacon transmission */
 	int8_t max_beacon_tx_power_dbm;
+	/** Cluster Max TX power */
 	int8_t max_cluster_power_dbm;
-	enum dect_cluster_beacon_period period;
+	/** Cluster beacon send periodicity */
+	enum dect_cluster_beacon_period beacon_period;
+	/** Maximum number of associations to accept. */
 	uint16_t max_num_neighbors;
+	/** Neighbor inactivity timer that triggers association releasing.
+	 *  Time in milliseconds, Use 0 to disable timer.
+	 */
+	uint32_t neighbor_inactivity_disconnect_timer_ms;
 
-	/** FT: Threshold when an operating channel load (=busy percentage) is so high that
-	 *      the RD should start Operating Channel(s) and Subslot(s) selection.
-	 *      Setting to zero disables the feature and the RD will not perform any
-	 *      channel reselection automatically.
+	/** Threshold when an operating channel load (=busy percentage) is so high that
+	 *  the RD should start Operating Channel(s) and Subslot(s) selection.
+	 *  Setting to zero disables the feature and the RD will not perform any
+	 *  channel reselection automatically.
 	 */
 	uint8_t channel_loaded_percent;
 };
 
 struct dect_settings_network_beacon {
 	uint16_t channel;
-	enum dect_nw_beacon_period period;
+	enum dect_nw_beacon_period beacon_period;
 };
 
 struct dect_settings_association {
@@ -740,8 +749,8 @@ struct dect_settings {
 	/** RSSI scan */
 	struct dect_settings_rssi_scan rssi_scan;
 
-	/** Cluster beacon settings */
-	struct dect_settings_cluster_beacon cluster_beacon;
+	/** Cluster settings */
+	struct dect_settings_cluster cluster;
 
 	/** Network beacon settings */
 	struct dect_settings_network_beacon nw_beacon;

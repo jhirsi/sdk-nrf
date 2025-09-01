@@ -404,17 +404,6 @@ void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settin
 	net_if_flag_set(iface, NET_IF_IPV6);
 	net_if_flag_set(iface, NET_IF_IPV6_NO_ND);
 	net_if_dormant_on(iface);
-#if RM_JH
-	/* Allocate room for children */
-	child_associations = k_calloc(initial_settings->cluster_beacon.max_num_neighbors,
-				      sizeof(struct dect_net_l2_association_data));
-	if (!child_associations) {
-		LOG_ERR("%s: cannot allocate child associations", (__func__));
-		LOG_WRN("Cannot continue, no memory - "
-			"reduce amount of cluster neigbors and reboot");
-	}
-#endif
-	/* Note: TODO? these are update only after a bootup! */
 	ctx->network_id = initial_settings->identities.network_id;
 	ctx->transmitter_long_rd_id = initial_settings->identities.transmitter_long_rd_id;
 	ctx->device_type = initial_settings->device_type;

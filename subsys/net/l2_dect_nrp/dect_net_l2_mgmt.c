@@ -346,7 +346,7 @@ static int dect_mgmt_settings_write(uint32_t mgmt_request, struct net_if *iface,
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_POWER_SAVE) ||
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_BAND_NBR) ||
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN) ||
-	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_CLUSTER_BEACON) ||
+	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_CLUSTER) ||
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_NW_BEACON) ||
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION) ||
 	      (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN) ||
