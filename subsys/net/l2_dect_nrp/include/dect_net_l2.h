@@ -984,6 +984,14 @@ NET_L2_DECLARE_PUBLIC(DECT_L2);
 void dect_net_l2_init(struct net_if *iface, struct dect_settings *driver_initial_settings);
 
 /**
+ * @brief Inform L2 that settings have been changed.
+ *
+ * @param iface Network interface
+ */
+void dect_net_l2_settings_changed(
+	struct net_if *iface, struct dect_settings *driver_current_settings);
+
+/**
  * @brief Inform L2 that association with a parent has been created. PT device.
  *
  * @param iface Network interface

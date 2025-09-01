@@ -584,3 +584,14 @@ void dect_net_l2_association_removed(
 		}
 	}
 }
+
+void dect_net_l2_settings_changed(
+	struct net_if *iface, struct dect_settings *driver_current_settings)
+{
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+
+	/* Update needed settings in our side to context */
+	ctx->network_id = driver_current_settings->identities.network_id;
+	ctx->transmitter_long_rd_id = driver_current_settings->identities.transmitter_long_rd_id;
+	ctx->device_type = driver_current_settings->device_type;
+}
