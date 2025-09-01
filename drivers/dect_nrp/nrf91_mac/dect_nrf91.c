@@ -994,7 +994,8 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 			}
 			ret = 0;
 		} else {
-			LOG_ERR("Error sending packet: %d, retries %d", ret, retry_count);
+			LOG_ERR("Error (%d) when sending packet to rd id %d: retries %d",
+				ret, target_long_rd_id, retry_count);
 		}
 	}
 	k_mutex_unlock(&send_buf_lock);
