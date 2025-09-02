@@ -645,6 +645,11 @@ struct dect_settings_association {
 	 * triggering procedures for a release of association.
 	 */
 	uint8_t max_beacon_rx_failures;
+
+	/** Minimum RX sensitivity.
+	 *  MIN_SENSITIVITY_LEVEL per MAC spec.
+	 */
+	int8_t min_sensitivity_dbm;
 };
 
 struct dect_settings_auto_start {
@@ -653,8 +658,11 @@ struct dect_settings_auto_start {
 
 #define DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY 0
 struct dect_settings_network_join {
+/* TODO? to be moved to dect_settings_association ?*/
+
 	/** Target FT Long Radio Device ID */
 	uint32_t target_ft_long_rd_id;
+
 };
 
 struct dect_settings_rssi_scan {
