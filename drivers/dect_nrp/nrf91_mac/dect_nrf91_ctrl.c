@@ -82,14 +82,20 @@ struct dect_nrf91_ctrl_rssi_scan_data {
 };
 
 #define DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS 30
+struct dect_nrf91_ctrl_cluster_channel_list_item {
+	uint32_t long_rd_id;
+	uint16_t channel;
+	int8_t rssi_2;
+
+};
+
 struct dect_nrf91_ctrl_scan_data {
 	bool on_going;
 
 	/* Storage for channels where we have seen cluster */
-	struct {
-		uint16_t channel;
-		int8_t rssi_2;
-	} cluster_channels[DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS];
+	struct dect_nrf91_ctrl_cluster_channel_list_item
+		cluster_channels[
+			DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS];
 	uint8_t current_cluster_channel_index;
 
 	dect_scan_result_cb_t scan_result_cb;
@@ -230,6 +236,45 @@ static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_ok(void)
 
 /**************************************************************************************************/
 
+static bool dect_nrf91_ctrl_cluster_channels_list_channel_exists(uint16_t channel)
+{
+	for (int i = 0; i < DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS; i++) {
+		if (ctrl_data.scan_data.cluster_channels[i].channel == channel) {
+			return true;
+		}
+	}
+	return false;
+}
+
+static bool dect_nrf91_ctrl_cluster_channels_list_best_channel_get(
+	struct dect_nrf91_ctrl_cluster_channel_list_item *best_channel_data_out)
+{
+	if (ctrl_data.scan_data.current_cluster_channel_index == 0 &&
+	    ctrl_data.scan_data.cluster_channels[0].channel == 0) {
+		LOG_WRN("No cluster channels stored");
+		return false;
+	}
+	int8_t best_rssi = ctrl_data.scan_data.cluster_channels[0].rssi_2;
+	uint16_t best_channel = ctrl_data.scan_data.cluster_channels[0].channel;
+	uint32_t best_long_rd_id = ctrl_data.scan_data.cluster_channels[0].long_rd_id;
+
+	for (int i = 1; i < ctrl_data.scan_data.current_cluster_channel_index; i++) {
+		if (ctrl_data.scan_data.cluster_channels[i].rssi_2 > best_rssi) {
+			best_rssi = ctrl_data.scan_data.cluster_channels[i].rssi_2;
+			best_channel = ctrl_data.scan_data.cluster_channels[i].channel;
+			best_long_rd_id = ctrl_data.scan_data.cluster_channels[i].long_rd_id;
+		}
+	}
+	best_channel_data_out->rssi_2 = best_rssi;
+	best_channel_data_out->channel = best_channel;
+	best_channel_data_out->long_rd_id = best_long_rd_id;
+	LOG_DBG("Best channel found: %d (RSSI: %d, long rd id %u)",
+		best_channel, best_rssi, best_long_rd_id);
+	return true;
+}
+
+/**************************************************************************************************/
+
 K_MSGQ_DEFINE(dect_nrf91_ctrl_msgq, sizeof(struct dect_mac_common_op_event_msgq_item), 1000,
 	      4); /* TODO optimize sizes */
 
@@ -315,6 +360,8 @@ static bool dect_nrf91_ctrl_connected(void) /* Cluster running or associated */
 		return false;
 	}
 }
+
+/**************************************************************************************************/
 
 static int dect_nrf91_ctrl_configure_cmd(dect_nrf91_ctrl_configure_params_t *params)
 {
@@ -1366,6 +1413,10 @@ send_events:
 							.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
 							.os_err_cause = err,
 						});
+				} else {
+					ctrl_data.scan_data.on_going = true;
+					ctrl_data.scan_data.scan_result_cb = NULL;
+					ctrl_data.scan_data.scan_params = params;
 				}
 			}
 			break;
@@ -1506,16 +1557,13 @@ send_events:
 			 * muutenkin paras?
 			 */
 			/* Check if we have seen another cluster in this channel */
-			for (int i = 0; i < DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS;
-			     i++) {
-				if (ctrl_data.scan_data.cluster_channels[i].channel ==
-				    rssi_data->channel) {
-					LOG_INF("RSSI results: another cluster seen in this "
-						"channel %d was seen in nw scanning phase",
-						rssi_data->channel);
-					channel_has_another_cluster = true;
-					rssi_data->another_cluster_detected_in_channel = true;
-				}
+			if (dect_nrf91_ctrl_cluster_channels_list_channel_exists(
+				rssi_data->channel)) {
+				LOG_INF("RSSI results: another cluster seen in this"
+					" channel %d was seen in nw scanning phase",
+					rssi_data->channel);
+				channel_has_another_cluster = true;
+				rssi_data->another_cluster_detected_in_channel = true;
 			}
 
 			/* MAC spec, ch. 5.1.2::
@@ -2021,8 +2069,7 @@ send_events:
 		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD: {
 			struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *params = event.data;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			bool add_to_cluster_channels = (ctrl_data.scan_data.on_going &&
-				set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT);
+			bool add_to_cluster_channels = ctrl_data.scan_data.on_going;
 
 			/* Did we already mark this to cluster_channels? */
 			for (int i = 0; i < DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS &&
@@ -2033,14 +2080,20 @@ send_events:
 					break;
 				}
 			}
-			/* Store channel and RSSI */
+			/* Store channel and RSSI: used by FT when creating a cluster and
+			 * when PT selecting RD for association.
+			 */
 			if (add_to_cluster_channels) {
 				ctrl_data.scan_data.cluster_channels[
 					ctrl_data.scan_data.current_cluster_channel_index].channel =
 					params->channel;
 				ctrl_data.scan_data.cluster_channels[
-				ctrl_data.scan_data.current_cluster_channel_index].rssi_2 =
-				params->rx_signal_info.rssi_2;
+					ctrl_data.scan_data.current_cluster_channel_index].rssi_2 =
+						params->rx_signal_info.rssi_2;
+				ctrl_data.scan_data.cluster_channels[
+					ctrl_data.scan_data.current_cluster_channel_index]
+						.long_rd_id = params->transmitter_long_rd_id;
+
 				ctrl_data.scan_data.current_cluster_channel_index++;
 				__ASSERT_NO_MSG(ctrl_data.scan_data.current_cluster_channel_index <
 						ARRAY_SIZE(ctrl_data.scan_data.cluster_channels));
@@ -2070,12 +2123,8 @@ send_events:
 				break;
 			}
 			if (ctrl_data.ass_config.pt_association_state !=
-				    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
-			    (set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
-				     DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
-			     set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
-				     params->transmitter_long_rd_id)) {
-				/* TODO check signal threshold & other cluster selection reqs */
+				CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
+			    dect_nrf91_utils_cluster_acceptable_for_association(params)) {
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
 				ctrl_data.ass_config.network_id = params->network_id;
@@ -2086,10 +2135,11 @@ send_events:
 					if (nrf_modem_dect_mac_network_scan_stop() != 0) {
 						LOG_ERR("OP_MDM_CLUSTER_BEACON_RCVD: error in "
 							"Network scan stop!");
+					} else {
+						LOG_DBG("nw scan stopping requested");
 					}
 				}
 			}
-
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_RCVD: {
@@ -2221,15 +2271,42 @@ send_events:
 					   CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED) {
 					dect_mac_ctrl_trigger_association();
 				} else {
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
+					struct dect_nrf91_ctrl_cluster_channel_list_item
+						best_channel_data;
+					bool best_channel_found =
+					dect_nrf91_ctrl_cluster_channels_list_best_channel_get(
+						&best_channel_data);
+
+					/* MAC spec 5.1.4:
+					 * If none of the detected cluster beacons meets
+					 * the minimum quality level, the RD may:
+					 * - initiate association to the RD providing
+					 * the highest RSSI-2 value
+					 */
+					if (best_channel_found) {
+						LOG_INF("Nw scan done: selecting best channel: "
+							"Long RD ID: 0x%X, RSSI-2: %d",
+							best_channel_data.long_rd_id,
+							best_channel_data.rssi_2);
+						ctrl_data.ass_config.pt_association_state =
+						CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
+						ctrl_data.ass_config.network_id =
+							set_ptr->net_mgmt_common.identities
+								.network_id;
+						ctrl_data.ass_config.parent_long_rd_id =
+							best_channel_data.long_rd_id;
+						dect_mac_ctrl_trigger_association();
+					} else {
+						dect_mgmt_network_status_evt(
+							ctrl_data.iface,
+							(struct dect_network_status_evt){
+								.network_status =
 								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause =
+								.dect_err_cause =
 								DECT_MAC_STATUS_RD_NOT_FOUND,
-						});
-					LOG_WRN("No cluster found with NW scan");
+							});
+						LOG_WRN("No cluster found with NW scan");
+					}
 				}
 			} else {
 				struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -2676,8 +2753,11 @@ send_events:
 				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
 
 				ctrl_data.configure_params.auto_start = false;
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_NONE;
+				if (ctrl_data.ass_config.pt_association_state !=
+					CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+					ctrl_data.ass_config.pt_association_state =
+						CTRL_PT_ASSOCIATION_STATE_NONE;
+				}
 
 				dect_nrf91_utils_modem_phy_err_to_string(params->status, tmp_str);
 				LOG_ERR("Modem operation failed for Association Response with "

@@ -37,4 +37,6 @@ int dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(
 	const struct nrf_modem_dect_mac_rssi_result *rssi_scan_results,
 	struct dect_rssi_scan_result_data *rssi_data_out);
 
+bool dect_nrf91_utils_cluster_acceptable_for_association(
+	struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *cluster_beacon);
 #endif /* DECT_NRF91_UTILS_H */

@@ -293,3 +293,55 @@ bool dect_common_utils_channel_is_supported_by_band(uint16_t band_nbr, uint16_t 
 	}
 	return true;
 }
+
+static int8_t dect_nrf91_utils_cluster_min_quality_to_db(
+	enum nrf_modem_dect_mac_quality_threshold min_quality)
+{
+	switch (min_quality) {
+	case NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0:
+		return 0;
+	case NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_3:
+		return 3;
+	case NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_6:
+		return 6;
+	case NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_9:
+	default:
+		return 9;
+	}
+}
+
+bool dect_nrf91_utils_cluster_acceptable_for_association(
+	struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *cluster_beacon)
+{
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	__ASSERT_NO_MSG(set_ptr && cluster_beacon);
+
+	if (cluster_beacon->network_id != set_ptr->net_mgmt_common.identities.network_id) {
+		return false;
+	}
+	int8_t min_quality_db =
+		dect_nrf91_utils_cluster_min_quality_to_db(cluster_beacon->beacon.min_quality);
+
+	/* MAC spec, ch. 5.1.4 */
+	if (cluster_beacon->rx_signal_info.rssi_2 <
+	    (set_ptr->net_mgmt_common.association.min_sensitivity_dbm + min_quality_db)) {
+		LOG_INF("nw_scan: cluster beacon RSSI too low: %d < %d "
+			"(long rd id %u (0x%08X), min_quality %d dB)",
+			cluster_beacon->rx_signal_info.rssi_2,
+			set_ptr->net_mgmt_common.association.min_sensitivity_dbm + min_quality_db,
+			cluster_beacon->transmitter_long_rd_id,
+			cluster_beacon->transmitter_long_rd_id, min_quality_db);
+		return false;
+	}
+	if (!(set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
+		      DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
+	      set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
+		      cluster_beacon->transmitter_long_rd_id)) {
+		LOG_INF("nw_scan: cluster beacon long rd id mismatch: %d != %d",
+			set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id,
+			cluster_beacon->transmitter_long_rd_id);
+		return false;
+	}
+	return true;
+}

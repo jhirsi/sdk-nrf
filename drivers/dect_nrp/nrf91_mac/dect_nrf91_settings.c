@@ -22,6 +22,7 @@ K_SEM_DEFINE(dect_settings_init_sema, 0, 1);
 /* Default nrf91 settings */
 static const struct dect_settings_association association_data = {
 	.max_beacon_rx_failures = 10,
+	.min_sensitivity_dbm = -95, /* MIN_SENSITIVITY_LEVEL per MAC spec */
 };
 
 static const struct dect_settings_network_beacon nw_beacon_data = {
@@ -69,6 +70,9 @@ static const struct dect_settings common_settings_data = {
 	.tx.max_mcs = 4,
 	.rssi_scan = rssi_scan_data,
 	.cluster = cluster_beacon_data,
+	.network_join = {
+		.target_ft_long_rd_id = DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY,
+	},
 	.nw_beacon = nw_beacon_data,
 	.association = association_data,
 	.sec_conf = security_configuration_data,
@@ -177,6 +181,8 @@ dect_nrf91_settings_write(struct dect_nrf91_settings *dect_sett_in)
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION) {
 		current_sett->association.max_beacon_rx_failures =
 			new_sett->association.max_beacon_rx_failures;
+		current_sett->association.min_sensitivity_dbm =
+			new_sett->association.min_sensitivity_dbm;
 	}
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN) {
 		current_sett->network_join.target_ft_long_rd_id =
