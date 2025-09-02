@@ -1343,7 +1343,10 @@ static const char dect_shell_sett_association_usage_str[] =
 	"                                   range or FT is turned off, resulting the automatic\n"
 	"                                   disassociation of the FT device.\n"
 	"                                   Value 0 means that no limit and no automatic\n"
-	"				    disassociation is done.\n";
+	"				    disassociation is done.\n"
+	"      --min_sensitivity <dbm>,     Set minimum RX sensitivity (dBm). Has impact\n"
+	"                                   when selecting RD for association.\n"
+	"                                   MIN_SENSITIVITY_LEVEL per MAC spec.\n";
 static const char dect_shell_sett_cluster_usage_str1[] =
 	"Cluster beacon settings\n"
 	"      --cluster_beacon_period <#>,   Set cluster beacon period in ms. Possible values:\n"
@@ -1394,6 +1397,7 @@ enum {
 	DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR,
 	DECT_SHELL_SETT_CMD_CLUSTER_NBR_INACTIVITY_TIME,
 	DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS,
+	DECT_SHELL_SETT_CMD_ASSOCIATION_MIN_SENSITIVITY,
 	DECT_SHELL_SETT_CMD_NW_BEACON_PERIOD,
 	DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL,
 	DECT_SHELL_SETT_CMD_PWR_SAVE,
@@ -1434,6 +1438,7 @@ static struct option long_options_sett_cmd[] = {
 	{"nw_beacon_channel", required_argument, 0, DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL},
 	{"max_beacon_rx_fails", required_argument, 0,
 	 DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS},
+	{"min_sensitivity", required_argument, 0, DECT_SHELL_SETT_CMD_ASSOCIATION_MIN_SENSITIVITY},
 	{"sec_mode", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_MODE},
 	{"sec_integ_key", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_INTEG_KEY},
 	{"sec_cipher_key", required_argument, 0, DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY},
@@ -1633,6 +1638,9 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 			   dect_sett->network_join.target_ft_long_rd_id,
 			   dect_sett->network_join.target_ft_long_rd_id);
 	}
+	desh_print("   MIN_SENSITIVITY_LEVEL:               %d dBm",
+		dect_sett->association.min_sensitivity_dbm);
+
 	desh_print("  Security configuration:");
 	desh_print("   Security mode:                       %s",
 		   dect_sett->sec_conf.mode == DECT_MAC_SECURITY_MODE_NONE ? "none" : "mode_1");
@@ -1925,6 +1933,18 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 				return;
 			}
 			newsettings.association.max_beacon_rx_failures = tmp_value;
+			newsettings.cmd_params.write_scope_bitmap |=
+				DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_ASSOCIATION_MIN_SENSITIVITY: {
+			tmp_value = atoi(optarg);
+			if (tmp_value > INT8_MAX || tmp_value < INT8_MIN) {
+				desh_error("Give decent value (value < %d && > %d)",
+					INT8_MIN, INT8_MAX);
+				return;
+			}
+			newsettings.association.min_sensitivity_dbm = tmp_value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION;
 			break;
