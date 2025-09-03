@@ -262,7 +262,7 @@ static void handle_dect_rssi_scan_result_evt(struct net_mgmt_event_callback *cb)
 		(const struct dect_rssi_scan_result_evt *)cb->info;
 	struct dect_rssi_scan_result_data *entry =
 		(struct dect_rssi_scan_result_data *)&evt->rssi_scan_result;
-	char verdict_str[48 + ((48 * 6) * 2) + 1];
+	char verdict_str[48 + ((48 * 6) * 2) + 1] = {0};
 	char *tmp_ptr = verdict_str;
 
 	verdict_str[0] = '\0';
@@ -495,7 +495,7 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 				(struct dect_rssi_scan_result_data *)&resp_data->status_info
 					.rssi_result;
 
-			char verdict_str[48 + ((48 * 6) * 2) + 1];
+			char verdict_str[48 + ((48 * 6) * 2) + 1] = {0};
 			char *tmp_ptr = verdict_str;
 
 			desh_print("Cluster status information:");
