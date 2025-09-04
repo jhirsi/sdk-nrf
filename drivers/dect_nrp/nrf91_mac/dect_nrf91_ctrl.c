@@ -172,7 +172,14 @@ static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
 	if (!ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored) {
 		goto update_needed;
 	}
+	/* 1st, the best possible case */
+	if (new_rssi_data->another_cluster_detected_in_channel == false &&
+	    new_rssi_data->all_subslots_free &&
+	    new_rssi_data->busy_percentage == 0) {
+		goto update_needed;
+	}
 
+	/* Then 2nd best, and so on */
 	if (new_rssi_data->all_subslots_free &&
 	    ((new_rssi_data->busy_percentage <
 	      ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) ||
@@ -190,18 +197,20 @@ static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
 	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.free_subslot_cnt) {
 		goto update_needed;
 	}
+	if (new_rssi_data->busy_percentage <
+	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) {
+		goto update_needed;
+	}
 	if (new_rssi_data->scan_suitable_percent >
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.scan_suitable_percent) {
+	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.scan_suitable_percent &&
+	    new_rssi_data->busy_percentage <=
+	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) {
 		goto update_needed;
 	}
 	if (new_rssi_data->busy_subslot_cnt ==
 	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_subslot_cnt &&
 	    new_rssi_data->possible_subslot_cnt <
 	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.possible_subslot_cnt) {
-		goto update_needed;
-	}
-	if (new_rssi_data->busy_percentage <
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) {
 		goto update_needed;
 	}
 	if (!new_rssi_data->another_cluster_detected_in_channel &&
@@ -1537,6 +1546,7 @@ send_events:
 			/* TODO: at band #1 only every other carrier -> to be done in modem? */
 
 			bool scan_suitable_percent_ok = false;
+			bool all_subslots_free = false;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 			struct dect_rssi_scan_result_evt l2_results_evt;
 			struct dect_rssi_scan_result_data *rssi_data =
@@ -1548,14 +1558,6 @@ send_events:
 				LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
 			}
 
-			/* TODO: ch access rules are trying mostly to avoid collisions on
-			 * legacy dect but we would like to create clusters on different channels.
-			 * So, TODO: do a nw scan first and blacklist all the channels where dect
-			 * nr+ clusters are found
-			 */
-			/* TODO: tallenna kaikki ja valitse mieluiten se jossa ei muita ja
-			 * muutenkin paras?
-			 */
 			/* Check if we have seen another cluster in this channel */
 			if (dect_nrf91_ctrl_cluster_channels_list_channel_exists(
 				rssi_data->channel)) {
@@ -1565,28 +1567,20 @@ send_events:
 				channel_has_another_cluster = true;
 				rssi_data->another_cluster_detected_in_channel = true;
 			}
-
-			/* MAC spec, ch. 5.1.2::
-			 * The RD may stop the background scan process and
-			 * initiate beacon transmission as defined in clause 5.2,
-			 * if the number of "free" or "possible"
-			 * subslots is ≥ SCAN_SUITABLE at SCAN_MEAS_DURATION
-			 * at least on one channel and the number of "free"
-			 * or "possible" measured subslots is sufficient for
-			 * the operation of the RD.
-			 */
-			if (!rssi_data->all_subslots_free &&
-			    rssi_data->scan_suitable_percent >=
+			all_subslots_free = rssi_data->all_subslots_free;
+			if (rssi_data->scan_suitable_percent >=
 				    set_ptr->net_mgmt_common.rssi_scan.scan_suitable_percent) {
 				scan_suitable_percent_ok = true;
 			}
 
 			LOG_INF("RSSI scan results: channel %d, all_subslots_free: %s, "
 				"scan_suitable_percent: %d%%, "
+				"busy_percentage: %d%%, "
 				"another_cluster_detected_in_channel: %s",
 				rssi_data->channel,
 				(rssi_data->all_subslots_free) ? "yes" : "no",
 				rssi_data->scan_suitable_percent,
+				rssi_data->busy_percentage,
 				(rssi_data->another_cluster_detected_in_channel) ? "yes" : "no");
 
 			dect_mgmt_rssi_scan_result_evt(ctrl_data.iface, l2_results_evt);
@@ -1612,15 +1606,18 @@ send_events:
 				/* Actual RSSI scanning command was running, let it run */
 				break;
 			}
-
-			if (!channel_has_another_cluster &&
-			    (rssi_data->all_subslots_free || scan_suitable_percent_ok) &&
+			if ((channel_has_another_cluster == false &&
+			     all_subslots_free && scan_suitable_percent_ok &&
+			     rssi_data->busy_percentage == 0) &&
 			    (ctrl_data.configure_params.auto_start ||
 			     ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) &&
 			    (ctrl_data.configure_params.channel == 0)) {
 				/* MAC spec, ch. 5.1.2:
 				 * if any channel where all subslots are "free", is found,
 				 * then select channel for the cluster & stop the scan.
+				 * Additionally, we made this rule stricter, we checked
+				 * that no other cluster is present in the channel and
+				 * calculated busy percentage is also zero.
 				 */
 				ctrl_data.configure_params.channel = mdm_rssi_res->channel;
 
@@ -1631,7 +1628,6 @@ send_events:
 						err);
 				}
 			}
-
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_RSSI_COMPLETE: {
@@ -2067,6 +2063,10 @@ send_events:
 		}
 
 		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD: {
+			/* TODO: PT mobility? we are getting these for every
+			 * received beacon when associated and we have a rssi level from rx
+			 * rx_signal_info -> poor enough could be used for mobility trigger?
+			 */
 			struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *params = event.data;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 			bool add_to_cluster_channels = ctrl_data.scan_data.on_going;
