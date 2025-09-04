@@ -179,6 +179,7 @@ int dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(
 					DECT_NRP_RSSI_MEAS_SUBSLOT_COUNT;
 
 	rssi_data_out->channel = rssi_scan_results->channel;
+	rssi_data_out->busy_percentage = rssi_scan_results->busy_percentage;
 	rssi_data_out->all_subslots_free = all_subslots_free;
 	rssi_data_out->scan_suitable_percent = free_possible_percent;
 	rssi_data_out->free_subslot_cnt = free_subslot_cnt;
