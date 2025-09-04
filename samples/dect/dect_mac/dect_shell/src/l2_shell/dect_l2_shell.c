@@ -276,7 +276,7 @@ static void handle_dect_rssi_scan_result_evt(struct net_mgmt_event_callback *cb)
 		desh_print("  Another cluster detected in channel: %s",
 			   entry->another_cluster_detected_in_channel ? "yes" : "no");
 	}
-
+	desh_print("  Busy percentage:                     %d%%", entry->busy_percentage);
 	if (!entry->all_subslots_free) {
 		desh_print("  Free subslot count:                  %d",
 			entry->free_subslot_cnt);
