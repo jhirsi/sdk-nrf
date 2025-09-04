@@ -44,7 +44,7 @@ static const struct dect_settings_auto_start auto_start_data = {
 };
 
 static const struct dect_settings_rssi_scan rssi_scan_data = {
-	.time_per_channel_ms = 2010,
+	.time_per_channel_ms = 200,
 	.scan_suitable_percent = DECT_NRF91_SETT_DEFAULT_RSSI_SCAN_SUITABLE_PERCENT,
 	.busy_threshold_dbm = DECT_NRF91_SETT_DEFAULT_RSSI_SCAN_THRESHOLD_MAX,
 	.free_threshold_dbm = DECT_NRF91_SETT_DEFAULT_RSSI_SCAN_THRESHOLD_MIN,
