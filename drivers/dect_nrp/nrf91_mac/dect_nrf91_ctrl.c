@@ -74,11 +74,27 @@ typedef struct {
 	uint16_t channel;
 } ctrl_pt_association_config_t;
 
+struct dect_nrf91_ctrl_rssi_scan_result_data {
+	uint16_t channel;
+
+	bool another_cluster_detected_in_channel;
+	bool all_subslots_free;
+	uint8_t busy_percentage;
+	bool busy_percentage_ok;
+	bool scan_suitable_percent_ok;
+
+	uint8_t possible_subslot_cnt;
+	uint8_t busy_subslot_cnt;
+};
+
+#define DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS 30
+
 struct dect_nrf91_ctrl_rssi_scan_data {
 	bool cmd_on_going; /* actual RSSI command */
 
-	bool rssi_scan_result_last_best_stored;
-	struct dect_rssi_scan_result_data rssi_scan_result_last_best;
+	uint8_t current_results_index;
+	struct dect_nrf91_ctrl_rssi_scan_result_data results[
+		DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS];
 };
 
 #define DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS 30
@@ -158,86 +174,131 @@ static struct dect_nrf91_ctrl_data {
 static void dect_nrf91_ctrl_rssi_scan_data_init(bool actual_command)
 {
 	ctrl_data.rssi_scan_data.cmd_on_going = actual_command;
-	ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored = false;
-	memset(&ctrl_data.rssi_scan_data.rssi_scan_result_last_best, 0,
-	       sizeof(ctrl_data.rssi_scan_data.rssi_scan_result_last_best));
-	ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage = 100;
-	ctrl_data.rssi_scan_data.rssi_scan_result_last_best.scan_suitable_percent = 0;
+	memset(&ctrl_data.rssi_scan_data.results, 0,
+	       sizeof(ctrl_data.rssi_scan_data.results));
+	ctrl_data.rssi_scan_data.current_results_index = 0;
 }
 
-static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
-	struct dect_rssi_scan_result_data *new_rssi_data)
+static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
+	struct dect_nrf91_ctrl_rssi_scan_result_data *rssi_data_out)
 {
-	/* TODO: better to have a list of all channels ? Tee tämä muutenkin uusiksi*/
-	if (!ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored) {
-		goto update_needed;
-	}
-	/* 1st, the best possible case */
-	if (new_rssi_data->another_cluster_detected_in_channel == false &&
-	    new_rssi_data->all_subslots_free &&
-	    new_rssi_data->busy_percentage == 0) {
-		goto update_needed;
-	}
+	bool cont = false;
+	const struct dect_nrf91_ctrl_rssi_scan_result_data *current_best = NULL;
 
-	/* Then 2nd best, and so on */
-	if (new_rssi_data->all_subslots_free &&
-	    ((new_rssi_data->busy_percentage <
-	      ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) ||
-	     (!new_rssi_data->another_cluster_detected_in_channel &&
-	      ctrl_data.rssi_scan_data.rssi_scan_result_last_best
-		      .another_cluster_detected_in_channel))) {
-		goto update_needed;
-	}
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
 
-	if (new_rssi_data->busy_subslot_cnt <
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_subslot_cnt) {
-		goto update_needed;
+		if (res->channel == 0) {
+			continue;
+		}
+		/* Min requirement */
+		if (res->scan_suitable_percent_ok) {
+			cont = true;
+			break;
+		}
 	}
-	if (new_rssi_data->free_subslot_cnt >
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.free_subslot_cnt) {
-		goto update_needed;
-	}
-	if (new_rssi_data->busy_percentage <
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) {
-		goto update_needed;
-	}
-	if (new_rssi_data->scan_suitable_percent >
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.scan_suitable_percent &&
-	    new_rssi_data->busy_percentage <=
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_percentage) {
-		goto update_needed;
-	}
-	if (new_rssi_data->busy_subslot_cnt ==
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.busy_subslot_cnt &&
-	    new_rssi_data->possible_subslot_cnt <
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best.possible_subslot_cnt) {
-		goto update_needed;
-	}
-	if (!new_rssi_data->another_cluster_detected_in_channel &&
-	    ctrl_data.rssi_scan_data.rssi_scan_result_last_best
-		    .another_cluster_detected_in_channel) {
-		goto update_needed;
-	}
-
-	return false;
-
-update_needed:
-	ctrl_data.rssi_scan_data.rssi_scan_result_last_best = *new_rssi_data;
-	ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored = true;
-	return true;
-}
-
-static bool dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_ok(void)
-{
-	/* Return true if stored RSSI scan result data if possible to be used for channel access */
-	if (!ctrl_data.rssi_scan_data.rssi_scan_result_last_best_stored) {
+	if (!cont) {
 		return false;
 	}
-	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (ctrl_data.rssi_scan_data
-		.rssi_scan_result_last_best.scan_suitable_percent >=
-	    set_ptr->net_mgmt_common.rssi_scan.scan_suitable_percent) {
+	/* MAC spec, ch. 5.1.2:
+	 * after measuring the supported channels,
+	 * the RD should select an operating channel(s) or consecutive operating
+	 * channels in the following manner:
+	 */
+	/* 1st: if any channel where all subslots are "free", is found:
+	 * Note: we have some extra checks here to search the best of "all free"
+	 */
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->all_subslots_free && res->busy_percentage == 0 &&
+		    res->another_cluster_detected_in_channel == false) {
+			current_best = res;
+			goto exit;
+		}
+	}
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->all_subslots_free && res->busy_percentage_ok &&
+		    res->another_cluster_detected_in_channel == false) {
+			current_best = res;
+			goto exit;
+		}
+	}
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->all_subslots_free && res->busy_percentage == 0) {
+			current_best = res;
+			goto exit;
+		}
+	}
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->all_subslots_free && res->another_cluster_detected_in_channel == false) {
+			current_best = res;
+			goto exit;
+		}
+	}
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->all_subslots_free) {
+			current_best = res;
+			goto exit;
+		}
+	}
+
+	/* 2nd: select the channel that has the lowest number of "busy" subslots */
+	uint8_t min_busy_subslots = UINT8_MAX;
+
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->busy_subslot_cnt < min_busy_subslots) {
+			min_busy_subslots = res->busy_subslot_cnt;
+			current_best = res;
+		}
+	}
+	uint16_t same_best_busy_subslots_count = 0;
+	uint16_t best_possible_subslots_count = 10000; /* Lower the better */
+
+	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+			&ctrl_data.rssi_scan_data.results[i];
+
+		if (res->busy_subslot_cnt == min_busy_subslots) {
+			same_best_busy_subslots_count++;
+		}
+	}
+	/* if multiple channels or consecutive channels have the same number of "busy" subslots: */
+	if (same_best_busy_subslots_count > 1) {
+		/* 2b: then select the channel that has the lowest number of "possible" subslots */
+		for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+			const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
+				&ctrl_data.rssi_scan_data.results[i];
+
+			if (res->busy_subslot_cnt == min_busy_subslots) {
+				if (res->possible_subslot_cnt < best_possible_subslots_count) {
+					best_possible_subslots_count = res->possible_subslot_cnt;
+					current_best = res;
+				}
+			}
+		}
+	}
+exit:
+	if (current_best != NULL) {
+		*rssi_data_out = *current_best;
 		return true;
 	}
 	return false;
@@ -1543,8 +1604,6 @@ send_events:
 
 			LOG_INF("RSSI scan results received");
 
-			/* TODO: at band #1 only every other carrier -> to be done in modem? */
-
 			bool scan_suitable_percent_ok = false;
 			bool all_subslots_free = false;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -1585,23 +1644,28 @@ send_events:
 
 			dect_mgmt_rssi_scan_result_evt(ctrl_data.iface, l2_results_evt);
 
-			/* Store best so far scanning result */
-			if (dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_update(
-				rssi_data)) {
-				LOG_INF("best RSSI scan results so far: channel %d, "
-					"all_subslots_free: %s, scan_suitable_percent: %d%%, "
-					"another_cluster_detected_in_channel: %s",
-					ctrl_data.rssi_scan_data.rssi_scan_result_last_best.channel,
-					(ctrl_data.rssi_scan_data
-						.rssi_scan_result_last_best.all_subslots_free) ?
-							"yes" : "no",
-					ctrl_data.rssi_scan_data
-						.rssi_scan_result_last_best.scan_suitable_percent,
-					(ctrl_data.rssi_scan_data.rssi_scan_result_last_best
-						.another_cluster_detected_in_channel) ?
-							"yes" : "no");
-			}
+			/* Store results for internal usage in cluster channel selection */
+			if (ctrl_data.rssi_scan_data.current_results_index <
+			    DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS) {
+				struct dect_nrf91_ctrl_rssi_scan_result_data results_item = {
+					.channel = rssi_data->channel,
+					.all_subslots_free = all_subslots_free,
+					.scan_suitable_percent_ok = scan_suitable_percent_ok,
+					.busy_percentage = rssi_data->busy_percentage,
+					.busy_percentage_ok =
+						(rssi_data->busy_percentage <
+						(100 - set_ptr->net_mgmt_common
+							.rssi_scan.scan_suitable_percent)),
+					.another_cluster_detected_in_channel =
+						channel_has_another_cluster,
+					.possible_subslot_cnt = rssi_data->possible_subslot_cnt,
+					.busy_subslot_cnt = rssi_data->busy_subslot_cnt,
+				};
 
+				ctrl_data.rssi_scan_data.results
+					[ctrl_data.rssi_scan_data.current_results_index++] =
+					results_item;
+			}
 			if (ctrl_data.rssi_scan_data.cmd_on_going) {
 				/* Actual RSSI scanning command was running, let it run */
 				break;
@@ -1663,7 +1727,6 @@ send_events:
 							"keeping cluster running");
 						break;
 					}
-					/* TODO: check if last best stored could be used? */
 					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
 					ctrl_data.configure_params.channel = 0;
 					ctrl_data.ft_requested_cluster_channel =
@@ -1704,10 +1767,11 @@ send_events:
 			}
 
 			if (ctrl_data.configure_params.channel == 0) {
-				if (dect_nrf91_ctrl_rssi_scan_data_result_data_last_best_ok()) {
-					ctrl_data.configure_params.channel =
-						ctrl_data.rssi_scan_data
-							.rssi_scan_result_last_best.channel;
+				struct dect_nrf91_ctrl_rssi_scan_result_data best_rssi_meas;
+
+				if (dect_nrf91_ctrl_rssi_scan_data_results_best_get(
+					&best_rssi_meas)) {
+					ctrl_data.configure_params.channel = best_rssi_meas.channel;
 				} else {
 					if (ctrl_data.ft_cluster_reconfig_ongoing) {
 						/* Reconfig failure, existing cluster config
