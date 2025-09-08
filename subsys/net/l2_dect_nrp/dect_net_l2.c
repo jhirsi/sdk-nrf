@@ -537,20 +537,19 @@ static bool dect_net_l2_no_associations(void)
 }
 
 void dect_net_l2_association_removed(
-	struct net_if *iface, uint32_t long_rd_id, enum dect_association_release_cause cause)
+	struct net_if *iface, uint32_t long_rd_id,
+	enum dect_association_release_cause cause, bool neighbor_initiated)
 {
-	struct dect_association_released_evt evt_data = {
-		.long_rd_id = long_rd_id,
-		.release_cause = cause,
-	};
-
 	LOG_DBG("dect_net_l2_association_removed: iface %p, "
 		"long_rd_id %u, release_cause %d", iface, long_rd_id, cause);
+
 	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
 		if (child_associations[i].in_use &&
 		    child_associations[i].target_long_rd_id == long_rd_id) {
 			child_associations[i].in_use = false;
-			dect_mgmt_association_released_evt(iface, evt_data);
+			dect_mgmt_association_released_evt(
+				iface, long_rd_id, DECT_NEIGHBOR_ROLE_CHILD,
+				neighbor_initiated, cause);
 
 			/* If this was the last association, drop the carrier */
 			if (dect_net_l2_no_associations()) {
@@ -563,7 +562,9 @@ void dect_net_l2_association_removed(
 		if (parent_associations[i].in_use &&
 		    parent_associations[i].target_long_rd_id == long_rd_id) {
 			parent_associations[i].in_use = false;
-			dect_mgmt_association_released_evt(iface, evt_data);
+			dect_mgmt_association_released_evt(
+				iface, long_rd_id, DECT_NEIGHBOR_ROLE_PARENT,
+				neighbor_initiated, cause);
 
 			/* If this was the last association, drop the carrier */
 			if (dect_net_l2_no_associations()) {

@@ -59,45 +59,105 @@ void dect_mgmt_nw_beacon_stop_evt(struct net_if *iface, enum dect_status_values 
 	net_mgmt_event_notify_with_info(NET_EVENT_DECT_NW_BEACON_STOP_RESULT, iface, &evt,
 					sizeof(evt));
 }
-
-void dect_mgmt_association_req_result_evt(struct net_if *iface,
-					  struct dect_association_req_result_evt resp_data)
-{
-	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_REQ_RESULT, iface, &resp_data,
-					sizeof(struct dect_association_req_result_evt));
-}
-
 void dect_mgmt_rssi_scan_result_evt(struct net_if *iface,
 				    struct dect_rssi_scan_result_evt result_data)
 {
 	net_mgmt_event_notify_with_info(NET_EVENT_DECT_RSSI_SCAN_RESULT, iface, &result_data,
 					sizeof(struct dect_rssi_scan_result_evt));
 }
+
 void dect_mgmt_rssi_scan_done_evt(struct net_if *iface, enum dect_status_values status)
 {
 	struct dect_common_resp_evt evt = {
 		.status = status,
 	};
+
 	net_mgmt_event_notify_with_info(NET_EVENT_DECT_RSSI_SCAN_DONE, iface, &evt, sizeof(evt));
+}
+
+void dect_mgmt_association_changed_evt(
+	struct net_if *iface,
+	struct dect_association_changed_evt evt_data)
+{
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt_data,
+					sizeof(struct dect_association_changed_evt));
+}
+
+void dect_mgmt_association_req_failed_mdm_result_evt(
+	struct net_if *iface,
+	uint32_t long_rd_id,
+	enum dect_status_values cause)
+{
+	struct dect_association_changed_evt evt = {
+		.long_rd_id = long_rd_id,
+		.neighbor_role = DECT_NEIGHBOR_ROLE_PARENT, /* always parent if req failed */
+		.association_change_type = DECT_ASSOCIATION_REQ_FAILED_MDM,
+		.association_req_failed_mdm.cause = cause,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt,
+					sizeof(struct dect_association_changed_evt));
+}
+
+void dect_mgmt_association_req_rejected_result_evt(
+	struct net_if *iface,
+	uint32_t long_rd_id,
+	enum dect_association_reject_cause reject_cause,
+	enum dect_mac_association_reject_time reject_time)
+{
+	struct dect_association_changed_evt evt = {
+		.long_rd_id = long_rd_id,
+		.neighbor_role = DECT_NEIGHBOR_ROLE_PARENT, /* always parent if req failed */
+		.association_change_type = DECT_ASSOCIATION_REQ_REJECTED,
+		.association_req_rejected.reject_cause = reject_cause,
+		.association_req_rejected.reject_time = reject_time,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt,
+					sizeof(struct dect_association_changed_evt));
 }
 
 void dect_mgmt_parent_association_created_evt(struct net_if *iface, uint32_t long_rd_id)
 {
-	net_mgmt_event_notify_with_info(NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED, iface,
-					&long_rd_id, sizeof(long_rd_id));
+	struct dect_association_changed_evt evt = {
+		.long_rd_id = long_rd_id,
+		.neighbor_role = DECT_NEIGHBOR_ROLE_PARENT,
+		.association_change_type = DECT_ASSOCIATION_CREATED,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt,
+					sizeof(struct dect_association_changed_evt));
 }
 
 void dect_mgmt_child_association_created_evt(struct net_if *iface, uint32_t long_rd_id)
 {
-	net_mgmt_event_notify_with_info(NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED, iface,
-					&long_rd_id, sizeof(long_rd_id));
+	struct dect_association_changed_evt evt = {
+		.long_rd_id = long_rd_id,
+		.neighbor_role = DECT_NEIGHBOR_ROLE_CHILD,
+		.association_change_type = DECT_ASSOCIATION_CREATED,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt,
+					sizeof(struct dect_association_changed_evt));
 }
 
 void dect_mgmt_association_released_evt(
-	struct net_if *iface, struct dect_association_released_evt evt_data)
+	struct net_if *iface,
+	uint32_t neighbor_long_rd_id,
+	enum dect_neighbor_role neighbor_role,
+	bool neighbor_initiated,
+	enum dect_association_release_cause cause)
 {
-	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_RELEASED, iface, &evt_data,
-					sizeof(struct dect_association_released_evt));
+	struct dect_association_changed_evt evt = {
+		.long_rd_id = neighbor_long_rd_id,
+		.neighbor_role = neighbor_role,
+		.association_change_type = DECT_ASSOCIATION_RELEASED,
+		.association_released.neighbor_initiated = neighbor_initiated,
+		.association_released.release_cause = cause,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ASSOCIATION_CHANGED, iface, &evt,
+					sizeof(struct dect_association_changed_evt));
 }
 
 void dect_mgmt_cluster_created_evt(struct net_if *iface,

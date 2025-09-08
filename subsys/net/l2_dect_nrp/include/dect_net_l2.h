@@ -231,6 +231,31 @@ enum dect_association_reject_cause {
 	DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON = 5,
 	/** Other reasons than from mac spec  */
 	DECT_MAC_ASSOCIATION_NO_RESPONSE = 6,
+	/** Request to modem failed */
+};
+/**
+ * @brief Association reject times. Application must wait the time before re-attempt
+ * the association with same parent.
+ */
+enum dect_mac_association_reject_time {
+	/** zero seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_0S = 0,
+	/** 5 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_5S = 1,
+	/** 10 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_10S = 2,
+	/** 30 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_30S = 3,
+	/** 60 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_60S = 4,
+	/** 120 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_120S = 5,
+	/** 180 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_180S = 6,
+	/** 300 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_300S = 7,
+	/** 600 seconds */
+	DECT_MAC_ASSOCIATION_REJECT_TIME_600S = 8,
 };
 
 enum dect_rssi_scan_result_verdict {
@@ -259,19 +284,6 @@ struct dect_rssi_scan_result_data {
 
 struct dect_rssi_scan_result_evt {
 	struct dect_rssi_scan_result_data rssi_scan_result;
-};
-
-/** @brief dect association resp event
- */
-struct dect_association_req_result_evt {
-	/** Transmitter Long Radio Device ID */
-	uint32_t transmitter_long_rd_id;
-
-	/** Association status */
-	bool accepted;
-
-	/** Association reject cause if not accepted */
-	enum dect_association_reject_cause reject_cause;
 };
 
 /**
@@ -311,6 +323,68 @@ struct dect_association_released_evt {
 	/** Cause of the association release */
 	enum dect_association_release_cause release_cause;
 };
+
+/** @brief Neighbor role  */
+enum dect_neighbor_role {
+	/** Device is our parent */
+	DECT_NEIGHBOR_ROLE_PARENT = 0,
+	/** Device is our child */
+	DECT_NEIGHBOR_ROLE_CHILD = 1,
+};
+
+/** @brief Association change type */
+enum dect_association_change_type {
+	/** Association created */
+	DECT_ASSOCIATION_CREATED = 0,
+	/** Association released */
+	DECT_ASSOCIATION_RELEASED = 1,
+	/** Association request rejected */
+	DECT_ASSOCIATION_REQ_REJECTED = 2,
+	/** Association request failed in modem  */
+	DECT_ASSOCIATION_REQ_FAILED_MDM = 2,
+};
+
+/** @brief dect association changed event
+ */
+struct dect_association_changed_evt {
+	/** Long Radio Device ID of neighbor */
+	uint32_t long_rd_id;
+
+	/** Neighbor role  */
+	enum dect_neighbor_role neighbor_role;
+
+	/** Association change type */
+	enum dect_association_change_type association_change_type;
+
+	union {
+		/* Valid if association_change_type is DECT_ASSOCIATION_RELEASED */
+		struct {
+			/** True if release was initiated by the neighbor */
+			bool neighbor_initiated;
+
+			/* Release cause */
+			enum dect_association_release_cause release_cause;
+		} association_released;
+
+		/* Valid if association_change_type is DECT_ASSOCIATION_REQ_REJECTED */
+		struct {
+			/** Association reject cause if not accepted */
+			enum dect_association_reject_cause reject_cause;
+
+			/* Time how long the other RD shall prohibit sending new association
+			 * requests to this RD.
+			 */
+			enum dect_mac_association_reject_time reject_time;
+		} association_req_rejected;
+
+		/* Valid if association_change_type is DECT_ASSOCIATION_REQ_FAILED_MDM */
+		struct {
+			/** Association request not delivered */
+			enum dect_status_values cause;
+		} association_req_failed_mdm;
+	};
+};
+
 /** @brief dect cluster start resp event
  */
 struct dect_cluster_start_resp_evt {
@@ -776,6 +850,7 @@ struct dect_settings {
 struct dect_association_data {
 	uint32_t long_rd_id;
 
+	/* TODO: remove or to be added by L2? */
 	struct in6_addr local_ipv6_addr;
 
 	bool global_ipv6_addr_set;
@@ -1028,6 +1103,7 @@ void dect_net_l2_child_association_created(struct net_if *iface, uint32_t target
  * @param iface Network interface
  */
 void dect_net_l2_association_removed(
-	struct net_if *iface, uint32_t long_rd_id, enum dect_association_release_cause cause);
+	struct net_if *iface, uint32_t long_rd_id,
+	enum dect_association_release_cause cause, bool neighbor_initiated);
 
 #endif /* ZEPHYR_INCLUDE_NET_NET_DECT_L2_H_ */

@@ -258,18 +258,12 @@ enum net_event_dect_cmd {
 	NET_EVENT_DECT_CMD_RSSI_SCAN_RESULT,
 	/** RSSI scan done */
 	NET_EVENT_DECT_CMD_RSSI_SCAN_DONE,
-	/** Association Response */
-	NET_EVENT_DECT_CMD_ASSOCIATION_REQ_RESULT,
-	/** PT: Parent Association created */
-	NET_EVENT_DECT_CMD_PARENT_ASSOCIATION_CREATED,
-	/** FT: Parent Association created */
-	NET_EVENT_DECT_CMD_CHILD_ASSOCIATION_CREATED,
 	/** FT: Network status */
 	NET_REQUEST_DECT_CMD_NETWORK_STATUS,
 	/** FT: Sink status event */
 	NET_EVENT_DECT_CMD_SINK_STATUS,
-	/** Association Release done */
-	NET_EVENT_DECT_CMD_ASSOCIATION_RELEASED,
+	/** Association changed event */
+	NET_EVENT_DECT_CMD_ASSOCIATION_CHANGED,
 	/** Cluster started event */
 	NET_EVENT_DECT_CMD_CLUSTER_START_RESP,
 	/** Cluster stop response */
@@ -350,27 +344,13 @@ enum net_event_dect_cmd {
 #define NET_EVENT_DECT_SCAN_DONE (_NET_DECT_EVENT | NET_EVENT_DECT_CMD_SCAN_DONE)
 
 /**
- * Signals the result of the @ref NET_REQUEST_DECT_ASSOCIATION net management command.
- * See @ref dect_association_req_result_evt for event parameters.
+ * Signals association related changes, including the result of the
+ * @ref NET_REQUEST_DECT_ASSOCIATION and @ref NET_REQUEST_DECT_ASSOCIATION_RELEASE net management
+ * commands but sent also when unsolitedly released or otherwise changed.
+ * See @ref dect_association_changed_evt for event parameters.
  */
-#define NET_EVENT_DECT_ASSOCIATION_REQ_RESULT                                                      \
-	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ASSOCIATION_REQ_RESULT)
-
-/**
- * Signals the result of the @ref NET_REQUEST_DECT_ASSOCIATION net management command.
- * Sent also unsolitedly when connecting.
- *
- * See @ref dect_association_req_result_evt for event parameters.
- */
-#define NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED                                                  \
-	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_PARENT_ASSOCIATION_CREATED)
-
-/**
- * Signals that a child association has been created.
- * uint32_t long_rd_id is included in an event indicating the long radio device ID of the child.
- */
-#define NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED                                                   \
-	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_CHILD_ASSOCIATION_CREATED)
+#define NET_EVENT_DECT_ASSOCIATION_CHANGED                                                         \
+	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ASSOCIATION_CHANGED)
 
 /**
  * Signals network status changes.
@@ -389,14 +369,6 @@ enum net_event_dect_cmd {
 #define NET_EVENT_DECT_SINK_STATUS                                                                 \
 	(_NET_DECT_EVENT |                                                                         \
 	 NET_EVENT_DECT_CMD_SINK_STATUS) /* connected/disconnected */
-
-/**
- * Signals the result of the @ref NET_REQUEST_DECT_ASSOCIATION_RELEASE net management command when
- * association has been released but sent also when unsolitedly released.
- * See @ref dect_association_released_evt for event parameters.
- */
-#define NET_EVENT_DECT_ASSOCIATION_RELEASED                                                        \
-	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ASSOCIATION_RELEASED)
 
 /**
  * Signals the result of the @ref NET_REQUEST_DECT_CLUSTER_START and
@@ -470,13 +442,67 @@ void dect_mgmt_rssi_scan_result_evt(struct net_if *iface,
  */
 void dect_mgmt_rssi_scan_done_evt(struct net_if *iface, enum dect_status_values status);
 
-/* TODO: do we really need such many association events? -> need a redesign? */
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED
+ * @param iface Network interface
+ * @param status Status of the scan request.
+ */
+void dect_mgmt_association_changed_evt(
+	struct net_if *iface,
+	struct dect_association_changed_evt evt_data);
+
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED with DECT_ASSOCIATION_CREATED
+ *  association change type and DECT_NEIGHBOR_ROLE_PARENT.
+ * @param iface Network interface
+ * @param long_rd_id Long Radio Identifier of the remote DECT NR+ device.
+ */
 void dect_mgmt_parent_association_created_evt(struct net_if *iface, uint32_t long_rd_id);
+
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED with DECT_ASSOCIATION_CREATED
+ *  association change type and DECT_NEIGHBOR_ROLE_CHILD.
+ * @param iface Network interface
+ * @param long_rd_id Long Radio Identifier of the remote DECT NR+ device.
+ */
 void dect_mgmt_child_association_created_evt(struct net_if *iface, uint32_t long_rd_id);
-void dect_mgmt_association_req_result_evt(struct net_if *iface,
-					  struct dect_association_req_result_evt resp_data);
+
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED with DECT_ASSOCIATION_RELEASED
+ *  association change type.
+ * @param iface Network interface
+ * @param neighbor_long_rd_id Long Radio Identifier of the remote DECT NR+ device.
+ * @param neighbor_role Role of the remote DECT NR+ device.
+ * @param neighbor_initiated True if the release was initiated by the neighbor device.
+ * @param cause Cause of the association release.
+ */
 void dect_mgmt_association_released_evt(
-	struct net_if *iface, struct dect_association_released_evt evt_data);
+	struct net_if *iface,
+	uint32_t neighbor_long_rd_id,
+	enum dect_neighbor_role neighbor_role,
+	bool neighbor_initiated,
+	enum dect_association_release_cause cause);
+
+
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED with DECT_ASSOCIATION_REQ_FAILED_MDM
+ *  association change type.
+ * @param iface Network interface
+ * @param long_rd_id Long Radio Identifier of the remote DECT NR+ device.
+ * @param cause Cause of the association request failure from modem.
+ */
+void dect_mgmt_association_req_failed_mdm_result_evt(
+	struct net_if *iface,
+	uint32_t long_rd_id,
+	enum dect_status_values cause);
+
+/** Send NET_EVENT_DECT_ASSOCIATION_CHANGED with DECT_ASSOCIATION_REQ_REJECTED
+ *  association change type.
+ * @param iface Network interface
+ * @param long_rd_id Long Radio Identifier of the remote DECT NR+ device.
+ * @param reject_cause Cause of the association request rejection from remote DECT NR+ device.
+ * @param reject_time Time how long the other RD shall prohibit sending new association request.
+ */
+void dect_mgmt_association_req_rejected_result_evt(
+	struct net_if *iface,
+	uint32_t long_rd_id,
+	enum dect_association_reject_cause reject_cause,
+	enum dect_mac_association_reject_time reject_time);
 
 /** Send NET_EVENT_DECT_CLUSTER_CREATED_RESULT
  * @param iface Network interface
