@@ -47,8 +47,7 @@ static struct net_mgmt_event_callback dect_shell_mgmt_cb;
 	(NET_EVENT_DECT_ACTIVATE_DONE | NET_EVENT_DECT_DEACTIVATE_DONE |                           \
 	 NET_EVENT_DECT_RSSI_SCAN_RESULT | NET_EVENT_DECT_RSSI_SCAN_DONE |                         \
 	 NET_EVENT_DECT_SCAN_DONE | NET_EVENT_DECT_SCAN_RESULT |                                   \
-	 NET_EVENT_DECT_ASSOCIATION_REQ_RESULT | NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED |       \
-	 NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED | NET_EVENT_DECT_ASSOCIATION_RELEASED |          \
+	 NET_EVENT_DECT_ASSOCIATION_CHANGED |                                                      \
 	 NET_EVENT_DECT_CLUSTER_CREATED_RESULT | NET_EVENT_DECT_NEIGHBOR_LIST |                    \
 	 NET_EVENT_DECT_NEIGHBOR_INFO | NET_EVENT_DECT_NW_BEACON_START_RESULT |                    \
 	 NET_EVENT_DECT_NW_BEACON_STOP_RESULT | NET_EVENT_DECT_NEIGHBOR_INFO |                     \
@@ -179,6 +178,83 @@ int dect_shell_util_htoa(const uint8_t *hex, uint16_t hex_len, char *ascii, uint
 	return (hex_len * 2);
 }
 /**************************************************************************************************/
+
+static char *dect_shell_util_association_reject_time_to_string(
+	enum dect_mac_association_reject_time reject_time,
+	char *out_str_buff, size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+
+	switch (reject_time) {
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_0S:
+		strncpy(out_str_buff, "0 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_5S:
+		strncpy(out_str_buff, "5 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_10S:
+		strncpy(out_str_buff, "10 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_30S:
+		strncpy(out_str_buff, "30 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_60S:
+		strncpy(out_str_buff, "60 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_120S:
+		strncpy(out_str_buff, "120 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_180S:
+		strncpy(out_str_buff, "180 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_300S:
+		strncpy(out_str_buff, "300 seconds", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_TIME_600S:
+		strncpy(out_str_buff, "600 seconds", out_str_buff_len);
+		break;
+	default:
+		snprintf(out_str_buff, out_str_buff_len, "Unknown (%d)", reject_time);
+		break;
+	}
+	return out_str_buff;
+}
+
+static char *dect_shell_util_association_reject_cause_to_string(
+	enum dect_association_reject_cause reject_cause,
+	char *out_str_buff, size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+
+	switch (reject_cause) {
+	case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_RADIO_CAPACITY:
+		strncpy(out_str_buff, "No radio capacity", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_HW_CAPACITY:
+		strncpy(out_str_buff, "No hardware capacity", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_CAUSE_CONFLICTED_SHORT_ID:
+		strncpy(out_str_buff, "Conflicted short ID", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_CAUSE_SECURITY_NEEDED:
+		strncpy(out_str_buff, "Security needed", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON:
+		strncpy(out_str_buff, "Other reason", out_str_buff_len);
+		break;
+	case DECT_MAC_ASSOCIATION_NO_RESPONSE:
+		strncpy(out_str_buff, "No response", out_str_buff_len);
+		break;
+	default:
+		snprintf(out_str_buff, out_str_buff_len, "Unknown (%d)", reject_cause);
+		break;
+	}
+	return out_str_buff;
+}
 
 static char *dect_shell_util_association_release_cause_to_string(
 	enum dect_association_release_cause cause, char *out_str_buff, size_t out_str_buff_len)
@@ -401,71 +477,70 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 		desh_print("NET_EVENT_DECT_SCAN_DONE");
 		handle_dect_scan_done(cb);
 		break;
-	case NET_EVENT_DECT_ASSOCIATION_REQ_RESULT: {
-		const struct dect_association_req_result_evt *resp_data =
-			(const struct dect_association_req_result_evt *)cb->info;
+	case NET_EVENT_DECT_ASSOCIATION_CHANGED: {
+		const struct dect_association_changed_evt *evt_data =
+			(const struct dect_association_changed_evt *)cb->info;
 
-		desh_print("NET_EVENT_DECT_ASSOCIATION_REQ_RESULT");
-		desh_print("Association response from long RD ID %u: %s",
-			   resp_data->transmitter_long_rd_id,
-			   resp_data->accepted ? "accepted" : "rejected");
-		if (!resp_data->accepted) {
-			char reject_cause_str[64];
-
-			reject_cause_str[0] = '\0';
-			switch (resp_data->reject_cause) {
-			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_RADIO_CAPACITY:
-				strcpy(reject_cause_str, "No radio capacity");
-				break;
-			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_NO_HW_CAPACITY:
-				strcpy(reject_cause_str, "No hardware capacity");
-				break;
-			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_CONFLICTED_SHORT_ID:
-				strcpy(reject_cause_str, "Conflicted short ID");
-				break;
-			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_SECURITY_NEEDED:
-				strcpy(reject_cause_str, "Security needed");
-				break;
-			case DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON:
-				strcpy(reject_cause_str, "Other reason");
-				break;
-			case DECT_MAC_ASSOCIATION_NO_RESPONSE:
-				strcpy(reject_cause_str, "No response");
-				break;
-			default:
-				strcpy(reject_cause_str, "Unknown");
-				break;
-			}
-			desh_print("  Reject cause: %d (%s)", resp_data->reject_cause,
-				   reject_cause_str);
+		desh_print("NET_EVENT_DECT_ASSOCIATION_CHANGED");
+		if (evt_data->association_change_type == DECT_ASSOCIATION_REQ_REJECTED) {
+			desh_print(" DECT_ASSOCIATION_REQ_REJECTED:");
+			desh_print("  Association request failed with long RD ID:          %u",
+				   evt_data->long_rd_id);
+			desh_print("  Neigbhor role:                                       %s",
+				   evt_data->neighbor_role == DECT_NEIGHBOR_ROLE_PARENT ?
+					   "Parent" :
+					   "Child");
+			desh_print("  Reject cause:                                        %s (%d)",
+				   dect_shell_util_association_reject_cause_to_string(
+					   evt_data->association_req_rejected.reject_cause,
+					   err_str, sizeof(err_str)),
+				   evt_data->association_req_rejected.reject_cause);
+			desh_print("  Reject time:                                         %d sec",
+				dect_shell_util_association_reject_time_to_string(
+					evt_data->association_req_rejected.reject_time,
+					err_str, sizeof(err_str)));
+		} else if (evt_data->association_change_type == DECT_ASSOCIATION_REQ_FAILED_MDM) {
+			desh_print(" DECT_ASSOCIATION_REQ_FAILED_MDM:");
+			desh_print("  Association request failed in modem with long RD ID: %u",
+				   evt_data->long_rd_id);
+			desh_print("  Neigbhor role:                                       %s",
+				   evt_data->neighbor_role == DECT_NEIGHBOR_ROLE_PARENT ?
+					   "Parent" :
+					   "Child");
+			desh_print("  Modem cause:                                         %s (%d)",
+				   dect_shell_util_mac_error_to_string(
+					   evt_data->association_req_failed_mdm.cause,
+					   err_str, sizeof(err_str)),
+				   evt_data->association_req_failed_mdm.cause);
+		} else if (evt_data->association_change_type == DECT_ASSOCIATION_CREATED) {
+			desh_print(" DECT_ASSOCIATION_CREATED:");
+			desh_print("  Association created with long RD ID:                 %u",
+				   evt_data->long_rd_id);
+			desh_print("  Neigbhor role:                                       %s",
+				   evt_data->neighbor_role == DECT_NEIGHBOR_ROLE_PARENT ?
+					   "Parent" :
+					   "Child");
+		} else if (evt_data->association_change_type == DECT_ASSOCIATION_RELEASED) {
+			desh_print(" DECT_ASSOCIATION_RELEASED:");
+			desh_print("  Association released with long RD ID:                %u",
+				evt_data->long_rd_id);
+			desh_print("  Neigbhor role:                                       %s",
+				   evt_data->neighbor_role == DECT_NEIGHBOR_ROLE_PARENT ?
+					   "Parent" :
+					   "Child");
+			desh_print("  Initiator:                                           %s",
+				   evt_data->association_released.neighbor_initiated ?
+					   "Neigbor" :
+					   "Local");
+			desh_print(" Release cause:                                        %s (%d)",
+				dect_shell_util_association_release_cause_to_string(
+					   evt_data->association_released.release_cause,
+					   err_str, sizeof(err_str)),
+				   evt_data->association_released.release_cause);
+		} else {
+			desh_error(" Unknown association change type: %d",
+				   evt_data->association_change_type);
 		}
-		break;
-	}
-	case NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED: {
-		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
-
-		desh_print("NET_EVENT_DECT_PARENT_ASSOCIATION_CREATED");
-		desh_print("Association created with a parent with long RD ID %u", *long_rd_id);
-		break;
-	}
-	case NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED: {
-		const uint32_t *long_rd_id = (const uint32_t *)cb->info;
-
-		desh_print("NET_EVENT_DECT_CHILD_ASSOCIATION_CREATED");
-		desh_print("Association created with a device with long RD ID %u", *long_rd_id);
-		break;
-	}
-	case NET_EVENT_DECT_ASSOCIATION_RELEASED: {
-		const struct dect_association_released_evt *evt_data =
-			(const struct dect_association_released_evt *)cb->info;
-		char err_str[128] = {0};
-
-		desh_print("NET_EVENT_DECT_ASSOCIATION_RELEASED");
-		desh_print(" Association released with long RD ID: %u", evt_data->long_rd_id);
-		desh_print(" Release cause:                        %s (%d)",
-			dect_shell_util_association_release_cause_to_string(
-				evt_data->release_cause, err_str, sizeof(err_str)),
-			evt_data->release_cause);
 		break;
 	}
 	case NET_EVENT_DECT_CLUSTER_CREATED_RESULT: {
