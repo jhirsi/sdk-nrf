@@ -1203,13 +1203,16 @@ association_release:
 }
 
 void dect_nrf91_parent_association_removed(
-	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
+	uint32_t long_rd_id,
+	enum nrf_modem_dect_mac_release_cause rel_cause,
+	bool neighbor_initiated)
 {
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 
 	dect_net_l2_association_removed(
-		iface, long_rd_id, (enum dect_association_release_cause)rel_cause);
+		iface, long_rd_id, (enum dect_association_release_cause)rel_cause,
+		neighbor_initiated);
 
 	/* We are orphan now. The only possible parent is gone. */
 	struct net_if_addr *ifaddr;
@@ -1276,14 +1279,16 @@ void dect_nrf91_parent_association_removed(
 }
 
 void dect_nrf91_child_association_removed(
-	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
+	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause,
+	bool neighbor_initiated)
 {
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
 	struct dect_nrf91_association_data *ass_list_item =
 		dect_nrf91_child_association_list_item_get(long_rd_id);
 
 	dect_net_l2_association_removed(
-		iface, long_rd_id, (enum dect_association_release_cause)rel_cause);
+		iface, long_rd_id, (enum dect_association_release_cause)rel_cause,
+		neighbor_initiated);
 
 	if (ass_list_item) {
 		if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
@@ -1311,7 +1316,8 @@ void dect_nrf91_child_association_all_removed(void)
 			dect_net_l2_association_removed(
 				ctx->iface,
 				ctx->child_associations[i].target_long_rd_id,
-				DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
+				DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION,
+				false);
 			dect_nrf91_child_association_list_remove(
 				ctx->child_associations[i].target_long_rd_id);
 		}

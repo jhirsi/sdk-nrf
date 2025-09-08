@@ -2806,14 +2806,10 @@ send_events:
 					DECT_DEVICE_TYPE_PT);
 			if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 				/* Modem operation failed */
-				struct dect_association_req_result_evt resp = {
-					.transmitter_long_rd_id = params->long_rd_id,
-					.accepted = false,
-					.reject_cause =
-						DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON,
-				};
-
-				dect_mgmt_association_req_result_evt(ctrl_data.iface, resp);
+				dect_mgmt_association_req_failed_mdm_result_evt(
+					ctrl_data.iface,
+					params->long_rd_id,
+					network_status_data.dect_err_cause);
 				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
 
 				ctrl_data.configure_params.auto_start = false;
@@ -2831,43 +2827,34 @@ send_events:
 			}
 
 			if (!params->flags.has_association_response) {
-				struct dect_association_req_result_evt resp = {
-					.transmitter_long_rd_id = params->long_rd_id,
-					.accepted = false,
-					.reject_cause = DECT_MAC_ASSOCIATION_NO_RESPONSE,
-				};
+				dect_mgmt_association_req_rejected_result_evt(
+					ctrl_data.iface,
+					params->long_rd_id,
+					DECT_MAC_ASSOCIATION_NO_RESPONSE,
+					DECT_MAC_ASSOCIATION_REJECT_TIME_60S);
 
 				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
-				dect_mgmt_association_req_result_evt(ctrl_data.iface, resp);
 				LOG_ERR("Association response with no actual response with long RD "
 					"ID: 0x%X",
 					params->long_rd_id);
 			} else if (!params->association_response.ack_status) {
 				/* Association rejected */
-				struct dect_association_req_result_evt resp = {
-					.transmitter_long_rd_id = params->long_rd_id,
-					.accepted = false,
-					.reject_cause = params->association_response.reject_cause,
-				};
-
 				LOG_INF("Association rejected with long RD ID: %d (0x%X), cause %d",
 					params->long_rd_id, params->long_rd_id,
 					params->association_response.reject_cause);
 
-				dect_mgmt_association_req_result_evt(ctrl_data.iface, resp);
+				dect_mgmt_association_req_rejected_result_evt(
+					ctrl_data.iface,
+					params->long_rd_id,
+					params->association_response.reject_cause,
+					params->association_response.reject_time);
 			} else {
-				struct dect_association_req_result_evt resp = {
-					.transmitter_long_rd_id = params->long_rd_id,
-					.accepted = true,
-				};
-
 				LOG_INF("New parent: association with long RD ID: %d (0x%X)",
 					params->long_rd_id, params->long_rd_id);
 
 				ctrl_data.configure_params.auto_start = false;
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_ASSOCIATED;
-				dect_mgmt_association_req_result_evt(ctrl_data.iface, resp);
 				dect_nrf91_parent_association_created(params->long_rd_id,
 								      params->ipv6_config);
 			}
@@ -2886,10 +2873,10 @@ send_events:
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_NONE;
 				dect_nrf91_parent_association_removed(
-					params->long_rd_id, ctrl_data.last_rel_cause);
+					params->long_rd_id, ctrl_data.last_rel_cause, false);
 			} else if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
 				dect_nrf91_child_association_removed(
-					params->long_rd_id, ctrl_data.last_rel_cause);
+					params->long_rd_id, ctrl_data.last_rel_cause, false);
 			}
 			break;
 		}
@@ -2904,13 +2891,13 @@ send_events:
 
 			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
 				dect_nrf91_child_association_removed(
-					params->long_rd_id, params->release_cause);
+					params->long_rd_id, params->release_cause, true);
 			} else {
 				/* Network kicked us out? */
 				ctrl_data.ass_config.pt_association_state =
 					CTRL_PT_ASSOCIATION_STATE_NONE;
 				dect_nrf91_parent_association_removed(
-					params->long_rd_id, params->release_cause);
+					params->long_rd_id, params->release_cause, true);
 			}
 			break;
 		}
