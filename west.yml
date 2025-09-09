@@ -67,7 +67,7 @@ manifest:
     - name: zephyr
       repo-path: sdk-zephyr
       remote: jhirsi
-      revision: zephyr_dect_mac_dev
+      revision: zephyr_dect_mac_dev_2
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
