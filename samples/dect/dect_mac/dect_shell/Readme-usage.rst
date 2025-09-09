@@ -94,7 +94,7 @@ DeSh command: ``hostname``
 You can set and read the hostname of the DECT NR+ device.
   .. code-block:: console
 
-     desh:~$ hostname write dect-ft-device.local
+     desh:~$ hostname write dect-ft-device
      desh:~$ hostname read
 
 Application settings
