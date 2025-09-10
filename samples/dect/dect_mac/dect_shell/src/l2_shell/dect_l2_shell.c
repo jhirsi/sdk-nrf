@@ -47,7 +47,7 @@ static struct net_mgmt_event_callback dect_shell_mgmt_cb;
 	(NET_EVENT_DECT_ACTIVATE_DONE | NET_EVENT_DECT_DEACTIVATE_DONE |                           \
 	 NET_EVENT_DECT_RSSI_SCAN_RESULT | NET_EVENT_DECT_RSSI_SCAN_DONE |                         \
 	 NET_EVENT_DECT_SCAN_DONE | NET_EVENT_DECT_SCAN_RESULT |                                   \
-	 NET_EVENT_DECT_ASSOCIATION_CHANGED |                                                      \
+	 NET_EVENT_DECT_ASSOCIATION_CHANGED | NET_EVENT_DECT_CLUSTER_INFO |                        \
 	 NET_EVENT_DECT_CLUSTER_CREATED_RESULT | NET_EVENT_DECT_NEIGHBOR_LIST |                    \
 	 NET_EVENT_DECT_NEIGHBOR_INFO | NET_EVENT_DECT_NW_BEACON_START_RESULT |                    \
 	 NET_EVENT_DECT_NW_BEACON_STOP_RESULT | NET_EVENT_DECT_NEIGHBOR_INFO |                     \
