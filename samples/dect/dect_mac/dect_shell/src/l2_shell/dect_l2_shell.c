@@ -387,10 +387,8 @@ static void handle_dect_scan_result_evt(struct net_mgmt_event_callback *cb)
 	desh_print("  RX RSSI-2:               %ddBm", entry->rx_signal_info.rssi_2);
 	desh_print("  RX SNR:                  %ddB", entry->rx_signal_info.snr);
 	desh_print("  RX MCS index:            %d", entry->rx_signal_info.mcs);
-	desh_print("  RX transmit power        %d (%d dBm)",
-				   entry->rx_signal_info.transmit_power,
-				   dect_nrp_utils_phy_tx_power_to_dbm(
-					   entry->rx_signal_info.transmit_power));
+	/* TODO convert to dbm: */
+	desh_print("  RX Transmit power:       %d", entry->rx_signal_info.transmit_power);
 	if (entry->beacon_type == DECT_SCAN_RESULT_TYPE_NW_BEACON) {
 		desh_print("  Current cluster channel: %d",
 			   entry->network_beacon.current_cluster_channel);
@@ -714,26 +712,20 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 				   evt_data->last_rx_signal_info.rssi_2);
 			desh_print("  Last RX SNR....................................%d",
 				   evt_data->last_rx_signal_info.snr);
-			if (evt_data->ft_mode) {
-				desh_print("  beacon_average_rx_txpower......................."
-					   "%d dB",
-					evt_data->beacon_average_rx_txpower);
-				desh_print("  beacon_average_rx_rssi_2.......................%d",
-					evt_data->beacon_average_rx_rssi_2);
-				desh_print("  beacon_average_rx_snr..........................%d",
-					evt_data->beacon_average_rx_snr);
-				desh_print("  total_missed_cluster_beacons...................%u",
-					evt_data->status_info.total_missed_cluster_beacons);
-				desh_print(
-					"  current_consecutive_missed_cluster_beacons.....%u",
-					evt_data->status_info
-						.current_consecutive_missed_cluster_beacons);
-				desh_print("  num_rx_paging..................................%u",
-					evt_data->status_info.num_rx_paging);
-			}
+			desh_print("  beacon_average_rx_rssi_2.......................%d",
+				   evt_data->beacon_average_rx_rssi_2);
+			desh_print("  beacon_average_rx_snr..........................%d",
+				   evt_data->beacon_average_rx_snr);
+			desh_print("  total_missed_cluster_beacons...................%u",
+				   evt_data->status_info.total_missed_cluster_beacons);
+			desh_print(
+				"  current_consecutive_missed_cluster_beacons.....%u",
+				evt_data->status_info.current_consecutive_missed_cluster_beacons);
+			desh_print("  num_rx_paging..................................%u",
+				   evt_data->status_info.num_rx_paging);
 			desh_print("  average_rx_mcs.................................%u",
 				   evt_data->status_info.average_rx_mcs);
-			desh_print("  average_rx_txpower.............................%d dB",
+			desh_print("  average_rx_txpower.............................%d",
 				   evt_data->status_info.average_rx_txpower);
 			desh_print("  average_rx_rssi_2..............................%d",
 				   evt_data->status_info.average_rx_rssi_2);
@@ -741,7 +733,7 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 				   evt_data->status_info.average_rx_snr);
 			desh_print("  average_tx_mcs.................................%u",
 				   evt_data->status_info.average_tx_mcs);
-			desh_print("  average_tx_txpower.............................%d dB",
+			desh_print("  average_tx_txpower.............................%d",
 				   evt_data->status_info.average_tx_txpower);
 			desh_print("  num_tx_attempts................................%u",
 				   evt_data->status_info.num_tx_attempts);
@@ -1690,7 +1682,7 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 		   dect_sett->cluster.max_beacon_tx_power_dbm);
 	desh_print("   Max cluster TX power:                %d dBm",
 		   dect_sett->cluster.max_cluster_power_dbm);
-	desh_print("   Max num of neighbors:                %d",
+	desh_print("   Max num of neighbors:                 %d",
 		   dect_sett->cluster.max_num_neighbors);
 	if (dect_sett->cluster.channel_loaded_percent) {
 		desh_print("   Channel reselection:                 enabled");
