@@ -441,6 +441,7 @@ static int dect_nrf91_ctrl_configure_cmd(dect_nrf91_ctrl_configure_params_t *par
 
 	struct nrf_modem_dect_control_configure_params config = {
 		.max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(params->tx_pwr),
+		.expected_mcs1_rx_rssi_level = -70, /* TODO: setting? */
 		.max_mcs = params->tx_mcs,
 		.long_rd_id = params->long_rd_id,
 		.phy_band_group_index = params->band_group_index,
@@ -1911,8 +1912,6 @@ send_events:
 					}},
 			};
 			struct nrf_modem_dect_mac_cluster_configure_params params = {
-				.include_load_info = false,
-				.include_route_info = false,
 				.cluster_period_start_offset = 0,
 				.association_config = &ass_config,
 				.cluster_config = &cluster_config,
@@ -2203,6 +2202,15 @@ send_events:
 						LOG_DBG("nw scan stopping requested");
 					}
 				}
+			}
+			if (ctrl_data.ass_config.pt_association_state ==
+			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
+			    set_ptr->net_mgmt_common.association.min_sensitivity_dbm >=
+			    params->rx_signal_info.rssi_2) {
+				LOG_WRN("Signal (rssi_2 %d) is below the minimum "
+					"sensitivity threshold (%d)",
+					params->rx_signal_info.rssi_2,
+					set_ptr->net_mgmt_common.association.min_sensitivity_dbm);
 			}
 			break;
 		}

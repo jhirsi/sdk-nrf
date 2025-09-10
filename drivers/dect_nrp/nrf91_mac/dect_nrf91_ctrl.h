@@ -64,6 +64,7 @@ typedef enum {
 	DECT_NRF91_CTRL_DEVICE_TYPE_NA,
 } dect_nrf91_ctrl_device_type_t;
 
+/* TODO: use nrf_modem_dect_control_configure_params directly? */
 typedef struct {
 	dect_nrf91_ctrl_device_type_t device_type;
 	bool debug;
@@ -71,6 +72,8 @@ typedef struct {
 	bool power_save;
 	bool auto_start;
 	bool auto_activate;
+
+	int8_t expected_mcs1_rx_rssi_level;
 
 	int8_t tx_pwr;
 	uint8_t tx_mcs;
