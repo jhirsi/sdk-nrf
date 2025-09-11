@@ -1386,7 +1386,7 @@ send_events:
 					.network_id_filter_mode =
 						NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_NONE,
 					.band = set_ptr->net_mgmt_common.band_nbr,
-					.scan_time = 2200, /* TODO: a config setting for this one?*/
+					.scan_time = 2100, /* TODO: a config setting for this one?*/
 					.num_channels = 0,
 				};
 
@@ -1395,6 +1395,25 @@ send_events:
 					params.num_channels = 1;
 					params.channel_list[0] =
 						ctrl_data.ft_requested_cluster_channel;
+				} else {
+					uint8_t num_channels =
+						NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ;
+					uint16_t channel_list
+					[NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ];
+
+					if (dect_common_utils_use_harmonized_std(
+						    set_ptr->net_mgmt_common.band_nbr) &&
+					    dect_common_utils_harmonized_band_channel_array_get(
+						    set_ptr->net_mgmt_common.band_nbr, channel_list,
+						    &num_channels)) {
+						/* Per harmonized std: only odd number channels at
+						 * band #1:
+						 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
+						 */
+						params.num_channels = num_channels;
+						memcpy(params.channel_list, channel_list,
+						       num_channels * sizeof(uint16_t));
+					}
 				}
 
 				if (ctrl_data.ft_cluster_reconfig_ongoing) {
@@ -1405,7 +1424,8 @@ send_events:
 				} else {
 					LOG_INF("FT device auto start for cluster start: "
 						"starting NW scanning to see where other "
-						"clusters are");
+						"clusters are: band %hhu, num_channels %hhu",
+						params.band, params.num_channels);
 					err = nrf_modem_dect_mac_network_scan(&params);
 				}
 				if (!err) {
