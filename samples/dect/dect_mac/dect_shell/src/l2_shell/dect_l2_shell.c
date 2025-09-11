@@ -387,8 +387,9 @@ static void handle_dect_scan_result_evt(struct net_mgmt_event_callback *cb)
 	desh_print("  RX RSSI-2:               %ddBm", entry->rx_signal_info.rssi_2);
 	desh_print("  RX SNR:                  %ddB", entry->rx_signal_info.snr);
 	desh_print("  RX MCS index:            %d", entry->rx_signal_info.mcs);
-	/* TODO convert to dbm: */
-	desh_print("  RX Transmit power:       %d", entry->rx_signal_info.transmit_power);
+	desh_print("  RX Transmit power:       %d (%d dBm)",
+		entry->rx_signal_info.transmit_power,
+		dect_nrp_utils_phy_tx_power_to_dbm(entry->rx_signal_info.transmit_power));
 	if (entry->beacon_type == DECT_SCAN_RESULT_TYPE_NW_BEACON) {
 		desh_print("  Current cluster channel: %d",
 			   entry->network_beacon.current_cluster_channel);
