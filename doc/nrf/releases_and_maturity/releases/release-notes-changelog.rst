@@ -577,30 +577,38 @@ Multiprotocol Service Layer libraries
 Libraries for networking
 ------------------------
 
-* Updated the following libraries to use the new ``SEC_TAG_TLS_INVALID`` definition for checking whether a security tag is valid:
+* Added:
 
+  * The :ref:`lib_downloader` library.
+  * A backend for the :ref:`TLS Credentials Subsystem <zephyr:sockets_tls_credentials_subsys>` that stores the credentials in the modem, see :kconfig:option:`CONFIG_TLS_CREDENTIALS_BACKEND_NRF_MODEM`.
+
+* Deprecated the :ref:`lib_download_client` library.
+  See the :ref:`migration guide <migration_3.0_recommended>` for recommended changes.
+
+* Updated the following libraries to use the :ref:`lib_downloader` library instead of the :ref:`lib_download_client` library:
+
+  * :ref:`lib_nrf_cloud`
   * :ref:`lib_aws_fota`
+  * :ref:`lib_azure_fota`
   * :ref:`lib_fota_download`
-  * :ref:`lib_ftp_client`
 
-* :ref:`lib_nrf_provisioning` library:
+* :ref:`lib_nrf_cloud_pgps` library:
 
-  * Added a blocking call to wait for a functional-mode change, relocating the logic from the app into the library.
+  * Fixed the warning due to missing ``https`` download protocol.
 
-  * Updated:
+* :ref:`lib_downloader` library:
 
-    * By making internal scheduling optional.
-      Applications can now trigger provisioning manually using the :kconfig:option:`CONFIG_NRF_PROVISIONING_SCHEDULED` Kconfig option.
-    * By moving root CA provisioning to modem initialization callback to avoid blocking and ensure proper state.
-    * By expanding the event handler to report more provisioning events, including failures.
-    * By making the event handler callback mandatory to notify the application of failures and prevent silent errors.
-    * By unifying the device‐mode and modem‐mode callbacks into a single handler for cleaner integration.
-    * The documentation and sample code accordingly.
+  * Updated to support Proxy-URI option and an authentication callback after connecting.
 
-  * Fixed multiple bugs and enhanced error handling.
+* :ref:`lib_fota_download` library:
 
-* Deprecated the :ref:`lib_nrf_cloud_rest` library.
-  Use the :ref:`lib_nrf_cloud_coap` library instead.
+  * Added error codes related to unsupported protocol, DFU failures, and invalid configuration.
+  * Updated to use the :ref:`lib_downloader` library for CoAP downloads.
+
+* :ref:`lib_nrf_cloud` library:
+
+  * Added the :kconfig:option:`CONFIG_NRF_CLOUD` Kconfig option to prevent unintended inclusion of nRF Cloud Kconfig variables in non-nRF Cloud projects.
+  * Updated to use the :ref:`lib_downloader` library for CoAP downloads.
 
 Libraries for NFC
 -----------------
