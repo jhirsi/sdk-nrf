@@ -10,4 +10,4 @@ zephyr_library_sources(
     app_jwt.c
 )
 
-zephyr_link_libraries_ifdef(CONFIG_MBEDTLS mbedTLS)
+zephyr_library_link_libraries_ifdef(CONFIG_MBEDTLS mbedTLS)
