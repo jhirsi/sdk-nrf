@@ -221,7 +221,7 @@ static void scan_result_cb(struct net_if *iface, enum dect_status_values status,
 
 /**************************************************************************************************/
 
-static int dect_mgmt_activate(uint32_t mgmt_request, struct net_if *iface, void *data, size_t len)
+static int dect_mgmt_activate(uint64_t mgmt_request, struct net_if *iface, void *data, size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
@@ -235,7 +235,7 @@ static int dect_mgmt_activate(uint32_t mgmt_request, struct net_if *iface, void 
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_ACTIVATE, dect_mgmt_activate);
 
-static int dect_mgmt_deactivate(uint32_t mgmt_request, struct net_if *iface, void *data, size_t len)
+static int dect_mgmt_deactivate(uint64_t mgmt_request, struct net_if *iface, void *data, size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
@@ -251,7 +251,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_DEACTIVATE, dect_mgmt_deactiv
 
 /**************************************************************************************************/
 
-static int dect_mgmt_rssi_scan(uint32_t mgmt_request, struct net_if *iface, void *data, size_t len)
+static int dect_mgmt_rssi_scan(uint64_t mgmt_request, struct net_if *iface, void *data, size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
@@ -268,7 +268,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_RSSI_SCAN, dect_mgmt_rssi_sca
 
 /**************************************************************************************************/
 
-static int dect_mgmt_scan(uint32_t mgmt_request, struct net_if *iface, void *data, size_t len)
+static int dect_mgmt_scan(uint64_t mgmt_request, struct net_if *iface, void *data, size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
@@ -285,7 +285,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_SCAN, dect_mgmt_scan);
 
 /**************************************************************************************************/
 
-static int dect_mgmt_network_create(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_network_create(uint64_t mgmt_request, struct net_if *iface, void *data,
 				    size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -300,7 +300,7 @@ static int dect_mgmt_network_create(uint32_t mgmt_request, struct net_if *iface,
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NETWORK_CREATE, dect_mgmt_network_create);
 
-static int dect_mgmt_network_remove(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_network_remove(uint64_t mgmt_request, struct net_if *iface, void *data,
 				    size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -315,7 +315,7 @@ static int dect_mgmt_network_remove(uint32_t mgmt_request, struct net_if *iface,
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NETWORK_REMOVE, dect_mgmt_network_remove);
 
-static int dect_mgmt_network_join(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_network_join(uint64_t mgmt_request, struct net_if *iface, void *data,
 				  size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -330,7 +330,7 @@ static int dect_mgmt_network_join(uint32_t mgmt_request, struct net_if *iface, v
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NETWORK_JOIN, dect_mgmt_network_join);
 
-static int dect_mgmt_network_unjoin(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_network_unjoin(uint64_t mgmt_request, struct net_if *iface, void *data,
 				    size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -347,7 +347,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NETWORK_UNJOIN, dect_mgmt_net
 
 /**************************************************************************************************/
 
-static int dect_mgmt_status_info_get(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_status_info_get(uint64_t mgmt_request, struct net_if *iface, void *data,
 				     size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -364,7 +364,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_STATUS_INFO_GET, dect_mgmt_st
 
 /**************************************************************************************************/
 
-static int dect_mgmt_settings_read(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_settings_read(uint64_t mgmt_request, struct net_if *iface, void *data,
 				   size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -382,7 +382,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_SETTINGS_READ, dect_mgmt_sett
 
 /**************************************************************************************************/
 
-static int dect_mgmt_settings_write(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_settings_write(uint64_t mgmt_request, struct net_if *iface, void *data,
 				    size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -421,7 +421,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_SETTINGS_WRITE, dect_mgmt_set
 
 /**************************************************************************************************/
 
-static int dect_mgmt_associate_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_associate_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				   size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -440,7 +440,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_ASSOCIATION, dect_mgmt_associ
 
 /**************************************************************************************************/
 
-static int dect_mgmt_associate_release(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_associate_release(uint64_t mgmt_request, struct net_if *iface, void *data,
 				       size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -460,7 +460,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_ASSOCIATION_RELEASE,
 
 /**************************************************************************************************/
 
-static int dect_mgmt_cluster_start_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_cluster_start_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				       size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -477,7 +477,7 @@ static int dect_mgmt_cluster_start_req(uint32_t mgmt_request, struct net_if *ifa
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_CLUSTER_START, dect_mgmt_cluster_start_req);
 
-static int dect_mgmt_cluster_reconfig_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_cluster_reconfig_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 					   size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -494,7 +494,7 @@ static int dect_mgmt_cluster_reconfig_req(uint32_t mgmt_request, struct net_if *
 NET_MGMT_REGISTER_REQUEST_HANDLER(
 	NET_REQUEST_DECT_CLUSTER_RECONFIGURE, dect_mgmt_cluster_reconfig_req);
 
-static int dect_mgmt_cluster_stop_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_cluster_stop_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				      size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -513,7 +513,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_CLUSTER_STOP, dect_mgmt_clust
 
 /**************************************************************************************************/
 
-static int dect_mgmt_nw_beacon_start_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_nw_beacon_start_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 					 size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -530,7 +530,7 @@ static int dect_mgmt_nw_beacon_start_req(uint32_t mgmt_request, struct net_if *i
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NW_BEACON_START, dect_mgmt_nw_beacon_start_req);
 
-static int dect_mgmt_nw_beacon_stop_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_nw_beacon_stop_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 					size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -549,7 +549,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NW_BEACON_STOP, dect_mgmt_nw_
 
 /**************************************************************************************************/
 
-static int dect_mgmt_neighbor_list_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_neighbor_list_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				       size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -565,7 +565,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NEIGHBOR_LIST, dect_mgmt_neig
 
 /**************************************************************************************************/
 
-static int dect_mgmt_neighbor_info_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_neighbor_info_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				       size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
@@ -583,7 +583,7 @@ NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_NEIGHBOR_INFO, dect_mgmt_neig
 
 /**************************************************************************************************/
 
-static int dect_mgmt_cluster_info_req(uint32_t mgmt_request, struct net_if *iface, void *data,
+static int dect_mgmt_cluster_info_req(uint64_t mgmt_request, struct net_if *iface, void *data,
 				      size_t len)
 {
 	const struct device *dev = net_if_get_device(iface);
