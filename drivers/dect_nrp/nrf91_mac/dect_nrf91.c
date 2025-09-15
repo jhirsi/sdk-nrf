@@ -501,7 +501,7 @@ static void dect_nrf91_parent_association_list_remove(uint32_t target_long_rd_id
 static struct net_mgmt_event_callback dect_nrf91_net_mgmt_ipv6_event_cb;
 
 static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callback *cb,
-						   uint32_t mgmt_event, struct net_if *iface)
+						   uint64_t mgmt_event, struct net_if *iface)
 {
 	char ipv6_addr_str[NET_IPV6_ADDR_LEN];
 
