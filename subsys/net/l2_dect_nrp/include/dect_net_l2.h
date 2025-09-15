@@ -86,7 +86,7 @@ enum dect_cluster_beacon_period {
 /**************************************************************************************************/
 
 #define DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN	   20
-#define DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ  4
+#define DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ  20
 #define DECT_MAC_MAX_ADDITIONAL_NW_BEACON_CHANNELS 3
 
 struct dect_rssi_scan_params {
