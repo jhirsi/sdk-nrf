@@ -140,7 +140,7 @@ K_WORK_DELAYABLE_DEFINE(auto_connect_work, auto_connect_work_fn);
 static struct net_mgmt_event_callback l4_cb;
 static struct net_mgmt_event_callback conn_cb;
 
-static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
+static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t event,
 			     struct net_if *iface)
 {
 	if (iface != context.iface) {
@@ -167,7 +167,7 @@ static void l4_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
 	}
 }
 
-static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint32_t event,
+static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint64_t event,
 				       struct net_if *iface)
 {
 	if (event == NET_EVENT_CONN_IF_FATAL_ERROR) {
@@ -185,7 +185,7 @@ static void connectivity_event_handler(struct net_mgmt_event_callback *cb, uint3
 	 NET_EVENT_DECT_NETWORK_STATUS | NET_EVENT_DECT_SINK_STATUS)
 
 static void auto_connect_net_mgmt_event_handler(struct net_mgmt_event_callback *cb,
-						uint32_t mgmt_event, struct net_if *iface)
+						uint64_t mgmt_event, struct net_if *iface)
 {
 	char err_str[128] = {0};
 
