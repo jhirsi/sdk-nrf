@@ -67,7 +67,7 @@ manifest:
     - name: zephyr
       repo-path: sdk-zephyr
       remote: jhirsi
-      revision: zephyr_dect_mac_dev_2
+      revision: zephyr_dect_mac_dev_3
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
@@ -148,7 +148,7 @@ manifest:
       repo-path: sdk-nrfxlib-dect-nrp
       path: nrfxlib
       remote: ncs
-      revision: dect_nrp_mdm_mac_dev
+      revision: dect_nrp_mdm_mac_dev_2
     - name: trusted-firmware-m
       repo-path: sdk-trusted-firmware-m
       path: modules/tee/tf-m/trusted-firmware-m
