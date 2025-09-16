@@ -53,7 +53,8 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 {
 	char ipv6_addr_str[NET_IPV6_ADDR_LEN];
 
-	if (iface != iface_for_prefix) {
+	if (iface && iface != iface_for_prefix) {
+		/* With NULL interface we should continue */
 		return;
 	}
 
@@ -243,7 +244,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 	case NET_EVENT_IPV6_NBR_ADD: {
 		struct net_event_ipv6_nbr *ipv6_nbr = (struct net_event_ipv6_nbr *)cb->info;
 
-		LOG_INF("NET_EVENT_IPV6_NBR_ADD: iface %p, nbr %s", iface,
+		LOG_DBG("NET_EVENT_IPV6_NBR_ADD: iface %p, nbr %s", iface,
 			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_nbr->addr, ipv6_addr_str,
 				      NET_IPV6_ADDR_LEN));
 		break;
@@ -252,7 +253,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 	case NET_EVENT_IPV6_NBR_DEL: {
 		struct net_event_ipv6_nbr *ipv6_nbr = (struct net_event_ipv6_nbr *)cb->info;
 
-		LOG_INF("NET_EVENT_IPV6_NBR_DEL: iface %p, nbr %s", iface,
+		LOG_DBG("NET_EVENT_IPV6_NBR_DEL: iface %p, nbr %s", iface,
 			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_nbr->addr, ipv6_addr_str,
 				      NET_IPV6_ADDR_LEN));
 #if defined(CONFIG_MODEM_CELLULAR)
@@ -261,8 +262,8 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 		 */
 		if (net_if_is_up(iface_for_prefix) &&
 		    net_ipv6_addr_cmp(&ipv6_router_addr, (struct in6_addr *)&ipv6_nbr->addr)) {
-			LOG_INF("NET_EVENT_IPV6_NBR_DEL: LTE IPv6 router removed "
-				"as nbr from LTE iface - let's add it back");
+			LOG_INF("NET_EVENT_IPV6_NBR_DEL: Sink IPv6 router removed "
+				"as nbr - let's add it back");
 
 			/* Submit a work to get it back (system queue) */
 			k_work_reschedule(&lte_ipv6_router_nbr_deleted_work, K_MSEC(100));
@@ -271,10 +272,10 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 		break;
 	}
 	case NET_EVENT_IPV6_ROUTE_ADD:
-		LOG_INF("NET_EVENT_IPV6_ROUTE_ADD: iface %p", iface);
+		LOG_DBG("NET_EVENT_IPV6_ROUTE_ADD: iface %p", iface);
 		break;
 	case NET_EVENT_IPV6_ROUTE_DEL:
-		LOG_INF("NET_EVENT_IPV6_ROUTE_DEL: iface %p", iface);
+		LOG_DBG("NET_EVENT_IPV6_ROUTE_DEL: iface %p", iface);
 		break;
 
 	default:
@@ -383,7 +384,9 @@ static void dect_nrf91_sink_lte_ipv6_nbr_router_deleted_worker(struct k_work *wo
 #define NET_IF_EVENT_MASK (NET_EVENT_IF_UP | NET_EVENT_IF_DOWN)
 #define IPV6_LAYER_EVENT_MASK                                                                      \
 	(NET_EVENT_IPV6_PREFIX_ADD | NET_EVENT_IPV6_PREFIX_DEL | NET_EVENT_IPV6_ADDR_ADD |         \
-	 NET_EVENT_IPV6_ADDR_DEL | NET_EVENT_IPV6_ROUTER_ADD | NET_EVENT_IPV6_ROUTER_DEL)
+	 NET_EVENT_IPV6_ADDR_DEL | NET_EVENT_IPV6_ROUTER_ADD | NET_EVENT_IPV6_ROUTER_DEL |         \
+	NET_EVENT_IPV6_NBR_DEL | NET_EVENT_IPV6_NBR_ADD | NET_EVENT_IPV6_ROUTE_ADD |               \
+	 NET_EVENT_IPV6_ROUTE_DEL)
 
 static int dect_nrf91_sink_init(void)
 {
