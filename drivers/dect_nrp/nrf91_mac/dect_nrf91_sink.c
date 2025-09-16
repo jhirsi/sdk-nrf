@@ -157,7 +157,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 		struct net_event_ipv6_addr *evt_ipv6_addr = (struct net_event_ipv6_addr *)cb->info;
 		struct in6_addr *ipv6_addr = &evt_ipv6_addr->addr;
 
-		LOG_INF("NET_EVENT_IPV6_ADDR_ADD: iface %p, addr %s", iface,
+		LOG_DBG("NET_EVENT_IPV6_ADDR_ADD: iface %p, addr %s", iface,
 			net_addr_ntop(AF_INET6, ipv6_addr, ipv6_addr_str, NET_IPV6_ADDR_LEN));
 
 		/* This is the trick: we get the 8 bytes as a prefix for
@@ -187,7 +187,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 			{
 				if (net_ipv6_is_global_addr(
 					    &dect_ipv6s->unicast[i].address.in6_addr)) {
-					LOG_INF("Removing old global address %s",
+					LOG_DBG("Removing old global address %s",
 						net_sprint_ipv6_addr(
 							&dect_ipv6s->unicast[i].address.in6_addr));
 					net_if_ipv6_addr_rm(

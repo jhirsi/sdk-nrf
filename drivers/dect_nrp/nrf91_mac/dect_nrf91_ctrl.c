@@ -1047,7 +1047,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			if (ctrl_data.configure_params.auto_activate ||
 			    ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ ||
 			    ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_CONFIGURE) {
-				LOG_INF("Modem configured: "
+				LOG_DBG("Modem configured: "
 					"activating to full functional mode");
 
 				if (dect_nrf91_ctrl_mdm_activate_req()) {
@@ -1155,7 +1155,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			ctrl_data.configure_params.auto_start = false;
 
 			if (reactivate) {
-				LOG_INF("Deactivated. Next configure before reactivate");
+				LOG_DBG("Deactivated. Next configure before reactivate");
 				/* Reactivate modem to be able to give commands still */
 				if (dect_nrf91_ctrl_configure_n_activate()) {
 					LOG_ERR("Error in initiating modem configure and activate");
@@ -1623,7 +1623,7 @@ send_events:
 				&evt_data->rssi_result;
 			bool channel_has_another_cluster = false;
 
-			LOG_INF("RSSI scan results received");
+			LOG_DBG("RSSI scan results received");
 
 			bool scan_suitable_percent_ok = false;
 			bool all_subslots_free = false;
@@ -1641,7 +1641,7 @@ send_events:
 			/* Check if we have seen another cluster in this channel */
 			if (dect_nrf91_ctrl_cluster_channels_list_channel_exists(
 				rssi_data->channel)) {
-				LOG_INF("RSSI results: another cluster seen in this"
+				LOG_DBG("RSSI results: another cluster seen in this"
 					" channel %d was seen in nw scanning phase",
 					rssi_data->channel);
 				channel_has_another_cluster = true;

@@ -243,7 +243,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 		} else {
 			added = true;
 			ass_list_item->local_ipv6_addr = child_addr;
-			LOG_INF("(%s): child (long rd id %d) local addr %s (link addr %s) added "
+			LOG_DBG("(%s): child (long rd id %d) local addr %s (link addr %s) added "
 				"as a neighbor to dect iface",
 				(__func__), ass_list_item->target_long_rd_id,
 				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
@@ -265,7 +265,7 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 				added = true;
 				ass_list_item->global_ipv6_addr = child_addr;
 				ass_list_item->global_ipv6_addr_set = true;
-				LOG_INF("(%s): child (long rd id %d) global addr %s (link addr %s) "
+				LOG_DBG("(%s): child (long rd id %d) global addr %s (link addr %s) "
 					"added as a neighbor to dect iface",
 					(__func__), ass_list_item->target_long_rd_id,
 					net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr),
@@ -417,7 +417,7 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 				(__func__));
 		} else {
 			ass_list_item->local_ipv6_addr = parent_addr;
-			LOG_INF("(%s): local addr %s (link addr %s) added as a neighbor to dect "
+			LOG_DBG("(%s): local addr %s (link addr %s) added as a neighbor to dect "
 				"iface",
 				(__func__), net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
 				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
@@ -435,7 +435,7 @@ static void dect_nrf91_parent_association_list_addressing_handle(
 				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
 					(__func__));
 			} else {
-				LOG_INF("(%s): parent global addr %s (link addr %s) added as "
+				LOG_DBG("(%s): parent global addr %s (link addr %s) added as "
 					"a neighbor to dect iface",
 					(__func__),
 					net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
@@ -903,7 +903,7 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 			dect_nrf91_mac_dev_context_data.iface,
 			&current_settings->net_mgmt_common);
 		if (ret_status.reactivate && dect_nrf91_ctrl_mdm_reactivate()) {
-			LOG_INF("Couldn't reconfigure/activate modem to apply new settings - "
+			LOG_DBG("Couldn't reconfigure/activate modem to apply new settings - "
 				"reactivate is needed");
 		}
 	}
