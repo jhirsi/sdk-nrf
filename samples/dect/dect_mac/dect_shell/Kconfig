@@ -93,6 +93,12 @@ config DESH_L2_SHELL
 	help
 	  Enable support for DECT NR+ Net Management interface.
 
+# START OF INTERNAL CHANGE. DO NOT COMMIT TO NCS MASTER.
+config DESH_FIDO_TRACE
+	bool "Enable FIDO tracing"
+	default y
+# END OF INTERNAL CHANGE
+
 rsource "src/native_tls/Kconfig"
 
 endmenu
