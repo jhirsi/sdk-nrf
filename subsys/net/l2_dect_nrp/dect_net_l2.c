@@ -120,7 +120,7 @@ static enum net_verdict dect_net_l2_recv(struct net_if *iface, struct net_pkt *p
 			uint32_t source_long_rd_id = dect_nrp_utils_long_rd_id_from_ipv6_addr(
 				(struct in6_addr *)NET_IPV6_HDR(pkt)->src);
 
-			LOG_INF("%s: IPv6 multicast packet to link local scope address",
+			LOG_DBG("%s: IPv6 multicast packet to link local scope address",
 				(__func__));
 
 			/* Forward to all children */
@@ -171,7 +171,7 @@ static enum net_verdict dect_net_l2_recv(struct net_if *iface, struct net_pkt *p
 					} else {
 						ret = net_pkt_get_len(pkt_cpy);
 						net_pkt_unref(pkt_cpy);
-						LOG_INF("%s (iface %p): multicast forwarded to "
+						LOG_DBG("%s (iface %p): multicast forwarded to "
 							"long rd id %u (%d bytes)",
 							(__func__), iface, ntohl(target_long_rd_id),
 							ret);
@@ -230,7 +230,7 @@ static int dect_net_l2_send(struct net_if *iface, struct net_pkt *pkt)
 				}
 
 				/* FT device: forward multicasts to all children */
-				LOG_INF("%s: FT device: forward multicast to all children",
+				LOG_DBG("%s: FT device: forward multicast to all children",
 					(__func__));
 				for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
 					if (child_associations[i].in_use == false) {
@@ -271,7 +271,7 @@ static int dect_net_l2_send(struct net_if *iface, struct net_pkt *pkt)
 					} else {
 						ret = net_pkt_get_len(pkt_cpy);
 						net_pkt_unref(pkt_cpy);
-						LOG_INF("%s (iface %p): multicast "
+						LOG_DBG("%s (iface %p): multicast "
 							"forwarded to "
 							"long rd id %u (%d bytes)",
 							(__func__), iface,
@@ -436,10 +436,10 @@ static void dect_net_l2_join_ipv6_mdns_group(struct net_if *iface)
 
 	ret = net_ipv6_mld_join(iface, &ipv6mr_multiaddr);
 	if (ret < 0) {
-		LOG_WRN("Iface %p, cannot join mDNS (ff02::fb) IPv6 multicast group (%d)", iface,
+		LOG_DBG("Iface %p, cannot join mDNS (ff02::fb) IPv6 multicast group (%d)", iface,
 			ret);
 	} else {
-		LOG_INF("Iface %p, joined mDNS (ff02::fb) IPv6 multicast group", iface);
+		LOG_DBG("Iface %p, joined mDNS (ff02::fb) IPv6 multicast group", iface);
 	}
 }
 
