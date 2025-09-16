@@ -2485,9 +2485,9 @@ send_events:
 					evt_data->status);
 			} else {
 				cluster_info->num_association_failures =
-					evt_data->info.num_association_requests;
-				cluster_info->num_association_requests =
 					evt_data->info.num_association_failures;
+				cluster_info->num_association_requests =
+					evt_data->info.num_association_requests;
 				cluster_info->num_neighbors = evt_data->info.num_neighbors;
 				cluster_info->num_ftpt_neighbors =
 					evt_data->info.num_ftpt_neighbors;
