@@ -1508,6 +1508,9 @@ send_events:
 					ctrl_data.scan_data.on_going = true;
 					ctrl_data.scan_data.scan_result_cb = NULL;
 					ctrl_data.scan_data.scan_params = params;
+					memset(ctrl_data.scan_data.cluster_channels, 0,
+					sizeof(ctrl_data.scan_data.cluster_channels));
+					ctrl_data.scan_data.current_cluster_channel_index = 0;
 				}
 			}
 			break;
