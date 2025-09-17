@@ -25,6 +25,53 @@ config NET_L2_DECT_MGMT
 	help
 	  Enable support for DECT NR+ Net Management interface.
 
+config NET_L2_DECT_MGMT_CONNECT_TIMEOUT_SECONDS
+	int "Connect timeout in seconds"
+	depends on NET_L2_DECT_MGMT
+	depends on NET_CONNECTION_MANAGER
+	default 0
+	help
+	  Time period in seconds that the library will try to establish a DECT connection, before
+	  timing out. The connect timeout can be updated by calling conn_mgr_if_set_timeout().
+	  Default value is 0 (timeout disabled). When the timeout is disabled, the library relies
+	  solely on the modem's internal connection handling to upkeep the connection.
+
+config NET_L2_DECT_MGMT_CONNECTION_PERSISTENCE
+	bool "Connection persistency"
+	depends on NET_L2_DECT_MGMT
+	depends on NET_CONNECTION_MANAGER
+	default n
+	help
+	  Persistent connection. If the connection is lost the modem will try to reconnect itself
+	  without the need for explicit calls to the network interface.
+	  Persistence can be updated run-time by calling conn_mgr_if_set_flag() with
+	  CONN_MGR_IF_PERSISTENT as flag parameter.
+
+config NET_L2_DECT_MGMT_AUTO_DOWN
+	bool "Auto down"
+	depends on NET_L2_DECT_MGMT
+	depends on NET_CONNECTION_MANAGER
+	default n
+	help
+	 If this option is set the Connection Manager will automatically take the network interface
+	 down when it stops trying to connect. This option sets the default value, the option can
+	 be changed at run time by calling conn_mgr_if_set_flag() with or without the
+	 CONN_MGR_IF_NO_AUTO_DOWN flag.
+
+config NET_L2_DECT_MGMT_AUTO_CONNECT
+	bool "Auto connect"
+	depends on NET_L2_DECT_MGMT
+	depends on NET_CONNECTION_MANAGER
+# No auto-connect support for now; otherwise, the connection manager might try activating
+# the DECT NRP stack before the modem is initialized. To fix this, enabling L2 (done when
+# bringing up the interface) should initialize the modem.
+	default n
+	help
+	 If this option is set the Connection Manager will automatically call connect after the
+	 network interface has been brought up. This option sets the default value, the option can
+	 be changed at run time by calling conn_mgr_if_set_flag() with or without the
+	 CONN_MGR_IF_NO_AUTO_CONNECT flag.
+
 if NET_L2_DECT_MGMT
 module = NET_L2_DECT_MGMT
 module-dep = NET_LOG

@@ -10,22 +10,23 @@
 #include <zephyr/net/conn_mgr_connectivity_impl.h>
 #include <dect_net_l2_mgmt.h>
 
-/* Store a local reference to the connection binding */
-static struct net_if *dect_iface;
+static struct net_mgmt_event_callback dect_mgmt_cb;
+static int64_t connection_timeout;
 
-int dect_nrp_net_if_connect(struct conn_mgr_conn_binding *const binding)
+static int connect(struct net_if *iface)
 {
 	struct dect_settings current_settings;
 	int ret;
 
-	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, dect_iface, &current_settings,
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, iface, &current_settings,
 		       sizeof(current_settings));
 	if (ret) {
 		printk("dect_nrp_net_if_connect: cannot read current settings: %d\n", ret);
-		goto exit;
+		return ret;
 	}
+
 	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
-		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, dect_iface, NULL, 0);
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, iface, NULL, 0);
 		if (ret) {
 			printk("dect_nrp_net_if_connect: cannot initiate request for joining "
 			       "a network: %d\n",
@@ -34,32 +35,41 @@ int dect_nrp_net_if_connect(struct conn_mgr_conn_binding *const binding)
 	} else {
 		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
 
-		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, dect_iface, NULL, 0);
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, iface, NULL, 0);
 		if (ret) {
 			printk("dect_nrp_net_if_connect: cannot initiate request for creating "
 			       "a network: %d\n",
 			       ret);
 		}
 	}
-exit:
+
 	return ret;
+}
+
+int dect_nrp_net_if_connect(struct conn_mgr_conn_binding *const binding)
+{
+	if (binding->timeout) {
+		connection_timeout = k_uptime_get() + binding->timeout * MSEC_PER_SEC;
+	} else {
+		connection_timeout = 0;
+	}
+
+	return connect(binding->iface);
 }
 
 int dect_nrp_net_if_disconnect(struct conn_mgr_conn_binding *const binding)
 {
-	ARG_UNUSED(binding);
-
 	struct dect_settings current_settings;
 	int ret;
 
-	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, dect_iface, &current_settings,
+	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, binding->iface, &current_settings,
 		       sizeof(current_settings));
 	if (ret) {
 		printk("dect_nrp_net_if_disconnect: cannot read current settings: %d\n", ret);
 		goto exit;
 	}
 	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
-		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, dect_iface, NULL, 0);
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, binding->iface, NULL, 0);
 		if (ret) {
 			printk("dect_nrp_net_if_disconnect: cannot initiate request for unjoining "
 			       "a network: %d\n",
@@ -67,7 +77,7 @@ int dect_nrp_net_if_disconnect(struct conn_mgr_conn_binding *const binding)
 		}
 	} else {
 		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
-		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, dect_iface, NULL, 0);
+		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, binding->iface, NULL, 0);
 		if (ret) {
 			printk("dect_nrp_net_if_disconnect: cannot initiate request for removing "
 			       "a network: %d\n",
@@ -78,24 +88,66 @@ exit:
 	return ret;
 }
 
+static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_event,
+			       struct net_if *iface)
+{
+	switch (mgmt_event) {
+	case NET_EVENT_DECT_NETWORK_STATUS: {
+		struct dect_network_status_evt *evt = (struct dect_network_status_evt *)cb->info;
+
+		if (evt->network_status == DECT_NETWORK_STATUS_FAILURE &&
+		    evt->dect_err_cause == DECT_MAC_STATUS_RD_NOT_FOUND) {
+			/* TODO: handle all errors. */
+			if (!connection_timeout || k_uptime_get() < connection_timeout) {
+				connect(iface);
+				printk("\nconnect\n");
+			}
+		}
+		break;
+	}
+	case NET_EVENT_DECT_ASSOCIATION_CHANGED: {
+		struct dect_association_changed_evt *evt =
+			(struct dect_association_changed_evt *)cb->info;
+
+		if (conn_mgr_if_get_flag(iface, CONN_MGR_IF_PERSISTENT) &&
+		    evt->neighbor_role == DECT_NEIGHBOR_ROLE_PARENT &&
+		    evt->association_change_type == DECT_ASSOCIATION_RELEASED &&
+		    evt->association_released.release_cause !=
+					DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION) {
+			/* Lost connection to parent but not because on purpose so reconnect. */
+			dect_nrp_net_if_connect(conn_mgr_if_get_binding(iface));
+			printk("\nif_connect\n");
+		}
+		break;
+	}
+	default:
+		break;
+	}
+}
+
 void dect_nrp_net_if_init(struct conn_mgr_conn_binding *const binding)
 {
-	/* TODO: set iface connectivity flags (persistency, auto-connect and auto-down). */
+	/* Configure the interface according to kconfig values. */
+	if (!IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_CONNECT)) {
+		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_CONNECT, true);
+	}
 
-	/* No auto-connect support for now; otherwise, the connection manager might try activating
-	 * the DECT NRP stack before the modem is initialized. To fix this, enabling L2 (done when
-	 * bringing up the interface) should initialize the modem.
-	 */
-	conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_CONNECT, true);
+	if (!IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_DOWN)) {
+		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_DOWN, true);
+	}
 
-	conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_DOWN, true);
+	if (IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_CONNECTION_PERSISTENCE)) {
+		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_PERSISTENT, true);
+	}
 
-	/* TODO: configure connection timeout. */
+	if (CONFIG_NET_L2_DECT_MGMT_CONNECT_TIMEOUT_SECONDS > 0) {
+		conn_mgr_if_set_timeout(binding->iface,
+					CONFIG_NET_L2_DECT_MGMT_CONNECT_TIMEOUT_SECONDS);
+	}
 
-	/* TODO: subscribe to relevant net events; NET_EVENT_DECT_NETWORK_STATUS, ??? */
-
-	/* Keep local reference to the network interface that the connectivity layer is bound to. */
-	dect_iface = binding->iface;
+	net_mgmt_init_event_callback(&dect_mgmt_cb, dect_event_handler,
+			NET_EVENT_DECT_NETWORK_STATUS | NET_EVENT_DECT_ASSOCIATION_CHANGED);
+	net_mgmt_add_event_callback(&dect_mgmt_cb);
 }
 
 static struct conn_mgr_conn_api l2_dect_conn_api = {
