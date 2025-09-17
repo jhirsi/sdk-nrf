@@ -63,7 +63,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 		struct net_event_ipv6_prefix *ipv6_prefix =
 			(struct net_event_ipv6_prefix *)cb->info;
 
-		LOG_INF("NET_EVENT_IPV6_PREFIX_ADD: iface %p, prefix %s/%d", iface,
+		LOG_DBG("NET_EVENT_IPV6_PREFIX_ADD: iface %p, prefix %s/%d", iface,
 			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_prefix->addr,
 				      ipv6_addr_str, NET_IPV6_ADDR_LEN),
 			ipv6_prefix->len);
@@ -73,7 +73,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 		struct net_event_ipv6_prefix *ipv6_prefix =
 			(struct net_event_ipv6_prefix *)cb->info;
 
-		LOG_INF("NET_EVENT_IPV6_PREFIX_DEL: iface %p, prefix %s/%d", iface,
+		LOG_DBG("NET_EVENT_IPV6_PREFIX_DEL: iface %p, prefix %s/%d", iface,
 			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_prefix->addr,
 				      ipv6_addr_str, NET_IPV6_ADDR_LEN),
 			ipv6_prefix->len);
@@ -84,30 +84,40 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 
 		LOG_INF("NET_EVENT_IPV6_ROUTER_DEL: iface %p, router %s", iface,
 			net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str, NET_IPV6_ADDR_LEN));
+		if (net_if_is_up(iface_for_prefix) &&
+		    net_ipv6_addr_cmp(&ipv6_router_addr, router_addr)) {
+			struct dect_sink_status_evt sink_status_data = {
+				.sink_status = DECT_SINK_STATUS_DISCONNECTED,
+				.br_iface = iface_for_prefix,
+			};
 
-		if (sink_prefix_addr_set == true &&
-		    net_ipv6_is_prefix((uint8_t *)router_addr, sink_prefix_addr.s6_addr,
-				       sizeof(struct in6_addr) / 2)) {
-			LOG_INF("SINK: Router with IPv6 addr with sink prefix %s/%d removed",
-				net_sprint_ipv6_addr(router_addr), sizeof(struct in6_addr) / 2);
+			LOG_INF("SINK: Router with IPv6 addr %s deleted from sink iface %p",
+				net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str,
+					      NET_IPV6_ADDR_LEN),
+				iface_for_prefix);
+
 			sink_prefix_addr_set = false;
+			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
+
+			LOG_INF("SINK: starting router solicitation for iface %p",
+				iface_for_prefix);
+			net_if_start_rs(iface_for_prefix);
 		}
 		break;
 	}
 	case NET_EVENT_IPV6_ROUTER_ADD: {
 		struct in6_addr *router_addr = (struct in6_addr *)cb->info;
+		bool prefix_found = false;
 
 		LOG_INF("NET_EVENT_IPV6_ROUTER_ADD: iface %p, router %s", iface,
 			net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str, NET_IPV6_ADDR_LEN));
 
 		ipv6_router_addr = *router_addr;
-#if RM_JH /* We do not always get this right away and still cellular modem is having pub addr ? */
-		/* This is the trick: if get the 1st public address and get a prefix from there. */
-		struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
 
-		if (sink_prefix_addr_set) {
-			LOG_WRN("prefix already set - continue");
-		}
+		/* Check that one of the iface public ipv6 addresses is having still
+		 * the same prefix
+		 */
+		struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
 
 		ARRAY_FOR_EACH(ipv6->unicast, i)
 		{
@@ -118,39 +128,34 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 				continue;
 			}
 
-			prefix = net_if_ipv6_prefix_get(iface, ipv6_addr);
-			if (prefix) {
-				prefix_len = prefix->len;
-				LOG_INF("IPv6 prefix %s/%d", net_sprint_ipv6_addr(ipv6_addr),
-					prefix_len);
-
-				if (sink_prefix_addr_set == false) {
-					memcpy(&sink_prefix_addr, &prefix->prefix,
-					       sizeof(struct in6_addr));
-
-					sink_prefix_addr_set = true;
-					LOG_INF("prefix found: IPv6 addr with prefix %s/%d added",
-						net_sprint_ipv6_addr(ipv6_addr), prefix_len);
-				}
-			} else {
-				LOG_DBG("No prefix for IPv6 address %s/%d",
-					net_sprint_ipv6_addr(ipv6_addr), prefix_len);
-
-				/* So, take 1st public address, and take 1st 64bits/8 bytes as
-				 * a prefix for our usage
-				 */
-				if (sink_prefix_addr_set == false &&
-				    net_ipv6_is_global_addr(ipv6_addr)) {
-					memcpy(&sink_prefix_addr, ipv6_addr->s6_addr,
-					       sizeof(struct in6_addr) / 2);
-					sink_prefix_addr_set = true;
-					LOG_INF("SINK: IPv6 addr with prefix %s/%d added",
-						net_sprint_ipv6_addr(ipv6_addr),
-						(sizeof(struct in6_addr) / 2) * 8);
-				}
+			/* Check if this is a global address and has the same prefix as our
+			 * sink prefix
+			 */
+			if (net_ipv6_is_global_addr(ipv6_addr) &&
+			    net_ipv6_is_prefix(ipv6_addr->s6_addr,
+					       sink_prefix_addr.s6_addr,
+					       sizeof(struct in6_addr) / 2)) {
+				prefix_found = true;
+				break;
 			}
 		}
-#endif /* RM_JH */
+		if (prefix_found == false) {
+			LOG_WRN("SINK: Router with IPv6 addr %s added to sink iface %p, but no "
+				"existing public address with our prefix found - "
+				"sink prefix needs to be re-created and we wait for "
+				"NET_EVENT_IPV6_ADDR_ADD",
+				net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str,
+					      NET_IPV6_ADDR_LEN),
+				iface_for_prefix);
+		} else if (sink_prefix_addr_set == false) {
+			struct dect_sink_status_evt sink_status_data = {
+				.sink_status = DECT_SINK_STATUS_CONNECTED,
+				.br_iface = iface_for_prefix,
+			};
+
+			sink_prefix_addr_set = true;
+			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
+		}
 		break;
 	}
 	case NET_EVENT_IPV6_ADDR_ADD: {
@@ -179,7 +184,7 @@ static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callbac
 			sink_prefix_addr_set = true;
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 
-			LOG_INF("SINK: IPv6 addr %s/%d added for dect nr+ prefix usage",
+			LOG_DBG("SINK: IPv6 addr %s/%d added for dect nr+ prefix usage",
 				net_sprint_ipv6_addr(ipv6_addr), (sizeof(struct in6_addr) / 2) * 8);
 
 			/* Remove old global address from dect nr+ iface*/
@@ -369,14 +374,16 @@ static void dect_nrf91_sink_lte_ipv6_nbr_router_deleted_worker(struct k_work *wo
 	/* Let's add router back */
 	if (!net_ipv6_nbr_add(iface_for_prefix, &ipv6_router_addr, &lte_if_mac_addr, true,
 			      NET_IPV6_NBR_STATE_REACHABLE)) {
-		LOG_ERR("(%s): Cannot add LTE IPv6 router as a nbr to LTE iface", (__func__));
+		LOG_ERR("(%s): Cannot add IPv6 router as a nbr to sink prefix iface",
+			(__func__));
 	} else {
-		LOG_INF("(%s): LTE IPv6 router added as a nbr to LTE iface", (__func__));
+		LOG_INF("(%s): sink iface IPv6 router added as a nbr to sink prefix iface",
+			(__func__));
 	}
 	route = net_route_add(iface_for_prefix, &ipv6_router_addr, 128, &ipv6_router_addr,
 			      NET_IPV6_ND_INFINITE_LIFETIME, NET_ROUTE_PREFERENCE_HIGH);
 	if (!route) {
-		LOG_ERR("Cannot add LTE network ipv6 router as a route");
+		LOG_ERR("Cannot add sink ipv6 router as a route");
 	}
 }
 #endif
