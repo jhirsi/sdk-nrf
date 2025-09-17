@@ -1387,7 +1387,8 @@ static const char dect_shell_sett_common_usage_str[] =
 	"      --region <eu/us/global>, Set region or variant. Impacts e.g. in channel access.\n"
 	"  -b, --band_nbr <#>,          Set used band.\n"
 	"      --max_tx_pwr <dbm>,      Set max TX power (dBm).\n"
-	"      --max_mcs <uint>,         Set max used MCS.\n"
+	"                               [-40,-30,-20,-16,-12,-8,-4,0,4,7,10,13,16,19,21,23]\n"
+	"      --max_mcs <uint>,        Set max used MCS.\n"
 	"      --power_save <on/off>,  \"on\" to enable power save on modem, \"off\" to disable.\n"
 	"                               Note: PT device only.\n"
 	"      --dev_type <dev_type>    Set device type. dev_type: \"FT\" or \"PT\".\n";
@@ -1428,8 +1429,10 @@ static const char dect_shell_sett_cluster_usage_str1[] =
 	"      --cluster_beacon_period <#>,   Set cluster beacon period in ms. Possible values:\n"
 	"                                     10, 50, 100, 500, 1000, 1500, 2000, 4000, 8000,\n"
 	"                                     16000 and 32000\n"
-	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range: [-12,23].\n"
-	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range: [-40,23]\n";
+	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster.\n"
+	"                                     Range: [-12,-8,-4,0,4,7,10,13,16,19,21,23].\n"
+	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm). Range:\n"
+	"                                    [-40,-30,-20,-16,-12,-8,-4,0,4,7,10,13,16,19,21,23]\n";
 static const char dect_shell_sett_cluster_usage_str2[] =
 	"      --cluster_ch_reselection_th <int>, CHANNEL_LOADED percent per MAC spec.\n"
 	"                                     Threshold percent when an operating channel\n"
@@ -2171,10 +2174,12 @@ static const char dect_shell_cluster_reconfig_usage_str[] =
 	"                                     10, 50, 100, 500, 1000, 1500, 2000, 4000, 8000,\n"
 	"                                     16000 and 32000.\n"
 	"                                     Default: from current cluster setting.\n"
-	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range: [-12,23].\n"
+	"      --cluster_max_tx_pwr <dbm>,    Set max TX power (dBm) in cluster. Range:\n"
+	"                                     [-12,-8,-4,0,4,7,10,13,16,19,21,23].\n"
 	"                                     Default: from current cluster setting.\n"
-	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range: [-40,23]\n"
-	"                                         Default: from current cluster setting.\n";
+	"      --cluster_max_beacon_tx_pwr <dbm>, Set max beacon TX power (dBm) Range:\n"
+	"                                     [-40,-30,-20,-16,-12,-8,-4,0,4,7,10,13,16,19,21,23]."
+	"                                     Default: from current cluster setting.\n";
 
 /* The following do not have short options: */
 enum {
