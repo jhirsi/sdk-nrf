@@ -62,15 +62,11 @@ config NET_L2_DECT_MGMT_AUTO_CONNECT
 	bool "Auto connect"
 	depends on NET_L2_DECT_MGMT
 	depends on NET_CONNECTION_MANAGER
-# No auto-connect support for now; otherwise, the connection manager might try activating
-# the DECT NRP stack before the modem is initialized. To fix this, enabling L2 (done when
-# bringing up the interface) should initialize the modem.
 	default n
 	help
-	 If this option is set the Connection Manager will automatically call connect after the
-	 network interface has been brought up. This option sets the default value, the option can
-	 be changed at run time by calling conn_mgr_if_set_flag() with or without the
-	 CONN_MGR_IF_NO_AUTO_CONNECT flag.
+	 If this option is set, the Connection Manager will automatically call connect after the
+	 network interface has been brought up on when modem is activated (PT or FT without BR)
+	 or when the BR for the sink is connected (FT with BR support).
 
 if NET_L2_DECT_MGMT
 module = NET_L2_DECT_MGMT

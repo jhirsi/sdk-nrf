@@ -12,6 +12,7 @@
 
 static struct net_mgmt_event_callback dect_mgmt_cb;
 static int64_t connection_timeout;
+static bool auto_connect_wait_sink_up;
 
 static int connect(struct net_if *iface)
 {
@@ -120,6 +121,45 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 		}
 		break;
 	}
+	case NET_EVENT_DECT_ACTIVATE_DONE: {
+		struct dect_settings current_settings;
+		int ret;
+		struct dect_common_resp_evt *evt = (struct dect_common_resp_evt *)cb->info;
+
+		if (evt->status == DECT_MAC_STATUS_OK &&
+		    IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_CONNECT) &&
+		    net_if_is_admin_up(iface) == false) {
+			auto_connect_wait_sink_up = false;
+			ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ,
+				       iface, &current_settings, sizeof(current_settings));
+			if (ret) {
+				printk("NET_EVENT_DECT_ACTIVATE_DONE: "
+				       "cannot read current settings: %d\n", ret);
+				break;
+			}
+			if (IS_ENABLED(CONFIG_DECT_NRP_MAC_BORDER_ROUTER) &&
+			    current_settings.device_type == DECT_DEVICE_TYPE_FT) {
+				/* For FT with sink/BR support,
+				 * we need to wait until sink BR connection is created
+				 */
+				auto_connect_wait_sink_up = true;
+			} else {
+				/* For PT and plain FT, we can start connecting right away */
+				net_if_up(iface);
+			}
+		}
+		break;
+	}
+	case NET_EVENT_DECT_SINK_STATUS: {
+		struct dect_sink_status_evt *evt = (struct dect_sink_status_evt *)cb->info;
+
+		if (auto_connect_wait_sink_up &&
+		    evt->sink_status == DECT_SINK_STATUS_CONNECTED) {
+			auto_connect_wait_sink_up = false;
+			net_if_up(iface);
+		}
+		break;
+	}
 	default:
 		break;
 	}
@@ -146,7 +186,8 @@ void dect_nrp_net_if_init(struct conn_mgr_conn_binding *const binding)
 	}
 
 	net_mgmt_init_event_callback(&dect_mgmt_cb, dect_event_handler,
-			NET_EVENT_DECT_NETWORK_STATUS | NET_EVENT_DECT_ASSOCIATION_CHANGED);
+		NET_EVENT_DECT_NETWORK_STATUS | NET_EVENT_DECT_ASSOCIATION_CHANGED |
+		NET_EVENT_DECT_ACTIVATE_DONE | NET_EVENT_DECT_SINK_STATUS);
 	net_mgmt_add_event_callback(&dect_mgmt_cb);
 }
 

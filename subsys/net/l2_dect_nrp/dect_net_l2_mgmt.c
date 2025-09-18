@@ -31,6 +31,7 @@ void dect_mgmt_activate_done_evt(struct net_if *iface, enum dect_status_values s
 	struct dect_common_resp_evt evt = {
 		.status = status,
 	};
+
 	net_mgmt_event_notify_with_info(NET_EVENT_DECT_ACTIVATE_DONE, iface, &evt, sizeof(evt));
 }
 
