@@ -237,13 +237,13 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 		/* local: add a child as a eigbor to dect iface */
 		if (!net_ipv6_nbr_add(iface, &child_addr, net_if_get_link_addr(iface), false,
 				      NET_IPV6_NBR_STATE_REACHABLE)) {
-			LOG_WRN("(%s): local: cannot add child (long rd id %d) as a nbr "
+			LOG_WRN("(%s): local: cannot add child (long rd id %u) as a nbr "
 				"to dect iface",
 				(__func__), ass_list_item->target_long_rd_id);
 		} else {
 			added = true;
 			ass_list_item->local_ipv6_addr = child_addr;
-			LOG_DBG("(%s): child (long rd id %d) local addr %s (link addr %s) added "
+			LOG_DBG("(%s): child (long rd id %u) local addr %s (link addr %s) added "
 				"as a neighbor to dect iface",
 				(__func__), ass_list_item->target_long_rd_id,
 				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
@@ -258,14 +258,14 @@ dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *as
 			/* global: add a child as a neighbor to dect iface */
 			if (!net_ipv6_nbr_add(iface, &child_addr, net_if_get_link_addr(iface),
 					      false, NET_IPV6_NBR_STATE_REACHABLE)) {
-				LOG_WRN("(%s): global: Cannot add child (long rd id %d) as a nbr "
+				LOG_WRN("(%s): global: Cannot add child (long rd id %u) as a nbr "
 					"to dect iface",
 					(__func__), ass_list_item->target_long_rd_id);
 			} else {
 				added = true;
 				ass_list_item->global_ipv6_addr = child_addr;
 				ass_list_item->global_ipv6_addr_set = true;
-				LOG_DBG("(%s): child (long rd id %d) global addr %s (link addr %s) "
+				LOG_DBG("(%s): child (long rd id %u) global addr %s (link addr %s) "
 					"added as a neighbor to dect iface",
 					(__func__), ass_list_item->target_long_rd_id,
 					net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr),
@@ -1004,7 +1004,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 			}
 			ret = 0;
 		} else {
-			LOG_ERR("Error (%d) when sending packet to rd id %d: retries %d",
+			LOG_ERR("Error (%d) when sending packet to rd id %u: retries %d",
 				ret, target_long_rd_id, retry_count);
 		}
 	}
@@ -1180,7 +1180,7 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 
 	association_list_item = dect_nrf91_child_association_list_add(target_long_rd_id);
 	if (association_list_item == NULL) {
-		LOG_ERR("Cannot add child (long rd id %d) to association list - "
+		LOG_ERR("Cannot add child (long rd id %u) to association list - "
 			"releasing association",
 			association_list_item->target_long_rd_id);
 		goto association_release;
@@ -1188,7 +1188,7 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 
 	/* Add child as a neighbor for a dect iface */
 	if (!dect_nrf91_child_association_list_nbr_add(association_list_item)) {
-		LOG_WRN("Cannot add child (long rd id %d) to neighbor list - continue",
+		LOG_WRN("Cannot add child (long rd id %u) to neighbor list - continue",
 			association_list_item->target_long_rd_id);
 	}
 
@@ -1249,20 +1249,20 @@ void dect_nrf91_parent_association_removed(
 		dect_nrf91_parent_association_list_item_get(long_rd_id);
 
 	if (!ass_list_item) {
-		LOG_WRN("%s: no association with %d in a parent list", (__func__), long_rd_id);
+		LOG_WRN("%s: no association with %u in a parent list", (__func__), long_rd_id);
 		return;
 	}
 
 	/* Remove parent from neighbors */
 	if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
-		LOG_WRN("Cannot remove parent (long rd id %d, local addr %s) as a nbr "
+		LOG_WRN("Cannot remove parent (long rd id %u, local addr %s) as a nbr "
 			"from dect iface",
 			ass_list_item->target_long_rd_id,
 			net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr));
 	}
 	if (ctx->global_ipv6_addr_set &&
 	    !net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
-		LOG_WRN("Cannot remove parent (long rd id %d, global addr %s) as a nbr "
+		LOG_WRN("Cannot remove parent (long rd id %u, global addr %s) as a nbr "
 			"from dect iface",
 			ass_list_item->target_long_rd_id,
 			net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr));
@@ -1292,13 +1292,13 @@ void dect_nrf91_child_association_removed(
 
 	if (ass_list_item) {
 		if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
-			LOG_DBG("Cannot remove child (long rd id %d, local addr %s) as a nbr from "
+			LOG_DBG("Cannot remove child (long rd id %u, local addr %s) as a nbr from "
 				"dect iface",
 				ass_list_item->target_long_rd_id,
 				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr));
 		}
 		if (!net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
-			LOG_DBG("Cannot remove child (long rd id %d, global addr %s) as a nbr from "
+			LOG_DBG("Cannot remove child (long rd id %u, global addr %s) as a nbr from "
 				"dect iface",
 				ass_list_item->target_long_rd_id,
 				net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr));

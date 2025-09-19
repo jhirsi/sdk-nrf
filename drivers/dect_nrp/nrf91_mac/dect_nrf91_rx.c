@@ -101,7 +101,7 @@ static void dect_nrf91_rx_th_op_handler_thread_fn(void)
 				(struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr *)event.data;
 			bool data_handled = false;
 
-			LOG_DBG("DLC data received to iface %p, transmitter: %d (0x%X), "
+			LOG_DBG("DLC data received to iface %p, transmitter: %u (0x%X), "
 				"flow ID: %hhu, data_len: %u",
 				params->iface, params->mdm_params.long_rd_id,
 				params->mdm_params.long_rd_id, params->mdm_params.flow_id,

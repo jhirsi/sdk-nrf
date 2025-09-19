@@ -38,11 +38,26 @@ config DECT_NRP_MAC_DEFAULT_NW_ID
 	help
 	  Default nw id.
 
+choice DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE
+	prompt "Select default long rd id type"
+	default DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_RANDOM
+config DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_HARD_CODED
+	bool "Default long rd id as hard coded"
+	help
+	  Default long rd id is hard coded.
+
+config DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_RANDOM
+	bool "Default long rd id as random generated"
+	help
+	  Default long rd id is randomly generated at 1st bootup and later in settings reset.
+endchoice
+
 config DECT_NRP_MAC_DEFAULT_LONG_RD_ID
 	int "Default long rd id"
+	range 1 4294967293
 	default 666
 	help
-	  Default long rd id.
+	  Default long rd id used if DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_HARD_CODED is selected.
 
 config DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT
 	int "Maximum number of associations"

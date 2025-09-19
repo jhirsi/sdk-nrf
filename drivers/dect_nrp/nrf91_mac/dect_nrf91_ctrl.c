@@ -2743,7 +2743,7 @@ send_events:
 					"(0x%08x)",
 					evt_data->long_rd_ids[i], evt_data->long_rd_ids[i]);
 				if (i >= DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT) {
-					LOG_ERR("Neighbor list too long, max %d, rd id %d ignored",
+					LOG_ERR("Neighbor list too long, max %d, rd id %u ignored",
 						DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT,
 						evt_data->long_rd_ids[i]);
 					continue;
@@ -2774,8 +2774,8 @@ send_events:
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("DLC data TX response failed to rd id %d with err %s (%d), "
-					"transaction id %d",
+				LOG_ERR("DLC data TX response failed to rd id %u with err %s (%d), "
+					"transaction id %u",
 					evt_data->long_rd_id, tmp_str, evt_data->status,
 					evt_data->acked_data[0].transaction_id);
 			}
@@ -2797,7 +2797,7 @@ send_events:
 				ctrl_data.total_unacked_req_amount--;
 			}
 			k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-			LOG_DBG("DLC data response (towards RD ID %d): "
+			LOG_DBG("DLC data response (towards RD ID %u): "
 				"total %d bytes unacked left, total req count %d",
 				evt_data->long_rd_id,
 				ctrl_data.total_unacked_tx_data_amount,
@@ -2817,7 +2817,7 @@ send_events:
 					tmp_str, params->status, params->long_rd_id);
 				break;
 			}
-			LOG_INF("New child: association with long RD ID: %d (0x%X)",
+			LOG_INF("New child: association with long RD ID: %u (0x%X)",
 				params->long_rd_id, params->long_rd_id);
 
 			dect_nrf91_child_association_created(params->long_rd_id);
@@ -2870,7 +2870,7 @@ send_events:
 					params->long_rd_id);
 			} else if (!params->association_response.ack_status) {
 				/* Association rejected */
-				LOG_INF("Association rejected with long RD ID: %d (0x%X), cause %d",
+				LOG_INF("Association rejected with long RD ID: %u (0x%X), cause %d",
 					params->long_rd_id, params->long_rd_id,
 					params->association_response.reject_cause);
 
@@ -2880,7 +2880,7 @@ send_events:
 					params->association_response.reject_cause,
 					params->association_response.reject_time);
 			} else {
-				LOG_INF("New parent: association with long RD ID: %d (0x%X)",
+				LOG_INF("New parent: association with long RD ID: %u (0x%X)",
 					params->long_rd_id, params->long_rd_id);
 
 				ctrl_data.configure_params.auto_start = false;

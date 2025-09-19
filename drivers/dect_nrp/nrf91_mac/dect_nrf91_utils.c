@@ -339,7 +339,7 @@ bool dect_nrf91_utils_cluster_acceptable_for_association(
 		      DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
 	      set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
 		      cluster_beacon->transmitter_long_rd_id)) {
-		LOG_INF("nw_scan: cluster beacon long rd id mismatch: %d != %d",
+		LOG_INF("nw_scan: cluster beacon long rd id mismatch: %u != %u",
 			set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id,
 			cluster_beacon->transmitter_long_rd_id);
 		return false;

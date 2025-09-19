@@ -16,7 +16,7 @@
 /************************************************************************************************/
 
 #define DECT_NRF91_DEFAULT_NW_ID	 (CONFIG_DECT_NRP_MAC_DEFAULT_NW_ID)
-#define DECT_NRF91_DEFAULT_LONG_RD_ID_ID (CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID)
+#define DECT_NRF91_LONG_RD_ID_ID_NOT_SET 0
 
 #if defined(CONFIG_DECT_NRP_MAC_DEFAULT_DEV_TYPE_PT)
 #define DECT_NRF91_DEFAULT_DEVICE_TYPE DECT_DEVICE_TYPE_PT

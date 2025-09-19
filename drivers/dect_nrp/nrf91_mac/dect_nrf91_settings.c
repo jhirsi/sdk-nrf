@@ -11,13 +11,13 @@
 #include <stdlib.h>
 #include <zephyr/shell/shell.h>
 #include <zephyr/settings/settings.h>
+#include <zephyr/random/random.h>
+
 #include <nrf_modem_dect_mac.h>
 
 #include "dect_nrf91_settings.h"
 
 K_SEM_DEFINE(dect_settings_init_sema, 0, 1);
-
-/* TODO? generate random long rd id as a default? */
 
 /* Default nrf91 settings */
 static const struct dect_settings_association association_data = {
@@ -61,7 +61,7 @@ static const struct dect_settings_security_conf security_configuration_data = {
 static const struct dect_settings common_settings_data = {
 	.region = DECT_SETTINGS_REGION_EU,
 	.identities.network_id = DECT_NRF91_DEFAULT_NW_ID,
-	.identities.transmitter_long_rd_id = DECT_NRF91_DEFAULT_LONG_RD_ID_ID,
+	.identities.transmitter_long_rd_id = DECT_NRF91_LONG_RD_ID_ID_NOT_SET,
 	.device_type = DECT_NRF91_DEFAULT_DEVICE_TYPE,
 	.auto_start = auto_start_data,
 	.band_nbr = 1,
@@ -84,6 +84,41 @@ static const struct dect_nrf91_settings settings_data_defaults = {
 static struct dect_nrf91_settings settings_data = settings_data_defaults;
 
 LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+
+static void dect_nrf91_settings_tx_id_default_set(void)
+{
+	if (settings_data.net_mgmt_common.identities.transmitter_long_rd_id ==
+		DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {
+		uint32_t new_tx_id = DECT_NRF91_LONG_RD_ID_ID_NOT_SET;
+
+		if (IS_ENABLED(CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_HARD_CODED)) {
+			/* Use hard coded value */
+			new_tx_id = CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID;
+		} else {
+			/* MAC spec: 4.2.3.2: long rd id is in range of 0x00000001-0xFFFFFFFD */
+			/* TODO: have a configurable range */
+			uint32_t random_value = sys_rand32_get();
+
+			__ASSERT_NO_MSG(
+				IS_ENABLED(CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_RANDOM));
+			random_value = (random_value % 0xFFFFFFFD) + 1;
+			new_tx_id = random_value;
+		}
+		/* Write defaults */
+		struct dect_nrf91_settings *current_sett_ptr = dect_nrf91_settings_ref_get();
+		struct dect_settings *current_sett = &current_sett_ptr->net_mgmt_common;
+		int ret;
+
+		current_sett->identities.transmitter_long_rd_id = new_tx_id;
+
+		ret = settings_save_one(
+			DECT_NRF91_SETT_TREE_KEY "/" DECT_NRF91_SETT_COMMON_CONFIG_KEY,
+			current_sett_ptr, sizeof(struct dect_nrf91_settings));
+		if (ret) {
+			LOG_ERR("Cannot save tx id to settings, err: %d", ret);
+		}
+	}
+}
 
 /**************************************************************************************************/
 
@@ -222,6 +257,9 @@ struct dect_nrf91_settings_write_status dect_nrf91_settings_defaults_set(void)
 		return return_status;
 	}
 	memcpy(&settings_data, &settings_data_defaults, sizeof(struct dect_nrf91_settings));
+
+	dect_nrf91_settings_tx_id_default_set();
+
 	LOG_INF("Default settings set.");
 
 	return return_status;
@@ -256,6 +294,8 @@ static int dect_nrf91_settings_handler(const char *key, size_t len, settings_rea
 
 static int dect_nrf91_settings_loaded(void)
 {
+	dect_nrf91_settings_tx_id_default_set();
+
 	k_sem_give(&dect_settings_init_sema);
 	return 0;
 }
