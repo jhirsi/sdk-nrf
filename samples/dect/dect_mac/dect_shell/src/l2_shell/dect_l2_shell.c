@@ -1191,7 +1191,7 @@ static void dect_shell_rx_thread_handler(void)
 
 		src_long_rd_id = ntohl(*(uint32_t *)&src.sll_addr);
 
-		desh_print("Received data (len %d, src long RD ID %d):", recv_len, src_long_rd_id);
+		desh_print("Received data (len %d, src long RD ID %u):", recv_len, src_long_rd_id);
 		desh_print("  %s", rx_data_buf);
 	}
 }
@@ -1648,7 +1648,7 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 	desh_print("DECT settings:");
 	desh_print("  Network ID:                           %u (0x%08x)",
 		   dect_sett->identities.network_id, dect_sett->identities.network_id);
-	desh_print("  Transmitter Long RD ID:               %d (0x%08x)",
+	desh_print("  Transmitter Long RD ID:               %u (0x%08x)",
 		   dect_sett->identities.transmitter_long_rd_id,
 		   dect_sett->identities.transmitter_long_rd_id);
 	desh_print("  Region/variant:                       %s",
@@ -1713,7 +1713,7 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 	if (dect_sett->network_join.target_ft_long_rd_id == DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY) {
 		desh_print("   Target FT:                           Any FT");
 	} else {
-		desh_print("   Target FT:                           %d (0x%08x)",
+		desh_print("   Target FT:                           %u (0x%08x)",
 			   dect_sett->network_join.target_ft_long_rd_id,
 			   dect_sett->network_join.target_ft_long_rd_id);
 	}
@@ -2432,7 +2432,7 @@ static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
 	}
 	if (dect_status->parent_count > 0) {
 		for (int i = 0; i < dect_status->parent_count; i++) {
-			desh_print("    Parent long RD ID:              %d (0x%08x)",
+			desh_print("    Parent long RD ID:              %u (0x%08x)",
 				   dect_status->parent_associations[i].long_rd_id,
 				   dect_status->parent_associations[i].long_rd_id);
 			desh_print("      Local IPv6 address:           %s",
@@ -2447,7 +2447,7 @@ static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
 	}
 	if (dect_status->child_count > 0) {
 		for (int i = 0; i < dect_status->child_count; i++) {
-			desh_print("    Child #%d long RD ID:       %d (0x%08x)", i + 1,
+			desh_print("    Child #%d long RD ID:       %u (0x%08x)", i + 1,
 				   dect_status->child_associations[i].long_rd_id,
 				   dect_status->child_associations[i].long_rd_id);
 			desh_print("      Local IPv6 address:       %s",
