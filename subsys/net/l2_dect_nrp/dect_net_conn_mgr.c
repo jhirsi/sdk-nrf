@@ -96,7 +96,8 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 	case NET_EVENT_DECT_NETWORK_STATUS: {
 		struct dect_network_status_evt *evt = (struct dect_network_status_evt *)cb->info;
 
-		if (evt->network_status == DECT_NETWORK_STATUS_FAILURE &&
+		if (conn_mgr_if_get_flag(iface, CONN_MGR_IF_PERSISTENT) &&
+		    evt->network_status == DECT_NETWORK_STATUS_FAILURE &&
 		    evt->dect_err_cause == DECT_MAC_STATUS_RD_NOT_FOUND) {
 			/* TODO: handle all errors. */
 			if (!connection_timeout || k_uptime_get() < connection_timeout) {
