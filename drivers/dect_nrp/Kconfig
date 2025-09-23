@@ -76,7 +76,7 @@ config DECT_NRP_MAC_BORDER_ROUTER
 
 config DECT_NRP_MAC_NET_IF_NO_AUTO_START
 	bool "Enable interface auto-start"
-	default y if NET_L2_DECT_MGMT_AUTO_CONNECT
+	default y if NET_L2_DECT_CONN_MGR_AUTO_CONNECT
 	help
 	  This option allows user to disable autostarting of the net interface
 	  immediately after initialization and instead call for net_if_up()

@@ -3,12 +3,13 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
-#include <zephyr/sys/printk.h> /* TODO LOGging*/
-
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_mgmt.h>
 #include <zephyr/net/conn_mgr_connectivity_impl.h>
 #include <dect_net_l2_mgmt.h>
+
+#include <zephyr/logging/log.h>
+LOG_MODULE_REGISTER(NET_L2_DECT_CONN_MGR, CONFIG_NET_L2_DECT_CONN_MGR_LOG_LEVEL);
 
 static struct net_mgmt_event_callback dect_mgmt_cb;
 static int64_t connection_timeout;
@@ -22,15 +23,16 @@ static int connect(struct net_if *iface)
 	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, iface, &current_settings,
 		       sizeof(current_settings));
 	if (ret) {
-		printk("dect_nrp_net_if_connect: cannot read current settings: %d\n", ret);
+		LOG_ERR("%s: cannot read current settings: %d", (__func__), ret);
 		return ret;
 	}
 
 	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, iface, NULL, 0);
 		if (ret) {
-			printk("dect_nrp_net_if_connect: cannot initiate request for joining "
-			       "a network: %d\n",
+			LOG_ERR("%s: cannot initiate request for joining "
+			       "a network: %d",
+			       (__func__),
 			       ret);
 		}
 	} else {
@@ -38,8 +40,9 @@ static int connect(struct net_if *iface)
 
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, iface, NULL, 0);
 		if (ret) {
-			printk("dect_nrp_net_if_connect: cannot initiate request for creating "
-			       "a network: %d\n",
+			LOG_ERR("%s: cannot initiate request for creating "
+			       "a network: %d",
+			       (__func__),
 			       ret);
 		}
 	}
@@ -66,22 +69,22 @@ int dect_nrp_net_if_disconnect(struct conn_mgr_conn_binding *const binding)
 	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ, binding->iface, &current_settings,
 		       sizeof(current_settings));
 	if (ret) {
-		printk("dect_nrp_net_if_disconnect: cannot read current settings: %d\n", ret);
+		LOG_ERR("%s: cannot read current settings: %d", (__func__), ret);
 		goto exit;
 	}
 	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, binding->iface, NULL, 0);
 		if (ret) {
-			printk("dect_nrp_net_if_disconnect: cannot initiate request for unjoining "
-			       "a network: %d\n",
+			LOG_ERR("%s: cannot initiate request for unjoining a network: %d",
+			       (__func__),
 			       ret);
 		}
 	} else {
 		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, binding->iface, NULL, 0);
 		if (ret) {
-			printk("dect_nrp_net_if_disconnect: cannot initiate request for removing "
-			       "a network: %d\n",
+			LOG_ERR("%s: cannot initiate request for removing a network: %d",
+			       (__func__),
 			       ret);
 		}
 	}
@@ -102,7 +105,7 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 			/* TODO: handle all errors. */
 			if (!connection_timeout || k_uptime_get() < connection_timeout) {
 				connect(iface);
-				printk("\nconnect\n");
+				LOG_INF("NET_EVENT_DECT_NETWORK_STATUS: Reconnecting...");
 			}
 		}
 		break;
@@ -118,7 +121,7 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 					DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION) {
 			/* Lost connection to parent but not because on purpose so reconnect. */
 			dect_nrp_net_if_connect(conn_mgr_if_get_binding(iface));
-			printk("\nif_connect\n");
+			LOG_INF("NET_EVENT_DECT_ASSOCIATION_CHANGED: Reconnecting...");
 		}
 		break;
 	}
@@ -128,14 +131,14 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 		struct dect_common_resp_evt *evt = (struct dect_common_resp_evt *)cb->info;
 
 		if (evt->status == DECT_MAC_STATUS_OK &&
-		    IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_CONNECT) &&
+		    !conn_mgr_if_get_flag(iface, CONN_MGR_IF_NO_AUTO_CONNECT) &&
 		    net_if_is_admin_up(iface) == false) {
 			auto_connect_wait_sink_up = false;
 			ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ,
 				       iface, &current_settings, sizeof(current_settings));
 			if (ret) {
-				printk("NET_EVENT_DECT_ACTIVATE_DONE: "
-				       "cannot read current settings: %d\n", ret);
+				LOG_ERR("NET_EVENT_DECT_ACTIVATE_DONE: "
+				       "cannot read current settings: %d", ret);
 				break;
 			}
 			if (IS_ENABLED(CONFIG_DECT_NRP_MAC_BORDER_ROUTER) &&
@@ -144,7 +147,9 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 				 * we need to wait until sink BR connection is created
 				 */
 				auto_connect_wait_sink_up = true;
+				LOG_INF("NET_EVENT_DECT_ACTIVATE_DONE: auto connect - wait sink");
 			} else {
+				LOG_INF("NET_EVENT_DECT_ACTIVATE_DONE: auto connect");
 				/* For PT and plain FT, we can start connecting right away */
 				net_if_up(iface);
 			}
@@ -169,21 +174,21 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 void dect_nrp_net_if_init(struct conn_mgr_conn_binding *const binding)
 {
 	/* Configure the interface according to kconfig values. */
-	if (!IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_CONNECT)) {
+	if (!IS_ENABLED(CONFIG_NET_L2_DECT_CONN_MGR_AUTO_CONNECT)) {
 		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_CONNECT, true);
 	}
 
-	if (!IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_AUTO_DOWN)) {
+	if (!IS_ENABLED(CONFIG_NET_L2_DECT_CONN_MGR_AUTO_DOWN)) {
 		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_NO_AUTO_DOWN, true);
 	}
 
-	if (IS_ENABLED(CONFIG_NET_L2_DECT_MGMT_CONNECTION_PERSISTENCE)) {
+	if (IS_ENABLED(CONFIG_NET_L2_DECT_CONN_MGR_CONNECTION_PERSISTENCE)) {
 		conn_mgr_binding_set_flag(binding, CONN_MGR_IF_PERSISTENT, true);
 	}
 
-	if (CONFIG_NET_L2_DECT_MGMT_CONNECT_TIMEOUT_SECONDS > 0) {
+	if (CONFIG_NET_L2_DECT_CONN_MGR_CONNECT_TIMEOUT_SECONDS > 0) {
 		conn_mgr_if_set_timeout(binding->iface,
-					CONFIG_NET_L2_DECT_MGMT_CONNECT_TIMEOUT_SECONDS);
+					CONFIG_NET_L2_DECT_CONN_MGR_CONNECT_TIMEOUT_SECONDS);
 	}
 
 	net_mgmt_init_event_callback(&dect_mgmt_cb, dect_event_handler,
