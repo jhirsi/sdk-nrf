@@ -1381,6 +1381,12 @@ send_events:
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 			ctrl_data.configure_params.auto_start = true;
+
+			/* Clear seen cluster channels */
+			memset(ctrl_data.scan_data.cluster_channels, 0,
+			sizeof(ctrl_data.scan_data.cluster_channels));
+			ctrl_data.scan_data.current_cluster_channel_index = 0;
+
 			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
 				struct nrf_modem_dect_mac_network_scan_params params = {
 					.network_id_filter_mode =
@@ -1432,9 +1438,6 @@ send_events:
 					ctrl_data.scan_data.on_going = true;
 					ctrl_data.scan_data.scan_result_cb = NULL;
 					ctrl_data.scan_data.scan_params = params;
-					memset(ctrl_data.scan_data.cluster_channels, 0,
-					       sizeof(ctrl_data.scan_data.cluster_channels));
-					ctrl_data.scan_data.current_cluster_channel_index = 0;
 				} else {
 					/* As a default RSSI params from settings  */
 					struct nrf_modem_dect_mac_rssi_scan_params params = {
@@ -1467,11 +1470,6 @@ send_events:
 							"starting directly RSSI scan",
 							err);
 					}
-
-					/* Clear seen cluster channels */
-					memset(ctrl_data.scan_data.cluster_channels, 0,
-					       sizeof(ctrl_data.scan_data.cluster_channels));
-					ctrl_data.scan_data.current_cluster_channel_index = 0;
 
 					dect_nrf91_ctrl_msgq_data_op_add(
 						DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
@@ -1508,9 +1506,6 @@ send_events:
 					ctrl_data.scan_data.on_going = true;
 					ctrl_data.scan_data.scan_result_cb = NULL;
 					ctrl_data.scan_data.scan_params = params;
-					memset(ctrl_data.scan_data.cluster_channels, 0,
-					sizeof(ctrl_data.scan_data.cluster_channels));
-					ctrl_data.scan_data.current_cluster_channel_index = 0;
 				}
 			}
 			break;
@@ -2539,8 +2534,7 @@ send_events:
 						 *)event.data;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-			LOG_INF("Max nbr of cluster beacon RX failures (%d): long_rd_id %u (0x%X) -"
-				" starting releasing the association",
+			LOG_INF("Max nbr of cluster beacon RX failures (%d): long_rd_id %u (0x%X)",
 				set_ptr->net_mgmt_common.association.max_beacon_rx_failures,
 				evt_data->long_rd_id, evt_data->long_rd_id);
 
@@ -2552,6 +2546,7 @@ send_events:
 				__ASSERT_NO_MSG(
 					ctrl_data.ass_config.parent_long_rd_id ==
 						evt_data->long_rd_id);
+				LOG_INF("Starting releasing the association");
 				dect_nrf91_ctrl_associate_release_cmd(
 					ctrl_data.ass_config.parent_long_rd_id,
 					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
