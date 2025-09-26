@@ -2927,6 +2927,14 @@ send_events:
 			}
 			break;
 		}
+		case DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED: {
+			struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params *params =
+				event.data;
+
+			LOG_WRN("IPv6 config changed, type: %d - no support yet",
+				params->ipv6_config.type);
+			break;
+		}
 
 		default:
 			LOG_WRN("DECT NRF91 CTRL: Unknown event %u received", event.id);
@@ -3242,6 +3250,14 @@ static void dect_nrf91_ctrl_mdm_cluster_beacon_rx_fail_ntf_cb(
 		sizeof(struct nrf_modem_dect_mac_cluster_beacon_rx_failure_ntf_cb_params));
 }
 
+static void dect_nrf91_ctrl_mdm_ipv6_config_changed_ntf_cb(
+	struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params *params)
+{
+	dect_nrf91_ctrl_msgq_data_op_add(
+		DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED, params,
+		sizeof(struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params));
+}
+
 static const struct nrf_modem_dect_mac_ntf_callbacks mac_ntf_callbacks = {
 	.association_ntf = dect_nrf91_ctrl_mdm_association_ntf_cb,
 	.association_release_ntf = dect_nrf91_ctrl_mdm_association_release_ntf_cb,
@@ -3255,6 +3271,7 @@ static const struct nrf_modem_dect_mac_ntf_callbacks mac_ntf_callbacks = {
 	.capability_ntf = dect_nrf91_ctrl_mdm_capability_ntf_cb,
 	.cluster_beacon_rx_failure_ntf = dect_nrf91_ctrl_mdm_cluster_beacon_rx_fail_ntf_cb,
 	.dlc_flow_control_ntf = dect_nrf91_ctrl_mdm_flow_control_ntf_cb,
+	.ipv6_config_update_ntf = dect_nrf91_ctrl_mdm_ipv6_config_changed_ntf_cb,
 };
 
 static const struct nrf_modem_dect_mac_op_callbacks mac_op_callbacks = {
