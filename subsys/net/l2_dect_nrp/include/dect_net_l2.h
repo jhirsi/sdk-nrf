@@ -341,7 +341,7 @@ enum dect_association_change_type {
 	/** Association request rejected */
 	DECT_ASSOCIATION_REQ_REJECTED = 2,
 	/** Association request failed in modem  */
-	DECT_ASSOCIATION_REQ_FAILED_MDM = 2,
+	DECT_ASSOCIATION_REQ_FAILED_MDM = 3,
 };
 
 /** @brief dect association changed event
