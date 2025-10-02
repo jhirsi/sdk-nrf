@@ -1073,7 +1073,7 @@ struct dect_mac_ipv6_address_config {
 	uint8_t address[DECT_MAC_IPV6_ADDRESS_ARRAY_SIZE];
 };
 
-/** DECT NR+ L2 context. TODO: add to own header as private to L2? */
+/** DECT NR+ L2 context. */
 struct dect_net_l2_context {
 	/** L2 flags */
 	enum net_l2_flags flags;

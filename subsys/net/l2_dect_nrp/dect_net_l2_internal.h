@@ -12,13 +12,20 @@
 extern "C" {
 #endif
 
+struct dect_net_l2_association_data {
+	bool in_use;
+	uint32_t target_long_rd_id;
+
+	bool local_ipv6_addr_set;
+	struct in6_addr local_ipv6_addr;
+	bool global_ipv6_addr_set;
+	struct in6_addr global_ipv6_addr;
+};
+
 void dect_net_l2_status_info_fill_association_data(
 	struct net_if *iface, struct dect_status_info *status_info_out);
 void dect_net_l2_status_info_fill_sink_data(
 	struct net_if *iface, struct dect_status_info *status_info_out);
-
-void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface);
-
 
 #ifdef __cplusplus
 }

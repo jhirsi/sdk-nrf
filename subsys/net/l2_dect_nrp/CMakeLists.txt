@@ -6,6 +6,7 @@
 zephyr_library()
 zephyr_library_sources_ifdef(CONFIG_NET_L2_DECT
 	dect_net_l2.c
+	dect_net_l2_ipv6_util.c
 )
 zephyr_library_sources_ifdef(CONFIG_NET_L2_DECT_MGMT
 	dect_net_l2_mgmt.c
