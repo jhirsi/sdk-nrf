@@ -2460,7 +2460,7 @@ static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
 			}
 		}
 	}
-#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
+#if defined(CONFIG_NET_L2_DECT_BR)
 	char ifname[CONFIG_NET_INTERFACE_NAME_LEN + 1] = { 0 };
 	int ret;
 

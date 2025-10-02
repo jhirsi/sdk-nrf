@@ -15,14 +15,11 @@ struct dect_nrf91_ipv6_prefix {
 	/** IPv6 prefix */
 	struct in6_addr prefix;
 
-	/** Backpointer to network interface where this prefix is used */
-	struct net_if *iface;
-
 	/** Prefix length in bytes */
 	uint8_t len;
 };
 
-#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
+#if defined(CONFIG_NET_L2_DECT_BR)
 bool dect_nrf91_sink_ipv6_prefix_get(struct dect_nrf91_ipv6_prefix *prefix_out);
 #else
 static inline bool dect_nrf91_sink_ipv6_prefix_get(struct dect_nrf91_ipv6_prefix *prefix_out)

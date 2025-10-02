@@ -6,13 +6,19 @@
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_if.h>
 
+#include "ipv6.h"
+
 #include <zephyr/net/net_pkt.h>
 #include <zephyr/net/mld.h>
+#include <zephyr/net/dns_sd.h>
 
 #include <net/dect_nrp_utils.h>
 
 #include <dect_net_l2.h>
 #include <dect_net_l2_mgmt.h>
+
+#include "dect_net_l2_sink.h"
+#include "dect_net_l2_internal.h"
 
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(NET_L2_DECT, CONFIG_NET_L2_DECT_LOG_LEVEL);
@@ -23,6 +29,11 @@ LOG_MODULE_REGISTER(NET_L2_DECT, CONFIG_NET_L2_DECT_LOG_LEVEL);
 struct dect_net_l2_association_data {
 	bool in_use;
 	uint32_t target_long_rd_id;
+
+	bool local_ipv6_addr_set;
+	struct in6_addr local_ipv6_addr;
+	bool global_ipv6_addr_set;
+	struct in6_addr global_ipv6_addr;
 };
 
 static struct dect_net_l2_association_data
@@ -61,6 +72,111 @@ static bool dect_net_l2_association_parent_id_get(uint32_t *parent_long_rd_id_ou
 		}
 	}
 	return false;
+}
+
+static struct dect_net_l2_association_data *dect_net_l2_association_ref_get(
+	uint32_t target_long_rd_id)
+{
+	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
+		if (child_associations[i].in_use &&
+		    child_associations[i].target_long_rd_id == target_long_rd_id) {
+			return &child_associations[i];
+		}
+	}
+	for (int i = 0; i < ARRAY_SIZE(parent_associations); i++) {
+		if (parent_associations[i].in_use &&
+		    parent_associations[i].target_long_rd_id == target_long_rd_id) {
+			return &parent_associations[i];
+		}
+	}
+	return NULL;
+}
+
+static uint16_t dect_net_l2_association_count_get(void)
+{
+	uint16_t count = 0;
+
+	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
+		if (child_associations[i].in_use) {
+			count++;
+		}
+	}
+	for (int i = 0; i < ARRAY_SIZE(parent_associations); i++) {
+		if (parent_associations[i].in_use) {
+			count++;
+		}
+	}
+	return count;
+}
+
+void dect_net_l2_status_info_fill_association_data(
+	struct net_if *iface, struct dect_status_info *status_info_out)
+{
+	if (status_info_out == NULL) {
+		return;
+	}
+	struct dect_net_l2_association_data *ass_data = NULL;
+
+	/* Fill parent data if available */
+	for (int i = 0; i < status_info_out->parent_count; i++) {
+		ass_data = dect_net_l2_association_ref_get(
+			status_info_out->parent_associations[i].long_rd_id);
+		if (ass_data) {
+			status_info_out->parent_associations[i].local_ipv6_addr =
+				ass_data->local_ipv6_addr;
+			status_info_out->parent_associations[i].global_ipv6_addr_set =
+				ass_data->global_ipv6_addr_set;
+			if (ass_data->global_ipv6_addr_set) {
+				status_info_out->parent_associations[i].global_ipv6_addr =
+					ass_data->global_ipv6_addr;
+			}
+		}
+	}
+	/* Fill child data if available */
+	for (int i = 0; i < status_info_out->child_count; i++) {
+		ass_data = dect_net_l2_association_ref_get(
+			status_info_out->child_associations[i].long_rd_id);
+		if (ass_data) {
+			status_info_out->child_associations[i].local_ipv6_addr =
+				ass_data->local_ipv6_addr;
+			status_info_out->child_associations[i].global_ipv6_addr_set =
+				ass_data->global_ipv6_addr_set;
+			if (ass_data->global_ipv6_addr_set) {
+				status_info_out->child_associations[i].global_ipv6_addr =
+					ass_data->global_ipv6_addr;
+			}
+		}
+	}
+}
+
+void dect_net_l2_status_info_fill_sink_data(
+	struct net_if *iface, struct dect_status_info *status_info_out)
+{
+	if (status_info_out == NULL) {
+		return;
+	}
+	struct dect_net_l2_sink_ipv6_prefix l2_sink_prefix;
+	struct in6_addr driver_ipv6_prefix = status_info_out->br_global_ipv6_addr_prefix;
+	bool driver_ipv6_prefix_set = status_info_out->br_global_ipv6_addr_prefix_set;
+
+	if (dect_net_l2_sink_ipv6_prefix_get(&l2_sink_prefix)) {
+		struct in6_addr l2_sink_ipv6_prefix = l2_sink_prefix.prefix;
+
+		/* Print warning if not the same as driver */
+		if (!driver_ipv6_prefix_set ||
+		    !net_ipv6_addr_cmp(&l2_sink_ipv6_prefix, &driver_ipv6_prefix)) {
+			LOG_WRN("SINK: IPv6 prefix %s/%d does not match driver prefix %s/%d",
+				net_sprint_ipv6_addr(&l2_sink_ipv6_prefix),
+				(sizeof(struct in6_addr) / 2) * 8,
+				net_sprint_ipv6_addr(&driver_ipv6_prefix),
+				(sizeof(struct in6_addr) / 2) * 8);
+		}
+		/* Anyways, we report L2 sink information */
+		status_info_out->br_net_iface = l2_sink_prefix.iface;
+		status_info_out->br_global_ipv6_addr_prefix = l2_sink_ipv6_prefix;
+		status_info_out->br_global_ipv6_addr_prefix_len = l2_sink_prefix.len;
+		status_info_out->br_global_ipv6_addr_prefix_set = true;
+	}
 }
 
 /**************************************************************************************************/
@@ -397,6 +513,8 @@ NET_L2_INIT(DECT_L2, dect_net_l2_recv, dect_net_l2_send, dect_net_l2_enable, dec
 void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settings)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+	struct net_if_addr *ifaddr;
+	struct in6_addr iid;
 
 	LOG_DBG("Initializing DECT L2 %p for iface %d (%p)", ctx, net_if_get_by_iface(iface),
 		iface);
@@ -407,23 +525,21 @@ void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settin
 	ctx->network_id = initial_settings->identities.network_id;
 	ctx->transmitter_long_rd_id = initial_settings->identities.transmitter_long_rd_id;
 	ctx->device_type = initial_settings->device_type;
-}
+	ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
 
-static uint16_t dect_net_l2_association_count_get(void)
-{
-	uint16_t count = 0;
-
-	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
-		if (child_associations[i].in_use) {
-			count++;
-		}
+	/* Add link-local address */
+	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
+	ifaddr = net_if_ipv6_addr_add(iface, &iid, NET_ADDR_AUTOCONF, 0);
+	if (!ifaddr) {
+		LOG_ERR("%s: cannot add address to interface %p", (__func__), iface);
+	} else {
+		/* As DAD is disabled in dect net iface,
+		 * we need to mark the address as a preferred one.
+		 */
+		ifaddr->addr_state = NET_ADDR_PREFERRED;
+		ctx->local_ipv6_addr = iid;
+		/* TODO: set initial_local_ipv6_addr */
 	}
-	for (int i = 0; i < ARRAY_SIZE(parent_associations); i++) {
-		if (parent_associations[i].in_use) {
-			count++;
-		}
-	}
-	return count;
 }
 
 static void dect_net_l2_join_ipv6_mdns_group(struct net_if *iface)
@@ -468,7 +584,204 @@ static void date_time_event_handler(const struct date_time_evt *evt)
 }
 #endif
 
-void dect_net_l2_parent_association_created(struct net_if *iface, uint32_t target_long_rd_id)
+static bool dect_net_l2_util_ipv6_link_local_addr_create_add(
+	struct net_if *iface, struct in6_addr *link_local_addr_out)
+{
+	struct net_if_addr *ifaddr;
+	struct in6_addr iid;
+
+	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
+	ifaddr = net_if_ipv6_addr_add(iface, &iid, NET_ADDR_AUTOCONF, 0);
+	if (!ifaddr) {
+		LOG_WRN("%s: cannot add link address to interface %p", (__func__), iface);
+		return false;
+	}
+	LOG_DBG("Link local IPv6 address %s added to interface %p",
+		net_sprint_ipv6_addr(&iid), iface);
+	*link_local_addr_out = iid;
+	return true;
+}
+
+
+static bool dect_net_l2_util_ipv6_global_addr_create_add(
+	struct net_if *iface, struct dect_mac_ipv6_address_config *ipv6_addr_cfg,
+	struct in6_addr *global_ipv6_addr_out)
+{
+	struct in6_addr global_addr = {};
+	struct in6_addr prefix_local = {};
+	struct net_if_addr *ifaddr;
+	bool added = false;
+
+	UNALIGNED_PUT(htonl(0xfe800000), &prefix_local.s6_addr32[0]);
+	/* Set ipv6 addr based on given info from peer FT device */
+	if (ipv6_addr_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
+		LOG_INF("No IPv6 address to set - using link local only");
+	} else {
+		int len = (ipv6_addr_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_FULL)
+				  ? 16
+				  : 8;
+
+		/* Create our own IPv6 address using the given prefix and iid. We first
+		 * setup link local address, and then copy prefix over first 16/8
+		 * bytes of that address.
+		 */
+		dect_nrp_utils_net_ipv6_addr_create_iid(&global_addr, net_if_get_link_addr(iface));
+		memcpy(&global_addr.s6_addr, ipv6_addr_cfg->address, len);
+
+		ifaddr = net_if_ipv6_addr_lookup(&global_addr, NULL);
+		if (ifaddr) {
+			LOG_WRN("IPv6 address %s already exists - continue",
+				net_sprint_ipv6_addr(&global_addr));
+			net_if_addr_set_lf(ifaddr, true);
+		} else {
+			ifaddr = net_if_ipv6_addr_add(iface, &global_addr, NET_ADDR_AUTOCONF, 0);
+			if (!ifaddr) {
+				LOG_WRN("%s: cannot add address (%s) to interface %p", (__func__),
+					net_sprint_ipv6_addr(&global_addr), iface);
+			} else {
+				added = true;
+				*global_ipv6_addr_out = global_addr;
+				LOG_INF("Global IPv6 address %s added to interface %p",
+					net_sprint_ipv6_addr(&global_addr), iface);
+			}
+		}
+	}
+	return added;
+}
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+static void dect_net_l2_util_ipv6_nbr_add(
+	struct net_if *iface, struct dect_mac_ipv6_address_config *ipv6_prefix_cfg,
+	uint32_t sink_long_rd_id, uint32_t nbr_long_rd_id,
+	bool *nbr_local_addr_was_set, struct in6_addr *nbr_local_ipv6_addr_out,
+	bool *nbr_global_addr_was_set, struct in6_addr *nbr_global_ipv6_addr_out)
+{
+	bool nbr_addr_generated;
+	struct in6_addr nbr_addr = {};
+	struct in6_addr prefix = {};
+
+	__ASSERT_NO_MSG(nbr_local_addr_was_set != NULL && nbr_global_addr_was_set != NULL);
+	__ASSERT_NO_MSG(nbr_local_ipv6_addr_out != NULL && nbr_global_ipv6_addr_out != NULL);
+
+	UNALIGNED_PUT(htonl(0xfe800000), &prefix.s6_addr32[0]);
+
+	/* Add local addr as a neighbor */
+	nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
+		prefix, sink_long_rd_id, nbr_long_rd_id,
+		&nbr_addr);
+	if (nbr_addr_generated) {
+		/* local: add a parent as a neighbor to dect iface */
+		if (!net_ipv6_nbr_add(iface, &nbr_addr, net_if_get_link_addr(iface), false,
+				      NET_IPV6_NBR_STATE_REACHABLE)) {
+			LOG_ERR("(%s): cannot add parents local addr (%s) as nbr to dect iface",
+				(__func__), net_sprint_ipv6_addr(&nbr_addr));
+		} else {
+			*nbr_local_addr_was_set = true;
+			*nbr_local_ipv6_addr_out = nbr_addr;
+			LOG_INF("(%s): long RD ID %u, local addr %s (link addr %s) "
+				"added as a neighbor to dect iface %p",
+				(__func__), nbr_long_rd_id, net_sprint_ipv6_addr(&nbr_addr),
+				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8), iface);
+		}
+	} else {
+		LOG_ERR("(%s): cannot create parents local addr as nbr to dect iface",
+			(__func__));
+	}
+	if (ipv6_prefix_cfg->type != DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
+		int len = (ipv6_prefix_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_FULL)
+				  ? 16
+				  : 8;
+
+		memcpy(&prefix, ipv6_prefix_cfg->address, len);
+
+		/* Add global addr as a neighbor */
+		nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
+			prefix, sink_long_rd_id, nbr_long_rd_id, &nbr_addr);
+		if (nbr_addr_generated) {
+			/* global: add a parent as a neighbor to dect iface */
+			if (!net_ipv6_nbr_add(iface, &nbr_addr, net_if_get_link_addr(iface), false,
+					      NET_IPV6_NBR_STATE_REACHABLE)) {
+				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
+					(__func__));
+			} else {
+				*nbr_global_addr_was_set = true;
+				*nbr_global_ipv6_addr_out = nbr_addr;
+				LOG_DBG("(%s): global addr %s (link addr %s) added "
+					"as a neighbor to dect iface",
+					(__func__), net_sprint_ipv6_addr(&nbr_addr),
+					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
+			}
+		}
+	}
+}
+
+static void dect_net_l2_util_ipv6_nbr_remove(
+	struct net_if *iface,
+	struct dect_net_l2_association_data *ass_list_item)
+{
+	if (ass_list_item->local_ipv6_addr_set) {
+		if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
+			LOG_WRN("Failed to remove local IPv6 neighbor %s on iface %p",
+				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr), iface);
+		}
+	}
+	if (ass_list_item->global_ipv6_addr_set) {
+		if (!net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
+			LOG_ERR("Failed to remove global IPv6 neighbor %s on iface %p",
+				net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr), iface);
+		}
+	}
+}
+#endif
+
+static void dect_net_l2_util_parent_added_ipv6_addressing_handle(
+	struct dect_net_l2_association_data *list_item,
+	struct net_if *iface, uint32_t parent_long_rd_id,
+	struct dect_mac_ipv6_address_config *ipv6_addr_cfg)
+{
+	bool removed = false;
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+
+	/* Store prefix config */
+	ctx->ipv6_prefix_cfg = *ipv6_addr_cfg;
+
+	/* Parent added: remove/update our link local addr and ipv6 IID */
+	removed = net_if_ipv6_addr_rm(iface, &ctx->local_ipv6_addr);
+	if (!removed) {
+		LOG_ERR("Failed to remove local IPv6 address %s on iface %p",
+			net_sprint_ipv6_addr(&ctx->local_ipv6_addr), iface);
+	}
+
+	/* Link level addr has been set by the driver according
+	 * to parent/sink long rd id + our long rd id.
+	 * Let's continue from that on IPv6 level.
+	 * Let's add our link local addr and possible global address to net iface
+	 * and also add parent as a neighbor.
+	 */
+	if (!dect_net_l2_util_ipv6_link_local_addr_create_add(iface, &ctx->local_ipv6_addr)) {
+		LOG_WRN("%s: cannot add our link local address to interface %p",
+			(__func__), iface);
+	}
+
+	ctx->global_ipv6_addr_set = dect_net_l2_util_ipv6_global_addr_create_add(
+		iface, ipv6_addr_cfg,
+		&ctx->global_ipv6_addr);
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	/* Add parent as a neighbor and also in association list as nbr */
+	dect_net_l2_util_ipv6_nbr_add(iface, ipv6_addr_cfg,
+					  parent_long_rd_id,
+					  parent_long_rd_id,
+					  &list_item->local_ipv6_addr_set,
+					  &list_item->local_ipv6_addr,
+					  &list_item->global_ipv6_addr_set,
+					  &list_item->global_ipv6_addr);
+#endif
+}
+
+void dect_net_l2_parent_association_created(
+	struct net_if *iface, uint32_t target_long_rd_id,
+	struct dect_mac_ipv6_address_config ipv6_addr_cfg)
 {
 	bool found = false;
 
@@ -479,6 +792,8 @@ void dect_net_l2_parent_association_created(struct net_if *iface, uint32_t targe
 		if (!parent_associations[i].in_use) {
 			parent_associations[i].in_use = true;
 			parent_associations[i].target_long_rd_id = target_long_rd_id;
+			dect_net_l2_util_parent_added_ipv6_addressing_handle(
+				&parent_associations[i], iface, target_long_rd_id, &ipv6_addr_cfg);
 			dect_mgmt_parent_association_created_evt(iface, target_long_rd_id);
 
 			/* We support only one parent */
@@ -499,20 +814,62 @@ void dect_net_l2_parent_association_created(struct net_if *iface, uint32_t targe
 	__ASSERT_NO_MSG(found);
 }
 
-#include <zephyr/net/dns_sd.h>
-void dect_net_l2_child_association_created(struct net_if *iface, uint32_t target_long_rd_id)
+static void dect_net_l2_util_child_added_ipv6_addressing_handle(
+	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface,
+	uint32_t child_long_rd_id, bool first_child)
 {
-	LOG_DBG("dect_net_l2_child_association_created: iface %p target_long_rd_id %u", iface,
-		target_long_rd_id);
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+
+	/* Add child as a neighbor, both local and global */
+	if (first_child) {
+		/* But 1st,
+		 * update ipv6 prefix info, and in case if there was related settings changes,
+		 * so update also ipv6 addressing also for this device
+		 * when 1st association is created.
+		 */
+		bool done = net_if_ipv6_addr_rm(iface, &ctx->local_ipv6_addr);
+
+		if (!done) {
+			LOG_WRN("%s: cannot remove our local address %s from interface %p",
+				(__func__), net_sprint_ipv6_addr(&ctx->local_ipv6_addr), iface);
+		}
+		if (!dect_net_l2_util_ipv6_link_local_addr_create_add(iface,
+								      &ctx->local_ipv6_addr)) {
+			LOG_WRN("%s: cannot add our link local address to interface %p", (__func__),
+				iface);
+		}
+		/* Update also our global address */
+		dect_net_l2_addr_util_global_addr_replace(iface);
+	}
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	/* Add child as a neighbor and also in association list */
+	dect_net_l2_util_ipv6_nbr_add(
+		iface, &ctx->ipv6_prefix_cfg, ctx->transmitter_long_rd_id, child_long_rd_id,
+		&ass_list_item->local_ipv6_addr_set, &ass_list_item->local_ipv6_addr,
+		&ass_list_item->global_ipv6_addr_set, &ass_list_item->global_ipv6_addr);
+#endif
+}
+
+void dect_net_l2_child_association_created(struct net_if *iface, uint32_t child_long_rd_id)
+{
+	bool first_child = false;
+
+	LOG_DBG("dect_net_l2_child_association_created: iface %p child_long_rd_id %u", iface,
+		child_long_rd_id);
 
 	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
 		if (!child_associations[i].in_use) {
 			child_associations[i].in_use = true;
-			child_associations[i].target_long_rd_id = target_long_rd_id;
-			dect_mgmt_child_association_created_evt(iface, target_long_rd_id);
+			child_associations[i].target_long_rd_id = child_long_rd_id;
+
+			first_child = (dect_net_l2_association_count_get() == 1);
+			dect_net_l2_util_child_added_ipv6_addressing_handle(
+				&child_associations[i], iface, child_long_rd_id, first_child);
+			dect_mgmt_child_association_created_evt(iface, child_long_rd_id);
 
 			/* Put the carrier on if this was the first association */
-			if (dect_net_l2_association_count_get() == 1) {
+			if (first_child) {
 				net_if_dormant_off(iface);
 				dect_net_l2_join_ipv6_mdns_group(iface);
 			}
@@ -536,6 +893,56 @@ static bool dect_net_l2_no_associations(void)
 	return true;
 }
 
+static void dect_net_l2_util_parent_removed_ipv6_addressing_handle(
+	struct dect_net_l2_association_data *ass_list_item,
+	struct net_if *iface, uint32_t parent_long_rd_id)
+{
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+	bool removed;
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	dect_net_l2_util_ipv6_nbr_remove(
+		iface,
+		ass_list_item);
+#endif
+
+	removed = net_if_ipv6_addr_rm(iface, &ctx->local_ipv6_addr);
+	if (!removed) {
+		LOG_WRN("%s: cannot remove our local address %s from interface %p",
+			(__func__), net_sprint_ipv6_addr(&ctx->local_ipv6_addr), iface);
+	}
+
+	/* Set link local addr back as original */
+	if (!dect_net_l2_util_ipv6_link_local_addr_create_add(iface, &ctx->local_ipv6_addr)) {
+		LOG_WRN("%s: cannot add our orig link local address to interface %p",
+			(__func__), iface);
+	}
+
+	/* Our local address was already updated, now remove our global IP address */
+	if (ctx->global_ipv6_addr_set) {
+		net_if_ipv6_addr_rm(iface, &ctx->global_ipv6_addr);
+	}
+	ctx->global_ipv6_addr_set = false;
+	ass_list_item->global_ipv6_addr_set = false;
+	ass_list_item->local_ipv6_addr_set = false;
+}
+
+static void dect_net_l2_util_child_removed_ipv6_addressing_handle(
+	struct dect_net_l2_association_data *ass_list_item,
+	struct net_if *iface, uint32_t child_long_rd_id)
+{
+	if (ass_list_item == NULL) {
+		return;
+	}
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	dect_net_l2_util_ipv6_nbr_remove(
+		iface,
+		ass_list_item);
+#endif
+	ass_list_item->global_ipv6_addr_set = false;
+	ass_list_item->local_ipv6_addr_set = false;
+}
+
 void dect_net_l2_association_removed(
 	struct net_if *iface, uint32_t long_rd_id,
 	enum dect_association_release_cause cause, bool neighbor_initiated)
@@ -547,6 +954,8 @@ void dect_net_l2_association_removed(
 		if (child_associations[i].in_use &&
 		    child_associations[i].target_long_rd_id == long_rd_id) {
 			child_associations[i].in_use = false;
+			dect_net_l2_util_child_removed_ipv6_addressing_handle(
+				&child_associations[i], iface, long_rd_id);
 			dect_mgmt_association_released_evt(
 				iface, long_rd_id, DECT_NEIGHBOR_ROLE_CHILD,
 				neighbor_initiated, cause);
@@ -562,6 +971,9 @@ void dect_net_l2_association_removed(
 		if (parent_associations[i].in_use &&
 		    parent_associations[i].target_long_rd_id == long_rd_id) {
 			parent_associations[i].in_use = false;
+
+			dect_net_l2_util_parent_removed_ipv6_addressing_handle(
+				&parent_associations[i], iface, long_rd_id);
 			dect_mgmt_association_released_evt(
 				iface, long_rd_id, DECT_NEIGHBOR_ROLE_PARENT,
 				neighbor_initiated, cause);
@@ -580,8 +992,68 @@ void dect_net_l2_settings_changed(
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
 
-	/* Update needed settings in our side to context */
+	/* Update needed settings in our side to context.
+	 * Addressing are updated on next time when 1st association is created.
+	 */
 	ctx->network_id = driver_current_settings->identities.network_id;
 	ctx->transmitter_long_rd_id = driver_current_settings->identities.transmitter_long_rd_id;
 	ctx->device_type = driver_current_settings->device_type;
+}
+
+#if RM_JH /* TODO */
+void dect_net_l2_parent_ipv6_config_changed(
+	struct net_if *iface, uint32_t parent_long_rd_id,
+	struct dect_mac_ipv6_address_config ipv6_addr_cfg)
+{
+	LOG_DBG("dect_net_l2_parent_ipv6_config_changed: iface %p, parent_long_rd_id %u",
+		iface, parent_long_rd_id);
+
+}
+#endif
+
+void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface)
+{
+	struct dect_net_l2_context *ctx = net_if_l2_data(dect_iface);
+	struct net_if_ipv6 *dect_ipv6s = dect_iface->config.ip.ipv6;
+	bool add_also_global = false;
+	struct dect_net_l2_sink_ipv6_prefix sink_global_prefix;
+
+	if (dect_net_l2_sink_ipv6_prefix_get(&sink_global_prefix)) {
+		memcpy(&ctx->ipv6_prefix_cfg.address, sink_global_prefix.prefix.s6_addr,
+		       sink_global_prefix.len);
+		__ASSERT_NO_MSG(sink_global_prefix.len == 8);
+		ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
+		add_also_global = true;
+	} else {
+		ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
+	}
+
+	/* Remove all old global address from dect nr+ iface*/
+	ARRAY_FOR_EACH(dect_ipv6s->unicast, i)
+	{
+		if (net_ipv6_is_global_addr(&dect_ipv6s->unicast[i].address.in6_addr)) {
+			LOG_DBG("Removing old global address %s",
+				net_sprint_ipv6_addr(&dect_ipv6s->unicast[i].address.in6_addr));
+			net_if_ipv6_addr_rm(dect_iface,
+					    &dect_ipv6s->unicast[i].address.in6_addr);
+		}
+	}
+#if RM_JH
+	/* Remove all old prefixes */
+	if (ctx->global_ipv6_addr_set) {
+		ARRAY_FOR_EACH(dect_ipv6s->prefix, i)
+		{
+			net_if_ipv6_prefix_rm(dect_iface,
+				&dect_ipv6s->prefix[i].prefix,
+				dect_ipv6s->prefix[i].len);
+		}
+		ctx->global_ipv6_addr_set = false;
+	}
+#endif
+	/* ...and finally set new global address */
+	ctx->global_ipv6_addr_set = dect_net_l2_util_ipv6_global_addr_create_add(
+		dect_iface, &ctx->ipv6_prefix_cfg,
+		&ctx->global_ipv6_addr);
+
+	/* TODO handle case when prefix changed */
 }

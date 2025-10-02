@@ -19,6 +19,22 @@ config NET_L2_DECT_MGMT
 	help
 	  Enable support for DECT NR+ Net Management interface.
 
+config NET_L2_DECT_BR
+	bool "Enable border router support for DECT NR+"
+	default y if NET_L2_ETHERNET || MODEM_CELLULAR
+	select NET_ROUTING if NET_IPV6 && NET_ROUTE
+	help
+	  Enable Border Router (BR) support.
+	  SLM running with LTE connection in connected nrf9151DK accessed via
+	  PPP by using MODEM_CELLULAR feature (preferred option),
+	  or Ethernet based NET_L2_ETHERNET mode can be used as a border router.
+	  If MODEM_CELLULAR is selected, then BR has only one sink and vice versa.
+
+module = NET_L2_DECT_BR
+module-dep = NET_LOG
+module-str = Log level for dect nr+ L2 Border Router / Sink
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
 module = NET_L2_DECT
 module-dep = NET_LOG
 module-str = Log level for dect nr+ L2

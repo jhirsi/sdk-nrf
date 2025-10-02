@@ -14,6 +14,8 @@ zephyr_library_sources_ifdef(CONFIG_NET_CONNECTION_MANAGER
 	dect_net_conn_mgr.c
 )
 
+zephyr_library_sources_ifdef(CONFIG_NET_L2_DECT_BR dect_net_l2_sink.c)
+
 zephyr_include_directories(include)
 
 # For net_private.h

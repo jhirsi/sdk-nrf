@@ -142,7 +142,7 @@ struct dect_mac_common_op_event_msgq_item {
 
 #include "dect_net_l2_mgmt.h"
 
-/* All of these that return integer returns 0 if success and negative on error */
+/* DECT NR+ ctrl api: All of these that return integer returns 0 if success and negative on error */
 
 int dect_nrf91_ctrl_configure_n_activate(void);
 int dect_nrf91_ctrl_deactivate(void);

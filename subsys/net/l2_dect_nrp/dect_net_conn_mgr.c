@@ -141,7 +141,7 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 				       "cannot read current settings: %d", ret);
 				break;
 			}
-			if (IS_ENABLED(CONFIG_DECT_NRP_MAC_BORDER_ROUTER) &&
+			if (IS_ENABLED(CONFIG_NET_L2_DECT_BR) &&
 			    current_settings.device_type == DECT_DEVICE_TYPE_FT) {
 				/* For FT with sink/BR support,
 				 * we need to wait until sink BR connection is created

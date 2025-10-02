@@ -1048,7 +1048,32 @@ struct dect_nrp_hal_api {
 	int (*network_unjoin_req)(const struct device *dev);
 };
 
-/** DECT NR+ L2 context. */
+/**
+ * @brief MAC IPv6 address type
+ */
+enum dect_mac_ipv6_address_type {
+	/** None */
+	DECT_MAC_IPV6_ADDRESS_TYPE_NONE = 0,
+	/** Prefix of the IPv6 address */
+	DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX = 1,
+	/** Complete IPv6 address */
+	DECT_MAC_IPV6_ADDRESS_TYPE_FULL = 2
+};
+
+#define DECT_MAC_IPV6_ADDRESS_ARRAY_SIZE 16
+
+/** IPv6 Address configuration */
+struct dect_mac_ipv6_address_config {
+	/** Address type */
+	enum dect_mac_ipv6_address_type type;
+	/**
+	 * IPv6 Address
+	 * valid bytes: PREFIX - 8 bytes, FULL - 16 bytes
+	 */
+	uint8_t address[DECT_MAC_IPV6_ADDRESS_ARRAY_SIZE];
+};
+
+/** DECT NR+ L2 context. TODO: add to own header as private to L2? */
 struct dect_net_l2_context {
 	/** L2 flags */
 	enum net_l2_flags flags;
@@ -1062,8 +1087,11 @@ struct dect_net_l2_context {
 	/** Transmitter Long Radio Device ID */
 	uint32_t transmitter_long_rd_id;
 
-	/** Link layer address (in big endian) of this device */
-	struct net_linkaddr linkaddr;
+	/** Current IPv6 address configurations */
+	struct dect_mac_ipv6_address_config ipv6_prefix_cfg;
+	struct in6_addr local_ipv6_addr;
+	bool global_ipv6_addr_set;
+	struct in6_addr global_ipv6_addr;
 };
 
 #define DECT_L2 DECT
@@ -1073,12 +1101,20 @@ NET_L2_DECLARE_PUBLIC(DECT_L2);
 #define DECT_L2_CTX_TYPE struct dect_net_l2_context
 
 /* Calls from driver to L2: */
+
+/**
+ * @brief Initialize DECT NR+ L2 on the given network interface.
+ *
+ * @param iface Network interface
+ * @param driver_initial_settings Initial settings in the driver
+ */
 void dect_net_l2_init(struct net_if *iface, struct dect_settings *driver_initial_settings);
 
 /**
  * @brief Inform L2 that settings have been changed.
  *
  * @param iface Network interface
+ * @param driver_current_settings Current settings in the driver
  */
 void dect_net_l2_settings_changed(
 	struct net_if *iface, struct dect_settings *driver_current_settings);
@@ -1087,13 +1123,18 @@ void dect_net_l2_settings_changed(
  * @brief Inform L2 that association with a parent has been created. PT device.
  *
  * @param iface Network interface
+ * @param parent_long_rd_id Long Radio Device ID of the parent
+ * @param ipv6_addr_cfg IPv6 address configuration to be used with this parent
  */
-void dect_net_l2_parent_association_created(struct net_if *iface, uint32_t target_long_rd_id);
+void dect_net_l2_parent_association_created(
+	struct net_if *iface, uint32_t parent_long_rd_id,
+	struct dect_mac_ipv6_address_config ipv6_addr_cfg);
 
 /**
  * @brief Inform L2 that association with a child has been created. FT device.
  *
  * @param iface Network interface
+ * @param target_long_rd_id Long Radio Device ID of the child
  */
 void dect_net_l2_child_association_created(struct net_if *iface, uint32_t target_long_rd_id);
 
@@ -1101,9 +1142,24 @@ void dect_net_l2_child_association_created(struct net_if *iface, uint32_t target
  * @brief Inform L2 that association has been released.
  *
  * @param iface Network interface
+ * @param long_rd_id Long Radio Device ID of the neighbor
+ * @param cause Release cause
+ * @param neighbor_initiated True if release was initiated by the neighbor
  */
 void dect_net_l2_association_removed(
 	struct net_if *iface, uint32_t long_rd_id,
 	enum dect_association_release_cause cause, bool neighbor_initiated);
+
+#if RM_JH /* TODO */
+/** * @brief PT device: Inform L2 that IPv6 address configuration of a parent has changed.
+ *
+ * @param iface Network interface
+ * @param parent_long_rd_id Long Radio Device ID of the parent
+ * @param ipv6_addr_cfg New IPv6 address configuration to be used with this parent
+ */
+void dect_net_l2_parent_ipv6_config_changed(
+	struct net_if *iface, uint32_t parent_long_rd_id,
+	struct dect_mac_ipv6_address_config ipv6_addr_cfg);
+#endif
 
 #endif /* ZEPHYR_INCLUDE_NET_NET_DECT_L2_H_ */

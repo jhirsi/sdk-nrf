@@ -10,6 +10,8 @@
 #include <dect_net_l2.h>
 #include <dect_net_l2_mgmt.h>
 
+#include "dect_net_l2_internal.h"
+
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(NET_L2_DECT_MGMT, CONFIG_NET_L2_DECT_MGMT_LOG_LEVEL);
 
@@ -354,11 +356,20 @@ static int dect_mgmt_status_info_get(uint64_t mgmt_request, struct net_if *iface
 	const struct device *dev = net_if_get_device(iface);
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
 	struct dect_status_info *status_out = data;
+	int err;
 
 	if (len != sizeof(struct dect_status_info) || api == NULL || api->status_info_get == NULL) {
 		return -ENOTSUP;
 	}
-	return api->status_info_get(dev, status_out);
+	err = api->status_info_get(dev, status_out);
+	if (!err) {
+		/* Fill the association L2 data */
+		dect_net_l2_status_info_fill_association_data(iface, status_out);
+
+		/* Fill the sink L2 data */
+		dect_net_l2_status_info_fill_sink_data(iface, status_out);
+	}
+	return err;
 }
 
 NET_MGMT_REGISTER_REQUEST_HANDLER(NET_REQUEST_DECT_STATUS_INFO_GET, dect_mgmt_status_info_get);

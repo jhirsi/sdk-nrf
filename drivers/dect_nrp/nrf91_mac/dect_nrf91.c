@@ -4,8 +4,6 @@
 #include <zephyr/kernel.h>
 #include <zephyr/net/net_if.h>
 
-#include "ipv6.h"
-
 #include <net/dect_nrp_utils.h>
 
 #if defined(CONFIG_MODEM_INFO)
@@ -23,32 +21,20 @@
 #include <zephyr/logging/log.h>
 LOG_MODULE_REGISTER(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
-#include "net_private.h" /* for net_sprint_ipv6_addr */
-
 struct dect_nrf91_association_data {
 	bool in_use;
 	uint32_t target_long_rd_id;
-
-	/* TODO: to be removed? */
-	struct in6_addr local_ipv6_addr;
-
-	bool global_ipv6_addr_set;
-	struct in6_addr global_ipv6_addr;
 };
 
 struct dect_nrf91_mac_dev_context {
 	struct net_if *iface;
+
 	uint8_t link_addr[8];
 	uint32_t parent_long_rd_id;
 
 	struct dect_nrf91_association_data
 		child_associations[CONFIG_DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT];
 	struct dect_nrf91_association_data parent_associations[1]; /* TODO: magic */
-
-	/* PT/leaf device global addr TODO: is these really needed here? */
-	bool global_ipv6_addr_set;
-	struct in6_addr global_ipv6_addr;
-	struct in6_addr local_ipv6_addr;
 };
 
 static struct dect_nrf91_mac_dev_context dect_nrf91_mac_dev_context_data;
@@ -143,7 +129,7 @@ BUILD_ASSERT((DECT_MAC_STATUS_NO_RSSI_RESULTS ==
 
 /**************************************************************************************************/
 
-static uint8_t *dect_nrf91_initial_link_addr_get(struct dect_nrf91_mac_dev_context *ctx)
+static uint8_t *dect_nrf91_current_link_addr_create(struct dect_nrf91_mac_dev_context *ctx)
 {
 	/* MAC addr based on set long rd id */
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -204,79 +190,6 @@ static uint8_t *dect_nrf91_initial_link_addr_get(struct dect_nrf91_mac_dev_conte
 
 /**************************************************************************************************/
 
-static bool
-dect_nrf91_child_association_list_nbr_add(struct dect_nrf91_association_data *ass_list_item)
-{
-	struct in6_addr child_addr = {};
-	struct in6_addr prefix = {};
-	struct in6_addr prefix_local = {};
-	struct dect_nrf91_ipv6_prefix sink_global_prefix;
-	bool child_addr_generated = false;
-	bool added = false; /* Either local and/or global added */
-	bool add_also_global = false;
-	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
-
-	if (ass_list_item == NULL) {
-		LOG_ERR("%s: no association data", (__func__));
-		return false;
-	}
-	/* Add child as a neighbor, both local and global */
-	if (dect_nrf91_sink_ipv6_prefix_get(&sink_global_prefix)) {
-		memcpy(&prefix, sink_global_prefix.prefix.s6_addr, sink_global_prefix.len);
-
-		add_also_global = true;
-	}
-	UNALIGNED_PUT(htonl(0xfe800000), &prefix_local.s6_addr32[0]);
-
-	/* At 1st, add local nbr */
-	child_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-		prefix_local, set_ptr->net_mgmt_common.identities.transmitter_long_rd_id,
-		ass_list_item->target_long_rd_id, &child_addr);
-	if (child_addr_generated) {
-		/* local: add a child as a eigbor to dect iface */
-		if (!net_ipv6_nbr_add(iface, &child_addr, net_if_get_link_addr(iface), false,
-				      NET_IPV6_NBR_STATE_REACHABLE)) {
-			LOG_WRN("(%s): local: cannot add child (long rd id %u) as a nbr "
-				"to dect iface",
-				(__func__), ass_list_item->target_long_rd_id);
-		} else {
-			added = true;
-			ass_list_item->local_ipv6_addr = child_addr;
-			LOG_DBG("(%s): child (long rd id %u) local addr %s (link addr %s) added "
-				"as a neighbor to dect iface",
-				(__func__), ass_list_item->target_long_rd_id,
-				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
-				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
-		}
-	}
-	if (add_also_global) {
-		child_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-			prefix, set_ptr->net_mgmt_common.identities.transmitter_long_rd_id,
-			ass_list_item->target_long_rd_id, &child_addr);
-		if (child_addr_generated) {
-			/* global: add a child as a neighbor to dect iface */
-			if (!net_ipv6_nbr_add(iface, &child_addr, net_if_get_link_addr(iface),
-					      false, NET_IPV6_NBR_STATE_REACHABLE)) {
-				LOG_WRN("(%s): global: Cannot add child (long rd id %u) as a nbr "
-					"to dect iface",
-					(__func__), ass_list_item->target_long_rd_id);
-			} else {
-				added = true;
-				ass_list_item->global_ipv6_addr = child_addr;
-				ass_list_item->global_ipv6_addr_set = true;
-				LOG_DBG("(%s): child (long rd id %u) global addr %s (link addr %s) "
-					"added as a neighbor to dect iface",
-					(__func__), ass_list_item->target_long_rd_id,
-					net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr),
-					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
-			}
-		}
-	}
-
-	return added;
-}
-
 static struct dect_nrf91_association_data *
 dect_nrf91_child_association_list_item_get(uint32_t target_long_rd_id)
 {
@@ -333,120 +246,22 @@ static void dect_nrf91_child_association_list_remove(uint32_t target_long_rd_id)
 
 /**************************************************************************************************/
 
-static void dect_nrf91_parent_association_list_addressing_handle(
-	struct dect_nrf91_association_data *ass_list_item,
-	struct nrf_modem_dect_mac_ipv6_address_config_t ipv6_config_from_mdm)
+static void dect_nrf91_parent_created_association_list_addressing_handle(
+	struct dect_nrf91_association_data *ass_list_item)
 {
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
-	struct net_if_addr *ifaddr;
-	struct in6_addr iid;
 	uint8_t *link_addr;
 	int ret;
 
-	/* Parent added: remove/update our link addr and ipv6 IID */
-	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
-	net_if_ipv6_addr_rm(iface, &iid);
-
-	link_addr = dect_nrf91_initial_link_addr_get(ctx);
+	/* Parent added: update our link addr */
+	link_addr = dect_nrf91_current_link_addr_create(ctx);
 	ret = net_if_set_link_addr(iface, link_addr, 8, NET_LINK_UNKNOWN);
 	if (ret) {
 		LOG_WRN("%s: cannot re-set link addr: %d", (__func__), ret);
 	}
-
-	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
-	ifaddr = net_if_ipv6_addr_add(iface, &iid, NET_ADDR_AUTOCONF, 0);
-	if (!ifaddr) {
-		LOG_WRN("%s: cannot add link address to interface %p", (__func__), iface);
-	}
-	struct in6_addr global_addr = {};
-	struct in6_addr prefix_local = {};
-	bool add_global = false;
-
-	UNALIGNED_PUT(htonl(0xfe800000), &prefix_local.s6_addr32[0]);
-
-	/* Set ipv6 addr based on given info from peer FT device */
-	if (ipv6_config_from_mdm.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
-		LOG_INF("No IPv6 address to set - using link local only");
-	} else {
-		int len = (ipv6_config_from_mdm.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_FULL)
-				  ? 16
-				  : 8;
-
-		/* Create our own IPv6 address using the given prefix and iid. We first
-		 * setup link local address, and then copy prefix over first 16/8
-		 * bytes of that address.
-		 */
-		dect_nrp_utils_net_ipv6_addr_create_iid(&global_addr, net_if_get_link_addr(iface));
-		memcpy(&global_addr, ipv6_config_from_mdm.address, len);
-
-		ifaddr = net_if_ipv6_addr_lookup(&global_addr, NULL);
-		if (ifaddr) {
-			LOG_WRN("IPv6 address %s already exists - continue",
-				net_sprint_ipv6_addr(&global_addr));
-			net_if_addr_set_lf(ifaddr, true);
-		} else {
-			ifaddr = net_if_ipv6_addr_add(iface, &global_addr, NET_ADDR_AUTOCONF, 0);
-			if (!ifaddr) {
-				LOG_WRN("%s: cannot add address (%s) to interface %p", (__func__),
-					net_sprint_ipv6_addr(&global_addr), iface);
-			} else {
-				ctx->global_ipv6_addr = global_addr;
-				ctx->global_ipv6_addr_set = true;
-
-				add_global = true;
-				LOG_INF("Global IPv6 address %s added to interface %p",
-					net_sprint_ipv6_addr(&global_addr), iface);
-			}
-		}
-	}
-
-#if defined(CONFIG_NET_IPV6_NBR_CACHE)
-	bool parent_addr_generated;
-	struct in6_addr parent_addr = {};
-
-	/* Add local addr as a neighbor and a router */
-	parent_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-		prefix_local, ass_list_item->target_long_rd_id, ass_list_item->target_long_rd_id,
-		&parent_addr);
-	if (parent_addr_generated) {
-		/* local: add a parent as a neighbor to dect iface */
-		if (!net_ipv6_nbr_add(iface, &parent_addr, net_if_get_link_addr(iface), false,
-				      NET_IPV6_NBR_STATE_REACHABLE)) {
-			LOG_ERR("(%s): cannot add parents local addr as nbr to dect iface",
-				(__func__));
-		} else {
-			ass_list_item->local_ipv6_addr = parent_addr;
-			LOG_DBG("(%s): local addr %s (link addr %s) added as a neighbor to dect "
-				"iface",
-				(__func__), net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
-				net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
-		}
-	}
-	if (add_global) {
-		parent_addr_generated =
-			dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-				global_addr, ass_list_item->target_long_rd_id,
-				ass_list_item->target_long_rd_id, &parent_addr);
-		if (parent_addr_generated) {
-			/* global: add a parent as a neighbor to dect iface */
-			if (!net_ipv6_nbr_add(iface, &parent_addr, net_if_get_link_addr(iface),
-					      true, NET_IPV6_NBR_STATE_REACHABLE)) {
-				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
-					(__func__));
-			} else {
-				LOG_DBG("(%s): parent global addr %s (link addr %s) added as "
-					"a neighbor to dect iface",
-					(__func__),
-					net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr),
-					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
-			}
-			ass_list_item->global_ipv6_addr = parent_addr;
-			ass_list_item->global_ipv6_addr_set = true;
-		}
-	}
-#endif /* CONFIG_NET_IPV6_NBR_CACHE */
 }
+
 /**************************************************************************************************/
 
 static struct dect_nrf91_association_data *
@@ -498,52 +313,16 @@ static void dect_nrf91_parent_association_list_remove(uint32_t target_long_rd_id
 
 /**************************************************************************************************/
 
-static struct net_mgmt_event_callback dect_nrf91_net_mgmt_ipv6_event_cb;
-
-static void dect_nrf91_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callback *cb,
-						   uint64_t mgmt_event, struct net_if *iface)
-{
-	char ipv6_addr_str[NET_IPV6_ADDR_LEN];
-
-	if (mgmt_event == NET_EVENT_IPV6_PREFIX_ADD) {
-		struct net_event_ipv6_prefix *ipv6_prefix =
-			(struct net_event_ipv6_prefix *)cb->info;
-
-		LOG_WRN("NET_EVENT_IPV6_PREFIX_ADD: iface %p, prefix %s/%d", iface,
-			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_prefix->addr,
-				      ipv6_addr_str, NET_IPV6_ADDR_LEN),
-			ipv6_prefix->len);
-
-	} else if (mgmt_event == NET_EVENT_IPV6_PREFIX_DEL) {
-		struct net_event_ipv6_prefix *ipv6_prefix =
-			(struct net_event_ipv6_prefix *)cb->info;
-
-		LOG_WRN("NET_EVENT_IPV6_PREFIX_DEL: iface %p, prefix %s/%d", iface,
-			net_addr_ntop(AF_INET6, (struct in6_addr *)&ipv6_prefix->addr,
-				      ipv6_addr_str, NET_IPV6_ADDR_LEN),
-			ipv6_prefix->len);
-	}
-}
-
-/**************************************************************************************************/
-
 static void dect_nrf91_iface_init(struct net_if *iface)
 {
 	struct dect_nrf91_mac_dev_context *ctx = net_if_get_device(iface)->data;
 	uint8_t *link_addr;
 	int err;
 
-	LOG_DBG("dect_nrf91_iface_init");
-
-	net_mgmt_init_event_callback(&dect_nrf91_net_mgmt_ipv6_event_cb,
-				     dect_nrf91_net_mgmt_ipv6_event_handler,
-				     (NET_EVENT_IPV6_PREFIX_ADD | NET_EVENT_IPV6_PREFIX_DEL));
-	net_mgmt_add_event_callback(&dect_nrf91_net_mgmt_ipv6_event_cb);
-
 	/* Note: settings init takes for a while */
 	dect_nrf91_settings_init();
 	ctx->parent_long_rd_id = 0;
-	link_addr = dect_nrf91_initial_link_addr_get(ctx);
+	link_addr = dect_nrf91_current_link_addr_create(ctx);
 
 	ctx->iface = iface;
 
@@ -551,27 +330,12 @@ static void dect_nrf91_iface_init(struct net_if *iface)
 
 	err = net_if_set_link_addr(iface, link_addr, 8, NET_LINK_UNKNOWN);
 	if (err) {
-		LOG_ERR("Cannot set link addr: %d", err);
+		LOG_ERR("%s: cannot set link addr: %d", (__func__), err);
 		return;
 	}
 	err = net_if_set_name(ctx->iface, "nrf91_dect");
 	if (err) {
-		LOG_WRN("Could not set interface name!!");
-	}
-
-	struct net_if_addr *ifaddr;
-	struct in6_addr iid;
-
-	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
-
-	ifaddr = net_if_ipv6_addr_add(iface, &iid, NET_ADDR_AUTOCONF, 0);
-	if (!ifaddr) {
-		LOG_ERR("Cannot add address to interface %p", iface);
-	} else {
-		/* As DAD is disabled in dect net iface,
-		 * we need to mark the address as a preferred one.
-		 */
-		ifaddr->addr_state = NET_ADDR_PREFERRED;
+		LOG_WRN("%s: could not set interface name", (__func__));
 	}
 
 	if (IS_ENABLED(CONFIG_DECT_NRP_MAC_NET_IF_NO_AUTO_START)) {
@@ -787,12 +551,6 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 		if (ctx->child_associations[i].in_use) {
 			status_info.child_associations[i].long_rd_id =
 				ctx->child_associations[i].target_long_rd_id;
-			status_info.child_associations[i].local_ipv6_addr =
-				ctx->child_associations[i].local_ipv6_addr;
-			status_info.child_associations[i].global_ipv6_addr =
-				ctx->child_associations[i].global_ipv6_addr;
-			status_info.child_associations[i].global_ipv6_addr_set =
-				ctx->child_associations[i].global_ipv6_addr_set;
 			tmp_count++;
 		}
 	}
@@ -804,12 +562,6 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 		if (ctx->parent_associations[i].in_use) {
 			status_info.parent_associations[i].long_rd_id =
 				ctx->parent_associations[i].target_long_rd_id;
-			status_info.parent_associations[i].local_ipv6_addr =
-				ctx->parent_associations[i].local_ipv6_addr;
-			status_info.parent_associations[i].global_ipv6_addr =
-				ctx->parent_associations[i].global_ipv6_addr;
-			status_info.parent_associations[i].global_ipv6_addr_set =
-				ctx->parent_associations[i].global_ipv6_addr_set;
 			tmp_count++;
 		}
 	}
@@ -846,21 +598,16 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 		.s6_addr = { 0 }
 	};
 
-#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
-	struct dect_nrf91_ipv6_prefix br_global_prefix = {
-		.iface = NULL,
-	};
+#if defined(CONFIG_NET_L2_DECT_BR)
+	struct dect_nrf91_ipv6_prefix br_global_prefix;
 
+	status_info.br_global_ipv6_addr_prefix_set = false;
+	status_info.br_net_iface = NULL;
 	if (dect_nrf91_sink_ipv6_prefix_get(&br_global_prefix)) {
 		status_info.br_global_ipv6_addr_prefix_set = true;
 		net_ipaddr_copy(&status_info.br_global_ipv6_addr_prefix,
 				&br_global_prefix.prefix);
 		status_info.br_global_ipv6_addr_prefix_len = br_global_prefix.len;
-		status_info.br_net_iface = br_global_prefix.iface;
-	} else {
-		status_info.br_global_ipv6_addr_prefix_set = false;
-		/* There might be iface still set: */
-		status_info.br_net_iface = br_global_prefix.iface;
 	}
 #endif
 
@@ -885,6 +632,8 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 					    const struct dect_settings *settings_in)
 {
 	struct dect_nrf91_settings_write_status ret_status;
+	uint16_t write_scope_bitmap_in =
+		settings_in->cmd_params.write_scope_bitmap;
 
 	if (settings_in->cmd_params.reset_to_driver_defaults) {
 		ret_status = dect_nrf91_settings_defaults_set();
@@ -905,6 +654,25 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 		if (ret_status.reactivate && dect_nrf91_ctrl_mdm_reactivate()) {
 			LOG_DBG("Couldn't reconfigure/activate modem to apply new settings - "
 				"reactivate is needed");
+		} else {
+			/* Not connected: we have a chance to update link addr already now */
+			if ((write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_IDENTITIES) ||
+			    (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_DEVICE_TYPE) ||
+			    (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_ALL)) {
+				/* Identities changed: update our link addr */
+				uint8_t *link_addr;
+				int ret;
+				struct dect_nrf91_mac_dev_context *ctx =
+					&dect_nrf91_mac_dev_context_data;
+
+				link_addr = dect_nrf91_current_link_addr_create(ctx);
+				ret = net_if_set_link_addr(ctx->iface, link_addr, 8,
+							  NET_LINK_UNKNOWN);
+				if (ret) {
+					LOG_WRN("%s: cannot re-set link addr: %d", (__func__),
+						ret);
+				}
+			}
 		}
 	}
 
@@ -1154,13 +922,17 @@ void dect_nrf91_parent_association_created(
 		LOG_ERR("Cannot add parent to association list - releasing association");
 		goto association_release;
 	}
+	struct dect_mac_ipv6_address_config l2_ipv6_addr_cfg;
+
+	memcpy(&l2_ipv6_addr_cfg.address, &ipv6_config.address, sizeof(l2_ipv6_addr_cfg.address));
+	l2_ipv6_addr_cfg.type = ipv6_config.type; /* TODO build assert that values match*/
 
 	__ASSERT_NO_MSG(ctx->parent_long_rd_id == 0); /* Only one parent supported */
 	ctx->parent_long_rd_id = target_long_rd_id;
 
-	dect_nrf91_parent_association_list_addressing_handle(ass_data_item, ipv6_config);
+	dect_nrf91_parent_created_association_list_addressing_handle(ass_data_item);
 
-	dect_net_l2_parent_association_created(iface, target_long_rd_id);
+	dect_net_l2_parent_association_created(iface, target_long_rd_id, l2_ipv6_addr_cfg);
 
 	/* We send also network status event eventhough join hasn't been necessarily called */
 	dect_mgmt_network_status_evt(iface, network_status_data);
@@ -1185,13 +957,6 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 			association_list_item->target_long_rd_id);
 		goto association_release;
 	}
-
-	/* Add child as a neighbor for a dect iface */
-	if (!dect_nrf91_child_association_list_nbr_add(association_list_item)) {
-		LOG_WRN("Cannot add child (long rd id %u) to neighbor list - continue",
-			association_list_item->target_long_rd_id);
-	}
-
 	dect_net_l2_child_association_created(iface, target_long_rd_id);
 	return;
 
@@ -1208,15 +973,12 @@ void dect_nrf91_parent_association_removed(
 	bool neighbor_initiated)
 {
 	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
-	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 
 	dect_net_l2_association_removed(
 		iface, long_rd_id, (enum dect_association_release_cause)rel_cause,
 		neighbor_initiated);
 
 	/* We are orphan now. The only possible parent is gone. */
-	struct net_if_addr *ifaddr;
-	struct in6_addr iid;
 	uint8_t *link_addr;
 	int ret;
 
@@ -1227,24 +989,16 @@ void dect_nrf91_parent_association_removed(
 
 	dect_mgmt_network_status_evt(iface, network_status_data);
 
-	/* Parent removed: remove/update link addr and ipv6 IID */
-	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
-	net_if_ipv6_addr_rm(iface, &iid);
-
+	/* Parent removed: remove current link addr  */
 	__ASSERT_NO_MSG(dect_nrf91_mac_dev_context_data.parent_long_rd_id != 0);
 	dect_nrf91_mac_dev_context_data.parent_long_rd_id = 0;
-	link_addr = dect_nrf91_initial_link_addr_get(&dect_nrf91_mac_dev_context_data);
 
+	link_addr = dect_nrf91_current_link_addr_create(&dect_nrf91_mac_dev_context_data);
 	ret = net_if_set_link_addr(iface, link_addr, 8, NET_LINK_UNKNOWN);
 	if (ret) {
 		LOG_ERR("%s: cannot set link addr: %d", (__func__), ret);
 	}
 
-	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
-	ifaddr = net_if_ipv6_addr_add(iface, &iid, NET_ADDR_AUTOCONF, 0);
-	if (!ifaddr) {
-		LOG_ERR("%s: cannot add address to interface %p", (__func__), iface);
-	}
 	struct dect_nrf91_association_data *ass_list_item =
 		dect_nrf91_parent_association_list_item_get(long_rd_id);
 
@@ -1252,27 +1006,6 @@ void dect_nrf91_parent_association_removed(
 		LOG_WRN("%s: no association with %u in a parent list", (__func__), long_rd_id);
 		return;
 	}
-
-	/* Remove parent from neighbors */
-	if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
-		LOG_WRN("Cannot remove parent (long rd id %u, local addr %s) as a nbr "
-			"from dect iface",
-			ass_list_item->target_long_rd_id,
-			net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr));
-	}
-	if (ctx->global_ipv6_addr_set &&
-	    !net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
-		LOG_WRN("Cannot remove parent (long rd id %u, global addr %s) as a nbr "
-			"from dect iface",
-			ass_list_item->target_long_rd_id,
-			net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr));
-	}
-
-	/* Our local address was already updated, now remove our global IP address */
-	if (ctx->global_ipv6_addr_set) {
-		net_if_ipv6_addr_rm(iface, &ctx->global_ipv6_addr);
-	}
-	ctx->global_ipv6_addr_set = false;
 
 	/* ...and finally, remove from our list */
 	dect_nrf91_parent_association_list_remove(long_rd_id);
@@ -1291,18 +1024,6 @@ void dect_nrf91_child_association_removed(
 		neighbor_initiated);
 
 	if (ass_list_item) {
-		if (!net_ipv6_nbr_rm(iface, &ass_list_item->local_ipv6_addr)) {
-			LOG_DBG("Cannot remove child (long rd id %u, local addr %s) as a nbr from "
-				"dect iface",
-				ass_list_item->target_long_rd_id,
-				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr));
-		}
-		if (!net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
-			LOG_DBG("Cannot remove child (long rd id %u, global addr %s) as a nbr from "
-				"dect iface",
-				ass_list_item->target_long_rd_id,
-				net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr));
-		}
 		dect_nrf91_child_association_list_remove(long_rd_id);
 	}
 }
