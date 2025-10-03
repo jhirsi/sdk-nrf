@@ -818,15 +818,16 @@ int dect_nrf91_ctrl_network_create_req_cmd(void)
 		return -EINVAL;
 	}
 	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_NONE) {
-		LOG_ERR("Cluster already started/starting");
+		LOG_WRN("Cluster already started/starting");
 		return -EALREADY;
 	}
+	/* TODO tartteeko? */
 	if (ctrl_data.configure_params.auto_start) {
 		LOG_ERR("Auto start enabled");
 		return -EALREADY;
 	}
 	if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
-		LOG_ERR("Network already started/starting");
+		LOG_WRN("Network already started/starting");
 		return -EALREADY;
 	}
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -1493,7 +1494,7 @@ send_events:
 				if (err) {
 					dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
 					LOG_ERR("Error in Network scan: err %s (%d)", tmp_str, err);
-
+					ctrl_data.configure_params.auto_start = false;
 					dect_mgmt_network_status_evt(
 						ctrl_data.iface,
 						(struct dect_network_status_evt){
@@ -2396,6 +2397,7 @@ send_events:
 								DECT_MAC_STATUS_RD_NOT_FOUND,
 							});
 						LOG_WRN("No cluster found with NW scan");
+						ctrl_data.configure_params.auto_start = false;
 					}
 				}
 			} else {
