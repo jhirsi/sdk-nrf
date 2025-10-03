@@ -922,17 +922,27 @@ void dect_nrf91_parent_association_created(
 		LOG_ERR("Cannot add parent to association list - releasing association");
 		goto association_release;
 	}
-	struct dect_mac_ipv6_address_config l2_ipv6_addr_cfg;
+	struct dect_net_ipv6_prefix_config ipv6_prefix_config = {
+		.prefix.s6_addr = { 0 },
+		.prefix_len = 0, /* As a default no prefix */
+	};
 
-	memcpy(&l2_ipv6_addr_cfg.address, &ipv6_config.address, sizeof(l2_ipv6_addr_cfg.address));
-	l2_ipv6_addr_cfg.type = ipv6_config.type; /* TODO build assert that values match*/
+	if (ipv6_config.type != NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
+		__ASSERT_NO_MSG(ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX ||
+				ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_FULL);
+		ipv6_prefix_config.prefix_len =
+			(ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX) ? 8 : 16;
+		memcpy(&ipv6_prefix_config.prefix.s6_addr,
+		       &ipv6_config.address, ipv6_prefix_config.prefix_len);
+	}
 
 	__ASSERT_NO_MSG(ctx->parent_long_rd_id == 0); /* Only one parent supported */
 	ctx->parent_long_rd_id = target_long_rd_id;
 
 	dect_nrf91_parent_created_association_list_addressing_handle(ass_data_item);
 
-	dect_net_l2_parent_association_created(iface, target_long_rd_id, l2_ipv6_addr_cfg);
+	dect_net_l2_parent_association_created(
+		iface, target_long_rd_id, &ipv6_prefix_config);
 
 	/* We send also network status event eventhough join hasn't been necessarily called */
 	dect_mgmt_network_status_evt(iface, network_status_data);

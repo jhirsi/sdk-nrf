@@ -23,7 +23,7 @@ LOG_MODULE_DECLARE(NET_L2_DECT, CONFIG_NET_L2_DECT_LOG_LEVEL);
 
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
 static void dect_net_l2_ipv6_util_nbr_add(
-	struct net_if *iface, struct dect_mac_ipv6_address_config *ipv6_prefix_cfg,
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_cfg,
 	uint32_t sink_long_rd_id, uint32_t nbr_long_rd_id,
 	bool *nbr_local_addr_was_set, struct in6_addr *nbr_local_ipv6_addr_out,
 	bool *nbr_global_addr_was_set, struct in6_addr *nbr_global_ipv6_addr_out)
@@ -59,16 +59,10 @@ static void dect_net_l2_ipv6_util_nbr_add(
 		LOG_ERR("(%s): cannot create parents local addr as nbr to dect iface",
 			(__func__));
 	}
-	if (ipv6_prefix_cfg->type != DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
-		int len = (ipv6_prefix_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_FULL)
-				  ? 16
-				  : 8;
-
-		memcpy(&prefix, ipv6_prefix_cfg->address, len);
-
+	if (ipv6_prefix_cfg->prefix_len > 0) {
 		/* Add global addr as a neighbor */
 		nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-			prefix, sink_long_rd_id, nbr_long_rd_id, &nbr_addr);
+			ipv6_prefix_cfg->prefix, sink_long_rd_id, nbr_long_rd_id, &nbr_addr);
 		if (nbr_addr_generated) {
 			/* global: add a parent as a neighbor to dect iface */
 			if (!net_ipv6_nbr_add(iface, &nbr_addr, net_if_get_link_addr(iface), false,
@@ -125,29 +119,24 @@ static bool dect_net_l2_ipv6_util_link_local_addr_create_add(
 }
 
 static bool dect_net_l2_ipv6_util_global_addr_create_add(
-	struct net_if *iface, struct dect_mac_ipv6_address_config *ipv6_addr_cfg,
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config,
 	struct in6_addr *global_ipv6_addr_out)
 {
 	struct in6_addr global_addr = {};
-	struct in6_addr prefix_local = {};
 	struct net_if_addr *ifaddr;
 	bool added = false;
 
-	UNALIGNED_PUT(htonl(0xfe800000), &prefix_local.s6_addr32[0]);
 	/* Set ipv6 addr based on given info from peer FT device */
-	if (ipv6_addr_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
-		LOG_WRN("No IPv6 address to set - using link local only");
+	if (ipv6_prefix_config->prefix_len == 0) {
+		LOG_WRN("No global IPv6 address to set - using link local only");
 	} else {
-		int len = (ipv6_addr_cfg->type == DECT_MAC_IPV6_ADDRESS_TYPE_FULL)
-				  ? 16
-				  : 8;
-
 		/* Create our own IPv6 address using the given prefix and iid. We first
 		 * setup link local address, and then copy prefix over first 16/8
 		 * bytes of that address.
 		 */
 		dect_nrp_utils_net_ipv6_addr_create_iid(&global_addr, net_if_get_link_addr(iface));
-		memcpy(&global_addr.s6_addr, ipv6_addr_cfg->address, len);
+		memcpy(&global_addr.s6_addr,
+		       ipv6_prefix_config->prefix.s6_addr, ipv6_prefix_config->prefix_len);
 
 		ifaddr = net_if_ipv6_addr_lookup(&global_addr, NULL);
 		if (ifaddr) {
@@ -173,13 +162,13 @@ static bool dect_net_l2_ipv6_util_global_addr_create_add(
 void dect_net_l2_util_parent_added_ipv6_addressing_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
-	struct dect_mac_ipv6_address_config *ipv6_addr_cfg)
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
 {
 	bool removed = false;
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
 
 	/* Store prefix config */
-	ctx->ipv6_prefix_cfg = *ipv6_addr_cfg;
+	ctx->ipv6_prefix_cfg = *ipv6_prefix_config;
 
 	/* Parent added: remove/update our link local addr and ipv6 IID */
 	removed = net_if_ipv6_addr_rm(iface, &ctx->local_ipv6_addr);
@@ -200,12 +189,12 @@ void dect_net_l2_util_parent_added_ipv6_addressing_handle(
 	}
 
 	ctx->global_ipv6_addr_set = dect_net_l2_ipv6_util_global_addr_create_add(
-		iface, ipv6_addr_cfg,
+		iface, ipv6_prefix_config,
 		&ctx->global_ipv6_addr);
 
 	/* Add parent as a neighbor and also in association list as nbr */
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
-	dect_net_l2_ipv6_util_nbr_add(iface, ipv6_addr_cfg,
+	dect_net_l2_ipv6_util_nbr_add(iface, ipv6_prefix_config,
 					  parent_long_rd_id,
 					  parent_long_rd_id,
 					  &list_item->local_ipv6_addr_set,
@@ -305,17 +294,14 @@ void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(dect_iface);
 	struct net_if_ipv6 *dect_ipv6s = dect_iface->config.ip.ipv6;
-	bool add_also_global = false;
 	struct dect_net_l2_sink_ipv6_prefix sink_global_prefix;
 
 	if (dect_net_l2_sink_ipv6_prefix_get(&sink_global_prefix)) {
-		memcpy(&ctx->ipv6_prefix_cfg.address, sink_global_prefix.prefix.s6_addr,
-		       sink_global_prefix.len);
 		__ASSERT_NO_MSG(sink_global_prefix.len == 8);
-		ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
-		add_also_global = true;
+		ctx->ipv6_prefix_cfg.prefix = sink_global_prefix.prefix;
+		ctx->ipv6_prefix_cfg.prefix_len = sink_global_prefix.len;
 	} else {
-		ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
+		ctx->ipv6_prefix_cfg.prefix_len = 0;
 	}
 
 	/* Remove all old global address from dect nr+ iface*/

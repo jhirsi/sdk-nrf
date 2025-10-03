@@ -850,7 +850,6 @@ struct dect_settings {
 struct dect_association_data {
 	uint32_t long_rd_id;
 
-	/* TODO: remove or to be added by L2? */
 	struct in6_addr local_ipv6_addr;
 
 	bool global_ipv6_addr_set;
@@ -1048,29 +1047,12 @@ struct dect_nrp_hal_api {
 	int (*network_unjoin_req)(const struct device *dev);
 };
 
-/**
- * @brief MAC IPv6 address type
- */
-enum dect_mac_ipv6_address_type {
-	/** None */
-	DECT_MAC_IPV6_ADDRESS_TYPE_NONE = 0,
-	/** Prefix of the IPv6 address */
-	DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX = 1,
-	/** Complete IPv6 address */
-	DECT_MAC_IPV6_ADDRESS_TYPE_FULL = 2
-};
-
-#define DECT_MAC_IPV6_ADDRESS_ARRAY_SIZE 16
-
 /** IPv6 Address configuration */
-struct dect_mac_ipv6_address_config {
-	/** Address type */
-	enum dect_mac_ipv6_address_type type;
-	/**
-	 * IPv6 Address
-	 * valid bytes: PREFIX - 8 bytes, FULL - 16 bytes
-	 */
-	uint8_t address[DECT_MAC_IPV6_ADDRESS_ARRAY_SIZE];
+struct dect_net_ipv6_prefix_config {
+	/** Length of the IPv6 prefix. Length in bytes. Zero means no prefix. */
+	int prefix_len;
+	/** IPv6 prefix */
+	struct in6_addr prefix;
 };
 
 /** DECT NR+ L2 context. */
@@ -1088,7 +1070,7 @@ struct dect_net_l2_context {
 	uint32_t transmitter_long_rd_id;
 
 	/** Current IPv6 address configurations */
-	struct dect_mac_ipv6_address_config ipv6_prefix_cfg;
+	struct dect_net_ipv6_prefix_config ipv6_prefix_cfg;
 	struct in6_addr local_ipv6_addr;
 	bool global_ipv6_addr_set;
 	struct in6_addr global_ipv6_addr;
@@ -1124,11 +1106,11 @@ void dect_net_l2_settings_changed(
  *
  * @param iface Network interface
  * @param parent_long_rd_id Long Radio Device ID of the parent
- * @param ipv6_addr_cfg IPv6 address configuration to be used with this parent
+ * @param ipv6_prefix_config IPv6 prefix configuration for this parent
  */
 void dect_net_l2_parent_association_created(
 	struct net_if *iface, uint32_t parent_long_rd_id,
-	struct dect_mac_ipv6_address_config ipv6_addr_cfg);
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 
 /**
  * @brief Inform L2 that association with a child has been created. FT device.
@@ -1155,11 +1137,11 @@ void dect_net_l2_association_removed(
  *
  * @param iface Network interface
  * @param parent_long_rd_id Long Radio Device ID of the parent
- * @param ipv6_addr_cfg New IPv6 address configuration to be used with this parent
+ * @param ipv6_prefix_config New IPv6 prefix configuration for this parent
  */
 void dect_net_l2_parent_ipv6_config_changed(
 	struct net_if *iface, uint32_t parent_long_rd_id,
-	struct dect_mac_ipv6_address_config ipv6_addr_cfg);
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 #endif
 
 #endif /* ZEPHYR_INCLUDE_NET_NET_DECT_L2_H_ */

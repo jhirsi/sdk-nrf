@@ -518,7 +518,7 @@ void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settin
 	ctx->network_id = initial_settings->identities.network_id;
 	ctx->transmitter_long_rd_id = initial_settings->identities.transmitter_long_rd_id;
 	ctx->device_type = initial_settings->device_type;
-	ctx->ipv6_prefix_cfg.type = DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
+	ctx->ipv6_prefix_cfg.prefix_len = 0; /* No prefix by default */
 
 	/* Add link-local address */
 	dect_nrp_utils_net_ipv6_addr_create_iid(&iid, net_if_get_link_addr(iface));
@@ -581,7 +581,7 @@ static void date_time_event_handler(const struct date_time_evt *evt)
 
 void dect_net_l2_parent_association_created(
 	struct net_if *iface, uint32_t target_long_rd_id,
-	struct dect_mac_ipv6_address_config ipv6_addr_cfg)
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
 {
 	bool found = false;
 
@@ -593,7 +593,8 @@ void dect_net_l2_parent_association_created(
 			parent_associations[i].in_use = true;
 			parent_associations[i].target_long_rd_id = target_long_rd_id;
 			dect_net_l2_util_parent_added_ipv6_addressing_handle(
-				&parent_associations[i], iface, target_long_rd_id, &ipv6_addr_cfg);
+				&parent_associations[i], iface, target_long_rd_id,
+				ipv6_prefix_config);
 			dect_mgmt_parent_association_created_evt(iface, target_long_rd_id);
 
 			/* We support only one parent */

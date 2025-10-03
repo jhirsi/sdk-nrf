@@ -17,7 +17,7 @@ extern "C" {
 void dect_net_l2_util_parent_added_ipv6_addressing_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
-	struct dect_mac_ipv6_address_config *ipv6_addr_cfg);
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 void dect_net_l2_util_child_added_ipv6_addressing_handle(
 	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface,
 	uint32_t child_long_rd_id, bool first_child);
