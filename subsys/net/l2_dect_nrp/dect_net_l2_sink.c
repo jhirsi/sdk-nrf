@@ -443,6 +443,8 @@ static int dect_net_l2_sink_init(void)
 
 	pm_device_action_run(modem, PM_DEVICE_ACTION_RESUME);
 
+	net_if_flag_set(modem_iface, NET_IF_POINTOPOINT);
+
 	ret = net_if_up(modem_iface);
 	if (ret < 0) {
 		printk("Failed to bring up modem interface\n");
