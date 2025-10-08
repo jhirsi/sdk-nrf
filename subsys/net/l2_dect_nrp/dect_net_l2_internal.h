@@ -27,6 +27,8 @@ void dect_net_l2_status_info_fill_association_data(
 void dect_net_l2_status_info_fill_sink_data(
 	struct net_if *iface, struct dect_status_info *status_info_out);
 
+void dect_net_l2_sink_ipv6_config_changed(
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 #ifdef __cplusplus
 }
 #endif

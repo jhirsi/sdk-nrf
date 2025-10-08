@@ -46,8 +46,6 @@ static struct k_work_delayable lte_ipv6_router_nbr_deleted_work;
 
 #endif
 
-/* TODO: this module to be moved to L2 as dect_net_l2_sink.c */
-
 /**************************************************************************************************/
 
 static struct net_mgmt_event_callback dect_net_l2_net_mgmt_ipv6_event_cb;
@@ -94,13 +92,18 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				.sink_status = DECT_SINK_STATUS_DISCONNECTED,
 				.br_iface = iface_for_prefix,
 			};
+			struct dect_net_ipv6_prefix_config empty_prefix;
 
+			memset(&empty_prefix, 0, sizeof(empty_prefix));
 			LOG_INF("SINK: Router with IPv6 addr %s deleted from sink iface %p",
 				net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str,
 					      NET_IPV6_ADDR_LEN),
 				iface_for_prefix);
 
 			sink_prefix_addr_set = false;
+			dect_net_l2_sink_ipv6_config_changed(
+				iface_for_dect,
+				&empty_prefix);
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 
 			LOG_INF("SINK: starting router solicitation for iface %p",
@@ -156,8 +159,15 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				.sink_status = DECT_SINK_STATUS_CONNECTED,
 				.br_iface = iface_for_prefix,
 			};
+			struct dect_net_ipv6_prefix_config new_prefix = {
+				.prefix = sink_prefix_addr,
+				.prefix_len = 8,
+			};
 
 			sink_prefix_addr_set = true;
+			dect_net_l2_sink_ipv6_config_changed(
+				iface_for_dect,
+				&new_prefix);
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 		}
 		break;
@@ -177,26 +187,26 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				.sink_status = DECT_SINK_STATUS_CONNECTED,
 				.br_iface = iface_for_prefix,
 			};
-			struct net_if_ipv6 *dect_ipv6s = iface_for_dect->config.ip.ipv6;
+			struct dect_net_ipv6_prefix_config new_prefix;
 
 			/* So, we take 1st public address, and take 1st 64bits/8 bytes as
 			 * a prefix for our usage
 			 */
 			memcpy(&sink_prefix_addr, ipv6_addr->s6_addr, 8);
 			sink_prefix_addr_set = true;
+			new_prefix.prefix = sink_prefix_addr;
+			new_prefix.prefix_len = 8;
 
 			LOG_DBG("SINK: IPv6 addr %s/%d added for dect nr+ prefix usage",
 				net_sprint_ipv6_addr(ipv6_addr), (sizeof(struct in6_addr) / 2) * 8);
 
-			dect_net_l2_addr_util_global_addr_replace(iface_for_dect);
+			dect_net_l2_sink_ipv6_config_changed(
+				iface_for_dect,
+				&new_prefix);
 
+#if RM_JH
 			/* Add also prefix to dect nr+ iface but remove current ones 1st */
-			ARRAY_FOR_EACH(dect_ipv6s->prefix, i)
-			{
-				net_if_ipv6_prefix_rm(iface_for_dect,
-					&dect_ipv6s->prefix[i].prefix,
-					dect_ipv6s->prefix[i].len);
-			}
+
 
 			struct net_if_ipv6_prefix *prefix;
 
@@ -211,6 +221,7 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 					net_sprint_ipv6_addr(&sink_prefix_addr), 64,
 					iface_for_dect);
 			}
+#endif
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 		}
 		break;
@@ -229,21 +240,18 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				.sink_status = DECT_SINK_STATUS_DISCONNECTED,
 				.br_iface = iface_for_prefix,
 			};
+			struct dect_net_ipv6_prefix_config empty_prefix;
+
+			memset(&empty_prefix, 0, sizeof(empty_prefix));
 
 			LOG_WRN("SINK: IPv6 addr with our prefix %s/%d removed from iface %p",
 				net_sprint_ipv6_addr(ipv6_addr), sizeof(struct in6_addr) / 2,
 				iface);
 			sink_prefix_addr_set = false;
 
-			/* Remove also prefix that we set */
-			if (!net_if_ipv6_prefix_rm(iface_for_dect, &sink_prefix_addr, 64)) {
-				LOG_WRN("SINK: IPv6 prefix %s/64 removal failed from "
-					"dect nr+ iface %p",
-					net_sprint_ipv6_addr(&sink_prefix_addr), iface_for_dect);
-			} else {
-				LOG_INF("SINK: IPv6 prefix %s/64 removed from dect nr+ iface %p",
-					net_sprint_ipv6_addr(&sink_prefix_addr), iface_for_dect);
-			}
+			dect_net_l2_sink_ipv6_config_changed(
+				iface_for_dect,
+				&empty_prefix);
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 		}
 		break;
@@ -321,7 +329,7 @@ static void dect_net_l2_sink_net_if_mgmt_event_handler(struct net_mgmt_event_cal
 			.br_iface = iface_for_prefix,
 		};
 
-		LOG_INF("NET_EVENT_IF_UP: Sink networking iface is up");
+		LOG_INF("NET_EVENT_IF_UP: Sink networking iface (%p) is up", iface_for_prefix);
 		dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 
 		/* TODO trigger router solicitation?
@@ -334,11 +342,18 @@ static void dect_net_l2_sink_net_if_mgmt_event_handler(struct net_mgmt_event_cal
 			.sink_status = DECT_SINK_STATUS_DISCONNECTED,
 			.br_iface = iface_for_prefix,
 		};
+		struct dect_net_ipv6_prefix_config empty_prefix;
+
+		memset(&empty_prefix, 0, sizeof(empty_prefix));
 
 		LOG_WRN("NET_EVENT_IF_DOWN: Sink networking iface (%p) is down", iface_for_prefix);
 		dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 		sink_prefix_addr_set = false;
 
+		/* Update our addressing */
+		dect_net_l2_sink_ipv6_config_changed(
+			iface_for_dect,
+			&empty_prefix);
 #if defined(CONFIG_MODEM_CELLULAR)
 		struct net_if_ipv6 *ipv6 = iface->config.ip.ipv6;
 		struct net_if_router *router;
@@ -356,20 +371,6 @@ static void dect_net_l2_sink_net_if_mgmt_event_handler(struct net_mgmt_event_cal
 		memset(&ipv6_router_addr, 0, sizeof(ipv6_router_addr));
 		net_ipv6_nbr_rm(iface, &router->address.in6_addr);
 #endif
-		/* Remove also prefix that we set */
-		if (!net_if_ipv6_prefix_rm(iface_for_dect, &sink_prefix_addr, 64)) {
-			LOG_WRN("SINK: IPv6 prefix %s/64 removal failed from dect nr+ iface %p",
-				net_sprint_ipv6_addr(&sink_prefix_addr), iface_for_dect);
-		} else {
-			LOG_DBG("SINK: IPv6 prefix %s/64 removed from dect nr+ iface %p",
-				net_sprint_ipv6_addr(&sink_prefix_addr), iface_for_dect);
-		}
-
-		/* TODO: We would need to stop/restart cluster to reset the prefix.
-		 * TODO: talk with mdm team if could set/remove prefix anytime during
-		 * cluster running?
-		 * but until mdm got the support, setting to tell if we want to stop also cluster?
-		 */
 		break;
 	default:
 		break;

@@ -1132,7 +1132,6 @@ void dect_net_l2_association_removed(
 	struct net_if *iface, uint32_t long_rd_id,
 	enum dect_association_release_cause cause, bool neighbor_initiated);
 
-#if RM_JH /* TODO */
 /** * @brief PT device: Inform L2 that IPv6 address configuration of a parent has changed.
  *
  * @param iface Network interface
@@ -1142,6 +1141,5 @@ void dect_net_l2_association_removed(
 void dect_net_l2_parent_ipv6_config_changed(
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
-#endif
 
 #endif /* ZEPHYR_INCLUDE_NET_NET_DECT_L2_H_ */

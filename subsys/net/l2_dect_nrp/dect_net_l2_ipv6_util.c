@@ -22,6 +22,40 @@ LOG_MODULE_DECLARE(NET_L2_DECT, CONFIG_NET_L2_DECT_LOG_LEVEL);
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
+static void dect_net_l2_ipv6_util_global_nbr_add(
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_cfg,
+	uint32_t sink_long_rd_id, uint32_t nbr_long_rd_id,
+	bool *nbr_global_addr_was_set, struct in6_addr *nbr_global_ipv6_addr_out)
+{
+	bool nbr_addr_generated;
+	struct in6_addr nbr_addr = {};
+
+	__ASSERT_NO_MSG(ipv6_prefix_cfg != NULL);
+	__ASSERT_NO_MSG(nbr_global_addr_was_set != NULL);
+	__ASSERT_NO_MSG(nbr_global_ipv6_addr_out != NULL);
+
+	if (ipv6_prefix_cfg->prefix_len > 0) {
+		/* Add global addr as a neighbor */
+		nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
+			ipv6_prefix_cfg->prefix, sink_long_rd_id, nbr_long_rd_id, &nbr_addr);
+		if (nbr_addr_generated) {
+			/* global: add a parent as a neighbor to dect iface */
+			if (!net_ipv6_nbr_add(iface, &nbr_addr, net_if_get_link_addr(iface), false,
+					      NET_IPV6_NBR_STATE_REACHABLE)) {
+				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
+					(__func__));
+			} else {
+				*nbr_global_addr_was_set = true;
+				*nbr_global_ipv6_addr_out = nbr_addr;
+				LOG_DBG("(%s): global addr %s (link addr %s) added "
+					"as a neighbor to dect iface",
+					(__func__), net_sprint_ipv6_addr(&nbr_addr),
+					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
+			}
+		}
+	}
+}
+
 static void dect_net_l2_ipv6_util_nbr_add(
 	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_cfg,
 	uint32_t sink_long_rd_id, uint32_t nbr_long_rd_id,
@@ -59,26 +93,9 @@ static void dect_net_l2_ipv6_util_nbr_add(
 		LOG_ERR("(%s): cannot create parents local addr as nbr to dect iface",
 			(__func__));
 	}
-	if (ipv6_prefix_cfg->prefix_len > 0) {
-		/* Add global addr as a neighbor */
-		nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
-			ipv6_prefix_cfg->prefix, sink_long_rd_id, nbr_long_rd_id, &nbr_addr);
-		if (nbr_addr_generated) {
-			/* global: add a parent as a neighbor to dect iface */
-			if (!net_ipv6_nbr_add(iface, &nbr_addr, net_if_get_link_addr(iface), false,
-					      NET_IPV6_NBR_STATE_REACHABLE)) {
-				LOG_ERR("(%s): cannot add parents global addr as nbr to dect iface",
-					(__func__));
-			} else {
-				*nbr_global_addr_was_set = true;
-				*nbr_global_ipv6_addr_out = nbr_addr;
-				LOG_DBG("(%s): global addr %s (link addr %s) added "
-					"as a neighbor to dect iface",
-					(__func__), net_sprint_ipv6_addr(&nbr_addr),
-					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
-			}
-		}
-	}
+	dect_net_l2_ipv6_util_global_nbr_add(
+		iface, ipv6_prefix_cfg, sink_long_rd_id, nbr_long_rd_id,
+		nbr_global_addr_was_set, nbr_global_ipv6_addr_out);
 }
 
 static void dect_net_l2_ipv6_util_nbr_remove(
@@ -90,12 +107,14 @@ static void dect_net_l2_ipv6_util_nbr_remove(
 			LOG_WRN("Failed to remove local IPv6 neighbor %s on iface %p",
 				net_sprint_ipv6_addr(&ass_list_item->local_ipv6_addr), iface);
 		}
+		ass_list_item->local_ipv6_addr_set = false;
 	}
 	if (ass_list_item->global_ipv6_addr_set) {
 		if (!net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
 			LOG_ERR("Failed to remove global IPv6 neighbor %s on iface %p",
 				net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr), iface);
 		}
+		ass_list_item->global_ipv6_addr_set = false;
 	}
 }
 #endif
@@ -157,6 +176,72 @@ static bool dect_net_l2_ipv6_util_global_addr_create_add(
 		}
 	}
 	return added;
+}
+
+void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
+	struct dect_net_l2_association_data *list_item,
+	struct net_if *iface, uint32_t parent_long_rd_id,
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
+{
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+
+	/* Check what has changed in parent IPv6 addressing */
+	if (ctx->ipv6_prefix_cfg.prefix_len == 0 &&
+	    ipv6_prefix_config->prefix_len > 0) {
+		/* Prefix added -> we got Internet connectivity */
+		LOG_INF("Parent IPv6 prefix added as %s/%d",
+			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
+			ipv6_prefix_config->prefix_len * 8);
+		dect_net_l2_util_parent_added_ipv6_addressing_handle(
+			list_item, iface, parent_long_rd_id, ipv6_prefix_config);
+	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
+		   ipv6_prefix_config->prefix_len == 0) {
+		/* Prefix removed */
+		LOG_WRN("Parent IPv6 prefix removed from %s/%d",
+			net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+			ctx->ipv6_prefix_cfg.prefix_len * 8);
+		if (ctx->global_ipv6_addr_set) {
+			net_if_ipv6_addr_rm(iface, &ctx->global_ipv6_addr);
+		}
+		ctx->global_ipv6_addr_set = false;
+		ctx->ipv6_prefix_cfg.prefix_len = 0;
+		memset(&ctx->ipv6_prefix_cfg.prefix, 0, sizeof(ctx->ipv6_prefix_cfg.prefix));
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+		if (list_item->global_ipv6_addr_set) {
+			if (!net_ipv6_nbr_rm(iface, &list_item->global_ipv6_addr)) {
+				LOG_ERR("%s: failed to remove global IPv6 neighbor %s on iface %p",
+					(__func__),
+					net_sprint_ipv6_addr(&list_item->global_ipv6_addr), iface);
+			}
+			list_item->global_ipv6_addr_set = false;
+		}
+#endif
+	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
+		   ipv6_prefix_config->prefix_len > 0 &&
+		   !net_ipv6_is_prefix(ctx->ipv6_prefix_cfg.prefix.s6_addr,
+				       ipv6_prefix_config->prefix.s6_addr,
+				       64)) {
+		/* Prefix changed */
+		LOG_WRN("Parent IPv6 prefix changed from %s/%d to %s/%d",
+			net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+			ctx->ipv6_prefix_cfg.prefix_len * 8,
+			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
+			ipv6_prefix_config->prefix_len * 8);
+		/* Remove our global addr */
+		if (ctx->global_ipv6_addr_set) {
+			net_if_ipv6_addr_rm(iface, &ctx->global_ipv6_addr);
+		}
+		ctx->global_ipv6_addr_set = false;
+
+		/* Add new prefix */
+		dect_net_l2_util_parent_added_ipv6_addressing_handle(
+			list_item, iface, parent_long_rd_id, ipv6_prefix_config);
+	} else {
+		/* No change */
+		LOG_WRN("No change in parent IPv6 prefix - ignore");
+		return;
+	}
 }
 
 void dect_net_l2_util_parent_added_ipv6_addressing_handle(
@@ -257,6 +342,40 @@ void dect_net_l2_util_child_removed_ipv6_addressing_handle(
 	ass_list_item->local_ipv6_addr_set = false;
 }
 
+void dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
+	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface)
+{
+	if (ass_list_item == NULL) {
+		return;
+	}
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	if (ass_list_item->global_ipv6_addr_set) {
+		if (!net_ipv6_nbr_rm(iface, &ass_list_item->global_ipv6_addr)) {
+			LOG_ERR("Failed to remove global IPv6 neighbor %s on iface %p",
+				net_sprint_ipv6_addr(&ass_list_item->global_ipv6_addr), iface);
+		}
+	}
+#endif
+	ass_list_item->global_ipv6_addr_set = false;
+}
+
+void dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
+	struct dect_net_l2_context *ctx,
+	struct dect_net_l2_association_data *ass_list_item,
+	struct net_if *iface)
+{
+	if (ass_list_item == NULL) {
+		return;
+	}
+
+#if defined(CONFIG_NET_IPV6_NBR_CACHE)
+	dect_net_l2_ipv6_util_global_nbr_add(
+		iface, &ctx->ipv6_prefix_cfg, ctx->transmitter_long_rd_id,
+		ass_list_item->target_long_rd_id,
+		&ass_list_item->global_ipv6_addr_set, &ass_list_item->global_ipv6_addr);
+#endif
+}
+
 void dect_net_l2_util_parent_removed_ipv6_addressing_handle(
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id)
@@ -330,6 +449,98 @@ void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface)
 	ctx->global_ipv6_addr_set = dect_net_l2_ipv6_util_global_addr_create_add(
 		dect_iface, &ctx->ipv6_prefix_cfg,
 		&ctx->global_ipv6_addr);
+}
 
-	/* TODO handle case when prefix changed */
+void dect_net_l2_addr_util_prefix_replace(
+	struct dect_net_l2_context *ctx, struct net_if *dect_iface,
+	struct dect_net_ipv6_prefix_config *new_ipv6_prefix_config)
+{
+	struct net_if_ipv6 *dect_ipv6s = dect_iface->config.ip.ipv6;
+
+	__ASSERT_NO_MSG(ctx != NULL);
+	__ASSERT_NO_MSG(dect_iface != NULL);
+	__ASSERT_NO_MSG(new_ipv6_prefix_config != NULL);
+
+	ctx->ipv6_prefix_cfg = *new_ipv6_prefix_config;
+
+	/* Remove all prefixes*/
+	ARRAY_FOR_EACH(dect_ipv6s->prefix, i)
+	{
+		net_if_ipv6_prefix_rm(dect_iface,
+			&dect_ipv6s->prefix[i].prefix,
+			dect_ipv6s->prefix[i].len);
+	}
+	/* Add new prefix */
+	if (ctx->ipv6_prefix_cfg.prefix_len > 0) {
+		if (!net_if_ipv6_prefix_add(dect_iface,
+			&ctx->ipv6_prefix_cfg.prefix,
+			ctx->ipv6_prefix_cfg.prefix_len * 8,
+			NET_IPV6_ND_INFINITE_LIFETIME)) {
+			LOG_WRN("Failed to add IPv6 prefix %s/%d to dect nr+ iface %p",
+				net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+				ctx->ipv6_prefix_cfg.prefix_len * 8, dect_iface);
+		} else {
+			LOG_INF("IPv6 prefix %s/%d added to dect nr+ iface %p",
+				net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+				ctx->ipv6_prefix_cfg.prefix_len * 8, dect_iface);
+		}
+	}
+}
+
+bool dect_net_l2_util_sink_ipv6_addressing_changed_handle(
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
+{
+	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
+	bool global_address_changed = false;
+
+	/* Check what has changed in sink IPv6 addressing and update our addressing accordingly */
+	if (ctx->ipv6_prefix_cfg.prefix_len == 0 &&
+	    ipv6_prefix_config->prefix_len > 0) {
+		/* Prefix added -> we got Internet connectivity */
+		LOG_DBG("Sink IPv6 prefix added as %s/%d",
+			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
+			ipv6_prefix_config->prefix_len * 8);
+		dect_net_l2_addr_util_global_addr_replace(iface);
+		dect_net_l2_addr_util_prefix_replace(ctx, iface, ipv6_prefix_config);
+		global_address_changed = true;
+	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
+		   ipv6_prefix_config->prefix_len == 0) {
+		/* Prefix removed */
+		LOG_WRN("Sink IPv6 prefix removed from %s/%d from dect nr+ iface %p",
+			net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+			ctx->ipv6_prefix_cfg.prefix_len * 8, iface);
+
+		/* Remove prefix */
+		if (!net_if_ipv6_prefix_rm(
+			iface, &ctx->ipv6_prefix_cfg.prefix, ctx->ipv6_prefix_cfg.prefix_len * 8)) {
+			LOG_WRN("SINK: IPv6 prefix %s/64 removal failed from "
+				"dect nr+ iface %p",
+					net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix), iface);
+		}
+		if (ctx->global_ipv6_addr_set) {
+			net_if_ipv6_addr_rm(iface, &ctx->global_ipv6_addr);
+		}
+		ctx->global_ipv6_addr_set = false;
+		ctx->ipv6_prefix_cfg.prefix_len = 0;
+		memset(&ctx->ipv6_prefix_cfg.prefix, 0, sizeof(ctx->ipv6_prefix_cfg.prefix));
+	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
+		   ipv6_prefix_config->prefix_len > 0 &&
+		   !net_ipv6_is_prefix(ctx->ipv6_prefix_cfg.prefix.s6_addr,
+				       ipv6_prefix_config->prefix.s6_addr,
+				       64)) {
+
+		/* Prefix changed */
+		LOG_WRN("Sink IPv6 prefix changed from %s/%d to %s/%d",
+			net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
+			ctx->ipv6_prefix_cfg.prefix_len * 8,
+			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
+			ipv6_prefix_config->prefix_len * 8);
+		dect_net_l2_addr_util_global_addr_replace(iface);
+		dect_net_l2_addr_util_prefix_replace(ctx, iface, ipv6_prefix_config);
+		global_address_changed = true;
+	} else {
+		/* No change */
+		LOG_WRN("No change in parent IPv6 prefix - ignore");
+	}
+	return global_address_changed;
 }

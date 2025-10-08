@@ -28,6 +28,7 @@ typedef enum {
 	DECT_NRF91_CTRL_OP_AUTO_START,
 	DECT_NRF91_CTRL_OP_CLUSTER_START_REQ,
 	DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ,
+	DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ,
 	DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP,
 	DECT_NRF91_CTRL_OP_CLUSTER_CH_LOAD_CHANGED,
 	DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY,
@@ -163,6 +164,8 @@ int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_inf
 
 int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *params);
 int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params);
+int dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed(void);
+
 int dect_nrf91_ctrl_cluster_info_req_cmd(void);
 
 int dect_nrf91_ctrl_network_create_req_cmd(void);

@@ -714,13 +714,50 @@ void dect_net_l2_settings_changed(
 	ctx->device_type = driver_current_settings->device_type;
 }
 
-#if RM_JH /* TODO */
 void dect_net_l2_parent_ipv6_config_changed(
 	struct net_if *iface, uint32_t parent_long_rd_id,
-	struct dect_mac_ipv6_address_config ipv6_addr_cfg)
+	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
 {
-	LOG_DBG("dect_net_l2_parent_ipv6_config_changed: iface %p, parent_long_rd_id %u",
-		iface, parent_long_rd_id);
+	struct dect_net_l2_association_data *assoc_data =
+		dect_net_l2_association_ref_get(parent_long_rd_id);
+
+	if (assoc_data) {
+		dect_net_l2_util_parent_ipv6_addressing_changed_handle(
+			assoc_data, iface, parent_long_rd_id,
+			ipv6_prefix_config);
+	}
+}
+
+void dect_net_l2_sink_ipv6_config_changed(
+	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
+{
+	struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
+	bool update_global = false;
+
+	__ASSERT_NO_MSG(iface);
+	__ASSERT_NO_MSG(ipv6_prefix_config);
+	__ASSERT_NO_MSG(l2_ctx);
+
+	/* Update our addressing */
+	update_global = dect_net_l2_util_sink_ipv6_addressing_changed_handle(
+		iface, ipv6_prefix_config);
+
+	/* Update children, by first removing all global nbrs */
+	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
+		if (child_associations[i].in_use) {
+			dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
+				&child_associations[i], iface);
+		}
+	}
+
+	/* Then update / add global neigbors */
+	if (update_global) {
+		for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
+			if (child_associations[i].in_use) {
+				dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
+					l2_ctx, &child_associations[i], iface);
+			}
+		}
+	}
 
 }
-#endif

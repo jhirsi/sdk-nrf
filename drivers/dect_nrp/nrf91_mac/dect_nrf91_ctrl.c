@@ -493,6 +493,15 @@ static int dect_nrf91_ctrl_modem_configure_req_from_settings(void)
 	params.power_save = set_ptr->net_mgmt_common.power_save;
 	params.tx_pwr = set_ptr->net_mgmt_common.tx.max_power_dbm;
 
+	/* Init reconfigure params */
+	ctrl_data.ft_cluster_reconfig_params.channel = 0;
+	ctrl_data.ft_cluster_reconfig_params.max_beacon_tx_power_dbm =
+		set_ptr->net_mgmt_common.cluster.max_beacon_tx_power_dbm;
+	ctrl_data.ft_cluster_reconfig_params.max_cluster_power_dbm =
+		set_ptr->net_mgmt_common.cluster.max_cluster_power_dbm;
+	ctrl_data.ft_cluster_reconfig_params.period =
+		set_ptr->net_mgmt_common.cluster.beacon_period;
+
 	ret = dect_nrf91_ctrl_configure_cmd(&params);
 	if (ret != 0) {
 		printk("Error in configure, error: %d\n", ret);
@@ -735,6 +744,15 @@ int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_pa
 
 	return dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, params,
 						sizeof(struct dect_cluster_reconfig_req_params));
+}
+int dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed(void)
+{
+	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
+		LOG_DBG("Cluster not started");
+		return -EINVAL;
+	}
+	return dect_nrf91_ctrl_msgq_non_data_op_add(
+		DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ);
 }
 
 int dect_nrf91_ctrl_cluster_info_req_cmd(void)
@@ -1179,7 +1197,6 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
 
-			/* Only channel supported currently */
 			ctrl_data.ft_requested_cluster_channel = params->channel;
 			ctrl_data.ft_cluster_reconfig_params = *params;
 
@@ -1190,6 +1207,21 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 				ctrl_data.configure_params.channel;
 
 			ctrl_data.configure_params.channel = 0;
+
+			dect_nrf91_ctrl_msgq_non_data_op_add(
+				DECT_NRF91_CTRL_OP_AUTO_START);
+			break;
+		}
+		case DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ: {
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+
+			/* Keep current channel, just reconfig ipv6 cfg  */
+			ctrl_data.ft_requested_cluster_channel =
+				ctrl_data.configure_params.channel;
+			ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
+				ctrl_data.configure_params.channel;
+
+			ctrl_data.ft_cluster_reconfig_ongoing = true;
 
 			dect_nrf91_ctrl_msgq_non_data_op_add(
 				DECT_NRF91_CTRL_OP_AUTO_START);
@@ -1723,7 +1755,11 @@ send_events:
 				ctrl_data.iface,
 				dect_nrf91_utils_modem_status_to_net_mgmt_status(*status));
 
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK &&
+			    !(ctrl_data.ft_cluster_reconfig_ongoing &&
+				ctrl_data.configure_params.channel ==
+				ctrl_data.ft_cluster_reconfig_prev_cluster_channel)) {
+
 				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
 
 				LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
@@ -2933,8 +2969,14 @@ send_events:
 			struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params *params =
 				event.data;
 
-			LOG_WRN("IPv6 config changed, type: %d - no support yet",
-				params->ipv6_config.type);
+			LOG_WRN("IPv6 config changed, type: %d", params->ipv6_config.type);
+			if (ctrl_data.ass_config.pt_association_state ==
+			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+				dect_nrf91_parent_association_ipv6_config_changed(
+					params->ipv6_config);
+			} else {
+				LOG_WRN("IPv6 config changed. Not associated - ignored ");
+			}
 			break;
 		}
 
@@ -3324,6 +3366,7 @@ static void dect_nrf91_ctrl_mac_init(void)
 	}
 	ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
 	net_if_carrier_off(ctrl_data.iface);
+
 	(void)dect_nrf91_ctrl_modem_configure_req_from_settings();
 
 	ret = k_sem_take(&dect_mac_libmodem_api_sema, K_SECONDS(2));

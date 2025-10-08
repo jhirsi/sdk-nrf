@@ -286,13 +286,22 @@ dect_nrf91_parent_association_list_item_get(uint32_t target_long_rd_id)
 {
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 
-	LOG_DBG("%s: target_long_rd_id %u", (__func__), target_long_rd_id);
-	for (int i = 0; i < ARRAY_SIZE(ctx->parent_associations); i++) {
-		if (ctx->parent_associations[i].in_use &&
-		    ctx->parent_associations[i].target_long_rd_id == target_long_rd_id) {
-			return &ctx->parent_associations[i];
+	if (target_long_rd_id) {
+		for (int i = 0; i < ARRAY_SIZE(ctx->parent_associations); i++) {
+			if (ctx->parent_associations[i].in_use &&
+			ctx->parent_associations[i].target_long_rd_id == target_long_rd_id) {
+				return &ctx->parent_associations[i];
+			}
+		}
+	} else {
+		/* If target_long_rd_id is zero, return the first in-use item */
+		for (int i = 0; i < ARRAY_SIZE(ctx->parent_associations); i++) {
+			if (ctx->parent_associations[i].in_use) {
+				return &ctx->parent_associations[i];
+			}
 		}
 	}
+
 	return NULL;
 }
 
@@ -975,6 +984,35 @@ association_release:
 	dect_nrf91_ctrl_associate_release_cmd(
 		target_long_rd_id,
 		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES);
+}
+
+void dect_nrf91_parent_association_ipv6_config_changed(
+	struct nrf_modem_dect_mac_ipv6_address_config_t ipv6_config)
+{
+	struct net_if *iface = dect_nrf91_mac_dev_context_data.iface;
+	struct dect_net_ipv6_prefix_config ipv6_prefix_config = {
+		.prefix.s6_addr = { 0 },
+		.prefix_len = 0, /* As a default no prefix */
+	};
+
+	struct dect_nrf91_association_data *ass_list_item =
+		dect_nrf91_parent_association_list_item_get(0);
+
+	if (!ass_list_item) {
+		LOG_WRN("%s: no parent association", (__func__));
+		return;
+	}
+
+	if (ipv6_config.type != NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE) {
+		__ASSERT_NO_MSG(ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX ||
+				ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_FULL);
+		ipv6_prefix_config.prefix_len =
+			(ipv6_config.type == NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX) ? 8 : 16;
+		memcpy(&ipv6_prefix_config.prefix.s6_addr,
+		       &ipv6_config.address, sizeof(ipv6_config.address));
+	}
+	dect_net_l2_parent_ipv6_config_changed(
+		iface, ass_list_item->target_long_rd_id, &ipv6_prefix_config);
 }
 
 void dect_nrf91_parent_association_removed(

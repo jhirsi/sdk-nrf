@@ -14,6 +14,7 @@
 
 #include <net/dect_nrp_utils.h>
 
+#include "dect_nrf91_ctrl.h"
 #include "dect_nrf91_sink.h"
 
 #include <zephyr/logging/log.h>
@@ -55,7 +56,6 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 		printk("Ignoring event for iface %p", iface);
 		return;
 	}
-
 	if (mgmt_event == NET_EVENT_IPV6_PREFIX_ADD) {
 		struct net_event_ipv6_prefix *ipv6_prefix =
 			(struct net_event_ipv6_prefix *)cb->info;
@@ -68,14 +68,27 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 		if (!ctx->global_prefix_addr_set && ipv6_prefix->len == 64 &&
 		    net_ipv6_is_global_addr((struct in6_addr *)&ipv6_prefix->addr)) {
 			ctx->global_prefix_addr_set = true;
-			memcpy(&ctx->global_prefix_addr, &ipv6_prefix->addr,
-			       sizeof(ctx->global_prefix_addr));
+			net_ipaddr_copy(&ctx->global_prefix_addr, &ipv6_prefix->addr);
+
 			LOG_INF("NET_EVENT_IPV6_PREFIX_ADD: our global prefix set to %s/64",
 				net_sprint_ipv6_addr(&ctx->global_prefix_addr));
+			/* Inform modem by starting reconfigure */
+			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
+		} else if (ctx->global_prefix_addr_set &&
+			 !net_ipv6_is_prefix(ctx->global_prefix_addr.s6_addr,
+					    ipv6_prefix->addr.s6_addr,
+					    64)) {
+			/* Prefix was already set and now it changed */
+			LOG_WRN("NET_EVENT_IPV6_PREFIX_ADD: our global prefix changed "
+				"from %s/64 to %s/64",
+				net_sprint_ipv6_addr(&ctx->global_prefix_addr),
+				net_sprint_ipv6_addr((struct in6_addr *)&ipv6_prefix->addr));
+
+			net_ipaddr_copy(&ctx->global_prefix_addr, &ipv6_prefix->addr);
+
+			/* Inform modem by starting reconfigure */
+			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
 		}
-
-		/* TODO ilmota modemille jos muuttunut ja FT laite */
-
 	} else if (mgmt_event == NET_EVENT_IPV6_PREFIX_DEL) {
 		struct net_event_ipv6_prefix *ipv6_prefix =
 			(struct net_event_ipv6_prefix *)cb->info;
@@ -93,8 +106,10 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 			ctx->global_prefix_addr_set = false;
 			memset(&ctx->global_prefix_addr, 0, sizeof(ctx->global_prefix_addr));
 			LOG_INF("NET_EVENT_IPV6_PREFIX_DEL: our global prefix was removed");
+
+			/* Inform modem by starting reconfigure */
+			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
 		}
-		/* TODO ilmota modemille jos hävis jos FT laite */
 	}
 }
 
