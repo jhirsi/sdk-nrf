@@ -12,6 +12,11 @@
 #include <zephyr/shell/shell.h>
 #include <zephyr/posix/sys/socket.h>
 
+#if defined(CONFIG_MODEM_CELLULAR)
+#include <zephyr/pm/device.h>
+#include <zephyr/pm/device_runtime.h>
+#include <zephyr/drivers/cellular.h>
+#endif
 #include <zephyr/net/ethernet.h> /* just for ETH_P_ALL */
 
 #include <zephyr/sys/printk.h>
@@ -2415,6 +2420,108 @@ static void dect_shell_nw_beacon_stop_cmd(const struct shell *shell, size_t argc
 
 /**************************************************************************************************/
 
+#if defined(CONFIG_MODEM_CELLULAR)
+
+char *dect_shell_util_cellular_reg_status_to_string(
+	enum cellular_registration_status reg_status,
+	char *out_str_buff,
+	size_t out_str_buff_len)
+{
+	if (out_str_buff == NULL || out_str_buff_len == 0) {
+		return NULL;
+	}
+
+	switch (reg_status) {
+	case CELLULAR_REGISTRATION_NOT_REGISTERED:
+		strncpy(out_str_buff, "Not registered", out_str_buff_len);
+		break;
+	case CELLULAR_REGISTRATION_REGISTERED_HOME:
+		strncpy(out_str_buff, "Registered (Home)", out_str_buff_len);
+		break;
+	case CELLULAR_REGISTRATION_SEARCHING:
+		strncpy(out_str_buff, "Searching", out_str_buff_len);
+		break;
+	case CELLULAR_REGISTRATION_DENIED:
+		strncpy(out_str_buff, "Denied", out_str_buff_len);
+		break;
+	case CELLULAR_REGISTRATION_UNKNOWN:
+		strncpy(out_str_buff, "Unknown", out_str_buff_len);
+		break;
+	case CELLULAR_REGISTRATION_REGISTERED_ROAMING:
+		strncpy(out_str_buff, "Registered (Roaming)", out_str_buff_len);
+		break;
+	default:
+		snprintf(out_str_buff, out_str_buff_len, "Unknown (%d)", reg_status);
+		break;
+	}
+
+	return out_str_buff;
+}
+
+const struct device *modem_dev = DEVICE_DT_GET(DT_ALIAS(modem));
+
+static void print_cellular_info(void)
+{
+	int rc;
+	int16_t rsrp;
+	char buffer[256];
+	enum cellular_registration_status reg_status;
+
+	desh_print("Border Router - Cellular Modem LTE status:");
+
+	rc = cellular_get_registration_status(modem_dev, CELLULAR_ACCESS_TECHNOLOGY_LTE,
+					    &reg_status);
+	if (!rc) {
+		desh_print("  Network registration status:  %s",
+			dect_shell_util_cellular_reg_status_to_string(
+				reg_status, buffer, sizeof(buffer)));
+	} else {
+		desh_error("    Failed to get network registration status, error: %d", rc);
+	}
+
+	rc = cellular_get_signal(modem_dev, CELLULAR_SIGNAL_RSRP, &rsrp);
+	if (!rc) {
+		desh_print("  RSRP:                         %d dBm", rsrp);
+	}
+	rc = cellular_get_signal(modem_dev, CELLULAR_SIGNAL_RSRQ, &rsrp);
+	if (!rc) {
+		desh_print("  RSRQ:                         %d dB", rsrp);
+	}
+
+	rc = cellular_get_modem_info(
+		modem_dev, CELLULAR_MODEM_INFO_IMEI, &buffer[0], sizeof(buffer));
+	if (!rc) {
+		desh_print("  IMEI:                         %s", buffer);
+	} else {
+		desh_error("  Failed to get IMEI, error: %d", rc);
+	}
+
+	rc = cellular_get_modem_info(modem_dev, CELLULAR_MODEM_INFO_MODEL_ID, &buffer[0],
+				     sizeof(buffer));
+	if (!rc) {
+		desh_print("  Model:                        %s", buffer);
+	} else {
+		desh_error("  Failed to get MODEL_ID, error: %d", rc);
+	}
+
+	rc = cellular_get_modem_info(modem_dev, CELLULAR_MODEM_INFO_MANUFACTURER, &buffer[0],
+				     sizeof(buffer));
+	if (!rc) {
+		desh_print("  Manufacturer:                 %s", buffer);
+	} else {
+		desh_error("  Failed to get MANUFACTURER, error: %d", rc);
+	}
+
+	rc = cellular_get_modem_info(modem_dev, CELLULAR_MODEM_INFO_FW_VERSION, &buffer[0],
+				     sizeof(buffer));
+	if (!rc) {
+		desh_print("  Modem firmware version:       %s", buffer);
+	} else {
+		desh_error("  Failed to get FW_VERSION, error: %d", rc);
+	}
+}
+#endif
+
 static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
 {
 	desh_print("DECT NR+ status:");
@@ -2485,6 +2592,9 @@ static void dect_shell_status_cmd_print(struct dect_status_info *dect_status)
 	} else {
 		desh_print("    Border router global IPv6 address: not set");
 	}
+#endif
+#if defined(CONFIG_MODEM_CELLULAR)
+	print_cellular_info();
 #endif
 }
 
