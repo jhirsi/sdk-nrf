@@ -2479,6 +2479,11 @@ static void print_cellular_info(void)
 		desh_error("    Failed to get network registration status, error: %d", rc);
 	}
 
+	rc = cellular_get_operator(modem_dev, &buffer[0], sizeof(buffer));
+	if (!rc) {
+		desh_print("  Operator:                     %s", buffer);
+	}
+
 	rc = cellular_get_signal(modem_dev, CELLULAR_SIGNAL_RSRP, &rsrp);
 	if (!rc) {
 		desh_print("  RSRP:                         %d dBm", rsrp);
