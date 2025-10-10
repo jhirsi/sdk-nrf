@@ -45,6 +45,7 @@ const struct device *modem = DEVICE_DT_GET(DT_ALIAS(modem));
 static struct k_work_delayable lte_ipv6_router_nbr_deleted_work;
 
 #endif
+static struct k_work_delayable dect_sink_rs_work;
 
 /**************************************************************************************************/
 
@@ -332,9 +333,7 @@ static void dect_net_l2_sink_net_if_mgmt_event_handler(struct net_mgmt_event_cal
 		LOG_INF("NET_EVENT_IF_UP: Sink networking iface (%p) is up", iface_for_prefix);
 		dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 
-		/* TODO trigger router solicitation?
-		 * i.e. handle case when already up and went down and up again
-		 */
+		k_work_reschedule(&dect_sink_rs_work, K_SECONDS(20));
 		break;
 	}
 	case NET_EVENT_IF_DOWN:
@@ -404,6 +403,14 @@ static void dect_net_l2_sink_lte_ipv6_nbr_router_deleted_worker(struct k_work *w
 }
 #endif
 
+static void dect_net_l2_sink_rs_work_handler(struct k_work *work)
+{
+	if (iface_for_prefix && net_if_is_up(iface_for_prefix) && !sink_prefix_addr_set) {
+		LOG_INF("SINK: RS work: starting RS for iface %p", iface_for_prefix);
+		net_if_start_rs(iface_for_prefix);
+	}
+}
+
 #define NET_IF_EVENT_MASK (NET_EVENT_IF_UP | NET_EVENT_IF_DOWN)
 #define IPV6_LAYER_EVENT_MASK                                                                      \
 	(NET_EVENT_IPV6_PREFIX_ADD | NET_EVENT_IPV6_PREFIX_DEL | NET_EVENT_IPV6_ADDR_ADD |         \
@@ -456,6 +463,7 @@ static int dect_net_l2_sink_init(void)
 	k_work_init_delayable(&lte_ipv6_router_nbr_deleted_work,
 			      dect_net_l2_sink_lte_ipv6_nbr_router_deleted_worker);
 #endif
+	k_work_init_delayable(&dect_sink_rs_work, dect_net_l2_sink_rs_work_handler);
 #if defined(CONFIG_NET_CONNECTION_MANAGER)
 	/* conn mgr does not have decent support for multiple interfaces for L4 events,
 	 * thus we want to ignore the sink interface because we want that those
