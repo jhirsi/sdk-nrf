@@ -123,9 +123,9 @@ BUILD_ASSERT((DECT_MAC_RELEASE_CAUSE_CUSTOM_RACH_RESOURCE_FAILURE ==
 /* Sanity check for the 1st and for the last error cause values */
 BUILD_ASSERT((DECT_MAC_STATUS_OK == (enum dect_status_values)NRF_MODEM_DECT_MAC_STATUS_OK),
 	     "NRF_MODEM_DECT_MAC_STATUS_OK != DECT_MAC_STATUS_OK");
-BUILD_ASSERT((DECT_MAC_STATUS_NO_RSSI_RESULTS ==
-	      (enum dect_status_values)NRF_MODEM_DECT_MAC_STATUS_NO_RSSI_RESULTS),
-	     "DECT_MAC_STATUS_NO_RSSI_RESULTS != NRF_MODEM_DECT_MAC_STATUS_NO_RSSI_RESULTS");
+BUILD_ASSERT((DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED ==
+	      (enum dect_status_values)NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED),
+	     "DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED != NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED");
 
 /**************************************************************************************************/
 
@@ -477,7 +477,6 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 	flow_config[0].flow_id = 1;
 	flow_config[0].priority = 1;
 	flow_config[0].dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3;
-	flow_config[0].num_arq_retx = 2;
 	flow_config[0].dlc_sdu_lifetime = 255;
 
 	mdm_params.tx_flow_configs = flow_config;

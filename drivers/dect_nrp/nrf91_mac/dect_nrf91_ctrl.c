@@ -536,7 +536,7 @@ static int dect_nrf91_ctrl_mdm_activate_req(void)
 		NRF_MODEM_DECT_CONTROL_FUNCTIONAL_MODE_ACTIVATE);
 
 	if (err) {
-		dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+		dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 		LOG_ERR("%s: error in CFUN set: err %s (%d)", (__func__), tmp_str, err);
 	}
 	return err;
@@ -550,7 +550,7 @@ static int dect_nrf91_ctrl_mdm_deactivate_req(void)
 		NRF_MODEM_DECT_CONTROL_FUNCTIONAL_MODE_DEACTIVATE);
 
 	if (err) {
-		dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+		dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 		LOG_ERR("%s: error in CFUN set: err %s (%d)", (__func__), tmp_str, err);
 	}
 	return err;
@@ -983,20 +983,17 @@ static void dect_mac_ctrl_trigger_association(void)
 		{
 			.flow_id = 1,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-			.num_arq_retx = 2,
 			.dlc_sdu_lifetime = NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
 		},
 		{ /* TODO: onko turhia? */
 			.flow_id = 2,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-			.num_arq_retx = 2,
 			.dlc_sdu_lifetime = 255,
 		},
 		{
 			.flow_id = 3,
 			.priority = 3,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-			.num_arq_retx = 2,
 			.dlc_sdu_lifetime = 255,
 		},
 	};
@@ -1056,7 +1053,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 				(enum nrf_modem_dect_mac_err *)event.data;
 
 			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 
 				LOG_ERR("Error in configure: err %s (%d)", tmp_str, *status);
 				break;
@@ -1085,7 +1082,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 
 			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 				/* Operation wasn't successful -> no change to activation state */
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 				if (ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ) {
 					dect_mgmt_activate_done_evt(
 						ctrl_data.iface,
@@ -1269,7 +1266,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 					dect_nrf91_utils_modem_status_to_net_mgmt_status(
 						params->status);
 
-				dect_nrf91_utils_modem_phy_err_to_string(params->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
 				LOG_ERR("Error in Cluster config: err %s (%d)", tmp_str,
 					params->status);
 
@@ -1524,7 +1521,7 @@ send_events:
 
 				err = nrf_modem_dect_mac_network_scan(&params);
 				if (err) {
-					dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+					dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 					LOG_ERR("Error in Network scan: err %s (%d)", tmp_str, err);
 					ctrl_data.configure_params.auto_start = false;
 					dect_mgmt_network_status_evt(
@@ -1560,7 +1557,7 @@ send_events:
 			}
 			err = nrf_modem_dect_mac_rssi_scan(params);
 			if (err) {
-				dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 				LOG_ERR("Error initiating RSSI scan by params: err %s (%d)",
 					tmp_str, err);
 				dect_mgmt_rssi_scan_done_evt(
@@ -1617,7 +1614,7 @@ send_events:
 			}
 			err = nrf_modem_dect_mac_rssi_scan(params);
 			if (err) {
-				dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 				LOG_ERR("Enrf_modem_dect_mac_rssi_scan failed: %s (%d)", tmp_str,
 					err);
 				if (ctrl_data.ft_cluster_reconfig_ongoing &&
@@ -1739,7 +1736,7 @@ send_events:
 
 				err = nrf_modem_dect_mac_rssi_scan_stop();
 				if (err) {
-					dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+					dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 					LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str,
 						err);
 				}
@@ -1760,7 +1757,7 @@ send_events:
 				ctrl_data.configure_params.channel ==
 				ctrl_data.ft_cluster_reconfig_prev_cluster_channel)) {
 
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 
 				LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
 					*status);
@@ -1922,14 +1919,12 @@ send_events:
 					{
 						.dlc_service_type =
 						NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
 					},
 					{
 						.dlc_service_type =
 							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
 					},
@@ -1937,7 +1932,6 @@ send_events:
 						.priority = 3,
 						.dlc_service_type =
 							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
 					},
@@ -1945,7 +1939,6 @@ send_events:
 						.priority = 4,
 						.dlc_service_type =
 							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
 					},
@@ -1953,7 +1946,6 @@ send_events:
 						.priority = 5,
 						.dlc_service_type =
 							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
 					},
@@ -1961,7 +1953,6 @@ send_events:
 						.priority = 6,
 						.dlc_service_type =
 							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.num_arq_retx = 2,
 						.dlc_sdu_lifetime =
 						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
 					}},
@@ -2041,7 +2032,7 @@ send_events:
 			enum nrf_modem_dect_mac_err *status =
 				(enum nrf_modem_dect_mac_err *)event.data;
 			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 
 				LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str, *status);
 			} else {
@@ -2097,7 +2088,7 @@ send_events:
 					event.data;
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 
 				LOG_ERR("Error in network beacon start/stop: err %s (%d)", tmp_str,
 					evt_data->status);
@@ -2167,7 +2158,7 @@ send_events:
 
 			err = nrf_modem_dect_mac_network_beacon_configure(&beacon_params);
 			if (err) {
-				dect_nrf91_utils_modem_phy_err_to_string(err, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
 				LOG_ERR("nrf_modem_dect_mac_network_beacon_configure failed: %s "
 					"(%d)",
 					tmp_str, err);
@@ -2346,7 +2337,7 @@ send_events:
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 
 				LOG_ERR("Network scan completed with err %s (%d)", tmp_str,
 					evt_data->status);
@@ -2475,7 +2466,7 @@ send_events:
 				(enum nrf_modem_dect_mac_err *)event.data;
 
 			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 				LOG_ERR("Network scan stopping failed with err %s (%d)", tmp_str,
 					*status);
 				break;
@@ -2488,7 +2479,7 @@ send_events:
 				(enum nrf_modem_dect_mac_err *)event.data;
 
 			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(*status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 				LOG_ERR("Cluster beacon rcv failed with err %s (%d)", tmp_str,
 					*status);
 				break;
@@ -2516,7 +2507,7 @@ send_events:
 			struct dect_rssi_scan_result_data *rssi_result = &cluster_info->rssi_result;
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 				LOG_ERR("Cluster info rcv failed with err %s (%d)", tmp_str,
 					evt_data->status);
 			} else {
@@ -2617,7 +2608,7 @@ send_events:
 			};
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 				LOG_ERR("Neighbor info rcv failed with err %s (%d)", tmp_str,
 					evt_data->status);
 			} else {
@@ -2759,7 +2750,7 @@ send_events:
 				dect_nrf91_utils_modem_status_to_net_mgmt_status(evt_data->status);
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 				LOG_ERR("Neighbor list rcv failed with err %s (%d)", tmp_str,
 					evt_data->status);
 
@@ -2806,7 +2797,7 @@ send_events:
 			int arr_index;
 
 			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_phy_err_to_string(evt_data->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
 				LOG_ERR("DLC data TX response failed to rd id %u with err %s (%d), "
 					"transaction id %u",
 					evt_data->long_rd_id, tmp_str, evt_data->status,
@@ -2883,7 +2874,7 @@ send_events:
 						CTRL_PT_ASSOCIATION_STATE_NONE;
 				}
 
-				dect_nrf91_utils_modem_phy_err_to_string(params->status, tmp_str);
+				dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
 				LOG_ERR("Modem operation failed for Association Response with "
 					"err %s (%d) with long RD ID: 0x%X",
 					tmp_str, params->status, params->long_rd_id);

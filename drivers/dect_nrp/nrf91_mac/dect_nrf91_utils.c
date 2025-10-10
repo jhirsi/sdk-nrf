@@ -39,7 +39,7 @@ dect_nrf91_utils_map_to_string(struct dect_nrf91_utils_mapping_tbl_item const *m
 	}
 	return out_str_buff;
 }
-const char *dect_nrf91_utils_modem_phy_err_to_string(enum nrf_modem_dect_mac_err err,
+const char *dect_nrf91_utils_modem_mac_err_to_string(enum nrf_modem_dect_mac_err err,
 						     char *out_str_buff)
 {
 	struct dect_nrf91_utils_mapping_tbl_item const mapping_table[] = {
@@ -55,6 +55,8 @@ const char *dect_nrf91_utils_modem_phy_err_to_string(enum nrf_modem_dect_mac_err
 		{NRF_MODEM_DECT_MAC_STATUS_NW_REJECT, "MAC_STATUS_NW_REJECT"},
 		{NRF_MODEM_DECT_MAC_STATUS_NO_MEMORY, "MAC_STATUS_NO_MEMORY"},
 		{NRF_MODEM_DECT_MAC_STATUS_NO_RSSI_RESULTS, "MAC_STATUS_NO_RSSI_RESULTS"},
+		{NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED,
+			"MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED"},
 		{-1, NULL}};
 
 	dect_nrf91_utils_map_to_string(mapping_table, err, out_str_buff);
@@ -90,6 +92,8 @@ dect_nrf91_utils_modem_status_to_net_mgmt_status(enum nrf_modem_dect_mac_err mdm
 		return DECT_MAC_STATUS_NO_MEMORY;
 	case NRF_MODEM_DECT_MAC_STATUS_NO_RSSI_RESULTS:
 		return DECT_MAC_STATUS_NO_RSSI_RESULTS;
+	case NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED:
+		return DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED;
 	default:
 		return DECT_MAC_STATUS_UNKNOWN;
 	}

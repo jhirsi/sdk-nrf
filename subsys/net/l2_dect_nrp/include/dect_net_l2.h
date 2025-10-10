@@ -45,6 +45,8 @@ enum dect_status_values {
 	DECT_MAC_STATUS_NO_MEMORY = 0x000A,
 	/** No RSSI scan results for the requested channel exists. */
 	DECT_MAC_STATUS_NO_RSSI_RESULTS = 0x000B,
+	/** TX request failed because DLC discard timer expired. */
+	DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED = 0x000C,
 
 	/** OS error */
 	DECT_MAC_STATUS_OS_ERROR = 0xFFFE,

@@ -16,7 +16,7 @@ struct dect_nrf91_utils_mapping_tbl_item {
 
 /******************************************************************************/
 
-const char *dect_nrf91_utils_modem_phy_err_to_string(enum nrf_modem_dect_mac_err err,
+const char *dect_nrf91_utils_modem_mac_err_to_string(enum nrf_modem_dect_mac_err err,
 						     char *out_str_buff);
 const char *dect_nrf91_utils_modem_association_ind_err_to_string(
 	enum nrf_modem_dect_mac_association_indication_status err, char *out_str_buff);
