@@ -45,6 +45,13 @@
 
 extern struct k_poll_signal desh_signal;
 
+/* When IPv6 connection status was updated last time:
+ * used to detect the cases when we need to re-read
+ * iface addressing to update ping socket bindings in case of possible
+ * changes.
+ */
+static int64_t ipv6_connected_status_updated_uptime;
+
 static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *ping_args,
 					    struct icmp_ping_shell_cmd_argv *ping_argv);
 
@@ -294,6 +301,7 @@ static uint32_t send_ping_wait_reply(struct icmp_ping_shell_cmd_argv *ping_args)
 	if (ret < 0) {
 		desh_error("Failed to bind a socket : %d", errno);
 		(void)close(fd);
+		free(buf);
 		return ret;
 	}
 #ifdef SO_RCVTIMEO
@@ -484,6 +492,22 @@ int icmp_ping_start(struct icmp_ping_shell_cmd_argv *ping_args)
 	}
 
 	for (int i = 0; i < current_ping_args.count; i++) {
+		if (current_ping_args.conn_info_read_uptime <
+			ipv6_connected_status_updated_uptime) {
+			/* Connection status has changed since last read,
+			 * re-read the connection info:
+			 */
+			desh_print("Re-reading conn info...");
+			freeaddrinfo(current_ping_args.dest);
+			current_ping_args.dest = NULL;
+			freeaddrinfo(current_ping_args.src);
+			current_ping_args.src = NULL;
+			if (!icmp_ping_current_conn_info_set(ping_args, &current_ping_args)) {
+				desh_error("Failed to re-read conn info - exiting");
+				ret = -1;
+				break;
+			}
+		}
 		ping_t = send_ping_wait_reply(&current_ping_args);
 
 		k_poll_signal_check(current_ping_args.kill_signal, &set, &res);
@@ -580,6 +604,7 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 	/* Now we can check the max payload len vs link MTU (IPv6 check later): */
 	uint32_t ipv4_max_payload_len = ping_args->mtu - ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN;
 
+	ping_args->conn_info_read_uptime = k_uptime_get();
 	if (!ping_args->force_ipv6 && ping_args->len > ipv4_max_payload_len) {
 		desh_warn("Payload size exceeds the link limits: MTU %d - headers %d = %d ",
 			  ping_args->force_ipv6, (ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN),
@@ -658,3 +683,33 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 exit:
 	return false;
 }
+#if defined(CONFIG_NET_CONNECTION_MANAGER)
+#define L4_EVENT_MASK (NET_EVENT_L4_IPV6_CONNECTED)
+static struct net_mgmt_event_callback l4_cb;
+static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t event,
+			     struct net_if *iface)
+{
+	ARG_UNUSED(cb);
+	ARG_UNUSED(iface);
+
+	switch (event) {
+	case NET_EVENT_L4_IPV6_CONNECTED:
+		ipv6_connected_status_updated_uptime = k_uptime_get();
+		break;
+	default:
+		break;
+	}
+}
+#endif
+
+static int icmp_ping_init(void)
+{
+	ipv6_connected_status_updated_uptime = k_uptime_get();
+#if defined(CONFIG_NET_CONNECTION_MANAGER)
+	net_mgmt_init_event_callback(&l4_cb, l4_event_handler, L4_EVENT_MASK);
+	net_mgmt_add_event_callback(&l4_cb);
+#endif
+	return 0;
+}
+
+SYS_INIT(icmp_ping_init, APPLICATION, CONFIG_APPLICATION_INIT_PRIORITY);

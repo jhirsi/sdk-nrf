@@ -50,6 +50,8 @@ struct icmp_ping_shell_cmd_argv {
 	uint32_t interval;
 	struct net_if *ping_iface;
 	bool force_ipv6;
+
+	int64_t conn_info_read_uptime;
 };
 
 /**
