@@ -1391,7 +1391,8 @@ static const char dect_shell_sett_common_usage_str[] =
 	"  -t, --tx_id <#>,             Set transmitter id (long RD ID).\n"
 	"      --region <eu/us/global>, Set region or variant. Impacts e.g. in channel access.\n"
 	"  -b, --band_nbr <#>,          Set used band.\n"
-	"      --max_tx_pwr <dbm>,      Set max TX power (dBm).\n"
+	"      --max_tx_pwr <dbm>,      Set max TX power (dBm). Note: max depends on supported\n"
+	"                               capabilities, i.e. power class.\n"
 	"                               [-40,-30,-20,-16,-12,-8,-4,0,4,7,10,13,16,19,21,23]\n"
 	"      --max_mcs <uint>,        Set max used MCS.\n"
 	"      --power_save <on/off>,  \"on\" to enable power save on modem, \"off\" to disable.\n"
@@ -1407,6 +1408,7 @@ static const char dect_shell_sett_rssi_scan_usage_str[] =
 	"RSSI measurement settings:\n"
 	"      --rssi_scan_time <msecs>,   Channel access: set the time (msec) that is used for\n"
 	"                                  scanning per channel for RSSI measurements.\n"
+	"                                  Range: [10, 2550].\n"
 	"      --rssi_scan_free_th <dbm>,  Channel access: considered as free:\n"
 	"                                  measured signal level <= <value>.\n"
 	"                                  Set a threshold for RSSI scan free threshold (dBm).\n"
@@ -1760,8 +1762,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 	struct dect_settings newsettings;
 
 	int long_index = 0;
-	int opt, tmp_value;
-	int ret;
+	int opt;
+	unsigned long long tmp_value;
+	int ret = 0;
 
 	if (argc < 2) {
 		goto show_usage;
@@ -1795,10 +1798,11 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case 'n': {
-			tmp_value = shell_strtoul(optarg, 10, &ret);
-			if (ret || !dect_nrp_utils_32bit_network_id_validate(tmp_value)) {
-				desh_error("%u (0x%08x) is not a valid network id.\n"
-					   "The network ID shall be set to a value where "
+			tmp_value = shell_strtoull(optarg, 10, &ret);
+			if (ret || tmp_value > UINT32_MAX ||
+			    !dect_nrp_utils_32bit_network_id_validate((uint32_t)tmp_value)) {
+				desh_error("%llu (0x%08llx) is not a valid network id.\n"
+					   "The network ID shall be set to UINT32 value where "
 					   "neither\n"
 					   "the 8 LSB bits are 0x00 nor the 24 MSB bits "
 					   "are 0x000000.",
@@ -1811,9 +1815,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case 't': {
-			tmp_value = shell_strtoul(optarg, 10, &ret);
-			if (ret) {
-				desh_error("Give decent tx id (> 0)");
+			tmp_value = shell_strtoull(optarg, 10, &ret);
+			if (ret || (tmp_value < 1 || tmp_value > (UINT32_MAX - 2))) {
+				desh_error("Give decent tx id (range: 1-%u)", UINT32_MAX - 2);
 				return;
 			}
 			newsettings.identities.transmitter_long_rd_id = tmp_value;
@@ -1863,9 +1867,10 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_NW_JOIN_TARGET: {
-			tmp_value = shell_strtoul(optarg, 10, &ret);
-			if (ret) {
-				desh_error("Give decent auto start target tx id (> 0)");
+			tmp_value = shell_strtoull(optarg, 10, &ret);
+			if (ret || tmp_value > (UINT32_MAX - 2)) {
+				desh_error("Give decent auto start target tx id (range: 0-%u)",
+					   UINT32_MAX - 2);
 				return;
 			}
 			newsettings.network_join.target_ft_long_rd_id = tmp_value;
@@ -1887,37 +1892,44 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_RSSI_SCAN_TIME_PER_CHANNEL: {
-			newsettings.rssi_scan.time_per_channel_ms = atoi(optarg);
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value < 10 || (tmp_value > 2550)) {
+				desh_error("Give decent value (range: 10-2550)");
+				return;
+			}
+			newsettings.rssi_scan.time_per_channel_ms = tmp_value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_RSSI_SCAN_FREE_THRESHOLD: {
-			tmp_value = atoi(optarg);
-			if (tmp_value >= 0) {
-				desh_error("Give decent value (value < 0)");
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value >= 0 || value < INT8_MIN) {
+				desh_error("Give decent value (range: %d...-1)", INT8_MIN);
 				return;
 			}
-			newsettings.rssi_scan.free_threshold_dbm = tmp_value;
+			newsettings.rssi_scan.free_threshold_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_RSSI_SCAN_BUSY_THRESHOLD: {
-			tmp_value = atoi(optarg);
-			if (tmp_value >= 0) {
-				desh_error("Give decent value (value < 0)");
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value >= 0 || value < INT8_MIN) {
+				desh_error("Give decent value (range: %d...-1)", INT8_MIN);
 				return;
 			}
-			newsettings.rssi_scan.busy_threshold_dbm = tmp_value;
+			newsettings.rssi_scan.busy_threshold_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN;
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_RSSI_SCAN_SUITABLE_PERCENT: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0 || tmp_value > 100) {
-				desh_error("Give decent value (0-100)");
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value > 100) {
+				desh_error("Give decent value (range: 0-100)");
 				return;
 			}
 			newsettings.rssi_scan.scan_suitable_percent = tmp_value;
@@ -1941,33 +1953,34 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_CLUSTER_MAX_BEACON_TX_PWR: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < -40 || tmp_value > 23) {
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value < -40 || value > 23) {
 				desh_error("Invalid cluster beacon TX power: %s", optarg);
 				return;
 			}
 
-			newsettings.cluster.max_beacon_tx_power_dbm = tmp_value;
+			newsettings.cluster.max_beacon_tx_power_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_CLUSTER;
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_CLUSTER_MAX_TX_PWR: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < -12 || tmp_value > 23) {
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value < -12 || value > 23) {
 				desh_error("Invalid cluster max TX power: %s", optarg);
 				return;
 			}
-
-			newsettings.cluster.max_cluster_power_dbm = tmp_value;
+			newsettings.cluster.max_cluster_power_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_CLUSTER;
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_CLUSTER_CHANNEL_LOADED_PERCENT: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0 || tmp_value > 100) {
-				desh_error("Give decent value (0-100)");
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value > 100) {
+				desh_error("Give decent value (range: 0-100)");
 				return;
 			}
 			newsettings.cluster.channel_loaded_percent = tmp_value;
@@ -1976,9 +1989,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_CLUSTER_NBR_INACTIVITY_TIME: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0 || tmp_value >= UINT32_MAX) {
-				desh_error("Give decent value (value >= 0 && <= %u)", UINT32_MAX);
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value >= UINT32_MAX) {
+				desh_error("Give decent value (range: 0-%u)", UINT32_MAX);
 				return;
 			}
 			newsettings.cluster.neighbor_inactivity_disconnect_timer_ms = tmp_value;
@@ -2000,9 +2013,11 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_NW_BEACON_CHANNEL: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0 || tmp_value > UINT16_MAX) {
-				desh_error("Invalid network beacon channel: %s", optarg);
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value > UINT16_MAX) {
+				desh_error("Invalid network beacon channel: %s, range: 0-%u. "
+					   "Set to %u to set as disabled.", optarg, UINT16_MAX,
+					   DECT_MAC_NW_BEACON_CHANNEL_NOT_USED);
 				return;
 			}
 			newsettings.nw_beacon.channel = tmp_value;
@@ -2011,9 +2026,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_ASSOCIATION_MAX_CLUSTER_BEACON_RX_FAILS: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0 || tmp_value > UINT8_MAX) {
-				desh_error("Give decent value (value > 0 AND <= %d)", UINT8_MAX);
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value > UINT8_MAX) {
+				desh_error("Give decent value (range: 0-%d)", UINT8_MAX);
 				return;
 			}
 			newsettings.association.max_beacon_rx_failures = tmp_value;
@@ -2022,13 +2037,14 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_ASSOCIATION_MIN_SENSITIVITY: {
-			tmp_value = atoi(optarg);
-			if (tmp_value > INT8_MAX || tmp_value < INT8_MIN) {
-				desh_error("Give decent value (value < %d && > %d)",
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value > INT8_MAX || value < INT8_MIN) {
+				desh_error("Give decent value (range: %d-%d)",
 					INT8_MIN, INT8_MAX);
 				return;
 			}
-			newsettings.association.min_sensitivity_dbm = tmp_value;
+			newsettings.association.min_sensitivity_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |=
 				DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION;
 			break;
@@ -2047,9 +2063,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_MAX_MCS: {
-			tmp_value = atoi(optarg);
-			if (tmp_value < 0) {
-				desh_error("Give decent value (value >= 0)");
+			tmp_value = shell_strtoul(optarg, 10, &ret);
+			if (ret || tmp_value > 4) {
+				desh_error("Give decent value (range: 0-4)");
 				return;
 			}
 			newsettings.tx.max_mcs = tmp_value;
@@ -2057,7 +2073,13 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 			break;
 		}
 		case DECT_SHELL_SETT_CMD_MAX_TX_PWR: {
-			newsettings.tx.max_power_dbm = atoi(optarg);
+			long value = shell_strtol(optarg, 10, &ret);
+
+			if (ret || value < -40 || value > 23) {
+				desh_error("Give decent value (range: -40-23)");
+				return;
+			}
+			newsettings.tx.max_power_dbm = value;
 			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_TX;
 			break;
 		}
