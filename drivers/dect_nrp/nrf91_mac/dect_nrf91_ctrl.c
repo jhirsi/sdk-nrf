@@ -832,20 +832,19 @@ int dect_nrf91_ctrl_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params
 int dect_nrf91_ctrl_network_create_req_cmd(void)
 {
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_ACTIVATED) {
-		LOG_ERR("Modem not activated, cannot create network");
+		LOG_ERR("%s: modem not activated, cannot create network", (__func__));
 		return -EINVAL;
 	}
 	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_NONE) {
-		LOG_WRN("Cluster already started/starting");
+		LOG_WRN("%s: cluster already started/starting", (__func__));
 		return -EALREADY;
 	}
-	/* TODO tartteeko? */
 	if (ctrl_data.configure_params.auto_start) {
-		LOG_ERR("Auto start enabled");
+		LOG_ERR("%s: auto start already enabled", (__func__));
 		return -EALREADY;
 	}
 	if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
-		LOG_WRN("Network already started/starting");
+		LOG_WRN("%s: network already started/starting", (__func__));
 		return -EALREADY;
 	}
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -854,7 +853,8 @@ int dect_nrf91_ctrl_network_create_req_cmd(void)
 	if (nw_beacon_channel != DECT_MAC_NW_BEACON_CHANNEL_NOT_USED &&
 	    dect_nrf91_ctrl_nw_beacon_common_can_be_started(
 		    set_ptr->net_mgmt_common.nw_beacon.channel) == false) {
-		LOG_ERR("Change settings - invalid channel %d for network beacon in band %d",
+		LOG_ERR("%s: change settings - invalid channel %d for network beacon in band %d",
+			(__func__),
 			nw_beacon_channel, set_ptr->net_mgmt_common.band_nbr);
 		return -EINVAL;
 	}
@@ -889,11 +889,15 @@ int dect_nrf91_ctrl_network_remove_req_cmd(void)
 int dect_nrf91_ctrl_network_join_req_cmd(void)
 {
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_ACTIVATED) {
-		LOG_ERR("Modem not activated, cannot join network");
+		LOG_ERR("%s: Modem not activated, cannot join network", (__func__));
 		return -EINVAL;
 	}
 	if (ctrl_data.ass_config.pt_association_state == CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-		LOG_ERR("Already associated");
+		LOG_ERR("%s: Already associated", (__func__));
+		return -EALREADY;
+	}
+	if (ctrl_data.configure_params.auto_start) {
+		LOG_ERR("%s: Auto start already enabled", (__func__));
 		return -EALREADY;
 	}
 
@@ -1037,7 +1041,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 					evt_data->band_info_elems[i].band);
 				LOG_DBG("    band_group_index[%hhu]:       %hhu", i,
 					evt_data->band_info_elems[i].band_group_index);
-				LOG_DBG("    power_class[%hhu]:            %hhu", i,
+				LOG_INF("    power_class[%hhu]:            %hhu", i,
 					evt_data->band_info_elems[i].power_class);
 				LOG_INF("    min_carrier[%hhu]:            %hu", i,
 					evt_data->band_info_elems[i].min_carrier);
