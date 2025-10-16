@@ -498,14 +498,18 @@ int icmp_ping_start(struct icmp_ping_shell_cmd_argv *ping_args)
 			 * re-read the connection info:
 			 */
 			desh_print("Re-reading conn info...");
-			freeaddrinfo(current_ping_args.dest);
+			if (current_ping_args.dest) {
+				freeaddrinfo(current_ping_args.dest);
+			}
 			current_ping_args.dest = NULL;
-			freeaddrinfo(current_ping_args.src);
+			if (current_ping_args.src) {
+				freeaddrinfo(current_ping_args.src);
+			}
 			current_ping_args.src = NULL;
 			if (!icmp_ping_current_conn_info_set(ping_args, &current_ping_args)) {
-				desh_error("Failed to re-read conn info - exiting");
-				ret = -1;
-				break;
+				desh_warn("Failed to re-read conn info - continue");
+				k_sleep(K_MSEC(current_ping_args.interval));
+				continue;
 			}
 		}
 		ping_t = send_ping_wait_reply(&current_ping_args);
