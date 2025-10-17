@@ -940,7 +940,8 @@ int dect_nrf91_ctrl_api_neighbor_list_req_cmd(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_api_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params)
+int dect_nrf91_ctrl_api_neighbor_info_req_cmd(
+	struct nrf_modem_dect_mac_neighbor_info_params *params)
 {
 	int err = nrf_modem_dect_mac_neighbor_info(params);
 
@@ -2750,8 +2751,8 @@ send_events:
 			break;
 		}
 		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST: {
-			struct nrf_modem_dect_mac_neighbor_list_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_neighbor_list_cb_params *)event.data;
+			struct dect_nrf91_ctrl_neighbor_list_resp_evt *evt_data =
+				(struct dect_nrf91_ctrl_neighbor_list_resp_evt *)event.data;
 			struct dect_neighbor_list_evt l2_results_evt;
 
 			l2_results_evt.neighbor_count = evt_data->num_neighbors;
@@ -2774,14 +2775,17 @@ send_events:
 			for (uint32_t i = 0; i < evt_data->num_neighbors; i++) {
 				LOG_DBG("  Neighbor (long RD ID)..........................%u "
 					"(0x%08x)",
-					evt_data->long_rd_ids[i], evt_data->long_rd_ids[i]);
-				if (i >= DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT) {
-					LOG_ERR("Neighbor list too long, max %d, rd id %u ignored",
-						DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT,
-						evt_data->long_rd_ids[i]);
-					continue;
+					evt_data->neighbor_long_rd_ids[i],
+					evt_data->neighbor_long_rd_ids[i]);
+				if (i >= DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT) {
+					LOG_ERR("Neighbor list too long, max is %d",
+						DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT);
+					l2_results_evt.neighbor_count =
+						DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT;
+					break;
 				}
-				l2_results_evt.neighbor_long_rd_ids[i] = evt_data->long_rd_ids[i];
+				l2_results_evt.neighbor_long_rd_ids[i] =
+					evt_data->neighbor_long_rd_ids[i];
 			}
 			dect_mgmt_neighbor_list_evt(ctrl_data.iface, l2_results_evt);
 			break;
@@ -3245,16 +3249,19 @@ dect_nrf91_ctrl_mdm_neighbor_list_cb(struct nrf_modem_dect_mac_neighbor_list_cb_
 	evt_data.status = params->status;
 	evt_data.num_neighbors = params->num_neighbors;
 	for (int i = 0; i < params->num_neighbors; i++) {
-		if (i >= DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT) {
-			printk("Too many neighbors, only first %d will be used\n",
-			       DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT);
+		if (i >= DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT) {
+			printk("Too many neighbors, only first %d will be used, "
+				"long RD ID %u dropped first\n",
+			       DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT,
+			       params->long_rd_ids[i]);
+			evt_data.num_neighbors = DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT;
 			break;
 		}
 		evt_data.neighbor_long_rd_ids[i] = params->long_rd_ids[i];
 	}
 
-	dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST, params,
-					 sizeof(struct nrf_modem_dect_mac_neighbor_list_cb_params));
+	dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST, &evt_data,
+					 sizeof(struct dect_nrf91_ctrl_neighbor_list_resp_evt));
 }
 
 static void dect_nrf91_ctrl_mdm_flow_control_ntf_cb(
@@ -3377,7 +3384,8 @@ static void dect_nrf91_ctrl_mac_init(void)
 
 /**************************************************************************************************/
 
-struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_api_mdm_capabilities_ref_get(void)
+struct nrf_modem_dect_mac_capability_ntf_cb_params
+	*dect_nrf91_ctrl_api_mdm_capabilities_ref_get(void)
 {
 	return &ctrl_data.mdm_capas;
 }
