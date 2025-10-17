@@ -539,7 +539,7 @@ int dect_nrf91_driver_nw_beacon_stop_req(const struct device *dev,
 static int dect_nrf91_driver_status_info_get(const struct device *dev,
 					     struct dect_status_info *status_info_out)
 {
-	struct dect_status_info status_info = {};
+	struct dect_status_info status_info;
 	int i, tmp_count;
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -548,17 +548,15 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 		LOG_ERR("%s: no status info pointer", (__func__));
 		return -EINVAL;
 	}
+	memset(&status_info, 0, sizeof(status_info));
 	status_info.mdm_activated = dect_nrf91_ctrl_api_mdm_activated();
 
 	tmp_count = 0;
 
 	/* Fill children status*/
-	/* TODO: get ip addresses from neighbor table or remove totally from dect status,
-	 * as aren't "dect status"?
-	 */
 	for (i = 0; i < ARRAY_SIZE(ctx->child_associations); i++) {
 		if (ctx->child_associations[i].in_use) {
-			status_info.child_associations[i].long_rd_id =
+			status_info.child_associations[tmp_count].long_rd_id =
 				ctx->child_associations[i].target_long_rd_id;
 			tmp_count++;
 		}
@@ -569,7 +567,7 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 	/* Fill parent info status*/
 	for (i = 0; i < ARRAY_SIZE(ctx->parent_associations); i++) {
 		if (ctx->parent_associations[i].in_use) {
-			status_info.parent_associations[i].long_rd_id =
+			status_info.parent_associations[tmp_count].long_rd_id =
 				ctx->parent_associations[i].target_long_rd_id;
 			tmp_count++;
 		}
@@ -579,7 +577,6 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 	status_info.cluster_channel = 0;
 	status_info.cluster_running = false;
 
-	/* TODO: Get cluster info if FT device etc.  */
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
 		int cluster_channel = dect_nrf91_ctrl_api_cluster_channel_get();
 
@@ -621,7 +618,6 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 #endif
 
 	*status_info_out = status_info;
-
 	return 0;
 }
 
