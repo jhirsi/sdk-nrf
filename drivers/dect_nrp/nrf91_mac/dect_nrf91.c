@@ -637,12 +637,13 @@ static int dect_nrf91_driver_settings_read(const struct device *dev,
 }
 
 static int dect_nrf91_driver_settings_write(const struct device *dev,
-					    const struct dect_settings *settings_in)
+					    struct dect_settings *settings_in)
 {
 	struct dect_nrf91_settings_write_status ret_status;
 	uint16_t write_scope_bitmap_in =
 		settings_in->cmd_params.write_scope_bitmap;
 
+	settings_in->cmd_params.failure_scope_bitmap_out = 0;
 	if (settings_in->cmd_params.reset_to_driver_defaults) {
 		ret_status = dect_nrf91_settings_defaults_set();
 	} else {
@@ -682,8 +683,9 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 				}
 			}
 		}
+	} else {
+		settings_in->cmd_params.failure_scope_bitmap_out = ret_status.failure_scope_bitmap;
 	}
-
 	return ret_status.status;
 }
 

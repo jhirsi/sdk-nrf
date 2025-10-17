@@ -680,7 +680,17 @@ enum dect_settings_cmd_params_write_scope {
 
 struct dect_settings_cmd_params {
 	bool reset_to_driver_defaults;
-	uint16_t write_scope_bitmap; /* bitmask of dect_settings_cmd_params_write_scope */
+
+	/** Following parameters are used when writing settings to the modem
+	 *  by using settings_write command.
+	 */
+
+	/* Bitmask of dect_settings_cmd_params_write_scope */
+	uint16_t write_scope_bitmap;
+	/* Returned bitmask of dect_settings_cmd_params_write_scope for failed scopes,
+	 * in success zero.
+	 */
+	uint16_t failure_scope_bitmap_out;
 };
 
 /**************************************************************************************************/
@@ -916,10 +926,10 @@ struct dect_nrp_hal_api {
 	/** Write dect settings (syncronous/blocking)
 	 *
 	 * @param dev Pointer to the device structure for the driver instance.
-	 * @param settings Settings to write
+	 * @param settings_in Settings to write
 	 * @return 0 if ok, < 0 if error
 	 */
-	int (*settings_write)(const struct device *dev, const struct dect_settings *settings_in);
+	int (*settings_write)(const struct device *dev, struct dect_settings *settings_in);
 
 	/** Activate dect nr+ stack
 	 *

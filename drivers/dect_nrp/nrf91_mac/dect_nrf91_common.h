@@ -35,4 +35,11 @@ struct dect_nrf91_common_op_event_msgq_item {
 
 #define DECT_NRP_NRF_SUPPORTED_BAND_COUNT 5
 
+/* Maximum output power. See ETSI TS 103 636-2 Table 6.2.1-1 */
+
+#define DECT_NRP_PWR_CLASS_1_MAX_TX_POWER_DBM 23
+#define DECT_NRP_PWR_CLASS_2_MAX_TX_POWER_DBM 21
+#define DECT_NRP_PWR_CLASS_3_MAX_TX_POWER_DBM 19
+#define DECT_NRP_PWR_CLASS_4_MAX_TX_POWER_DBM 10
+
 #endif /* DECT_NRF91_COMMON_H */

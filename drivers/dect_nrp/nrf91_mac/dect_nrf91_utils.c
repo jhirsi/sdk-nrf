@@ -350,3 +350,38 @@ bool dect_nrf91_utils_cluster_acceptable_for_association(
 	}
 	return true;
 }
+
+static int8_t dect_nrf91_utils_max_tx_pwr_dbm_by_pwr_class(uint8_t power_class)
+{
+	switch (power_class) {
+	case 1:
+		return DECT_NRP_PWR_CLASS_1_MAX_TX_POWER_DBM;
+	case 2:
+		return DECT_NRP_PWR_CLASS_2_MAX_TX_POWER_DBM;
+	case 3:
+		return DECT_NRP_PWR_CLASS_3_MAX_TX_POWER_DBM;
+	default:
+		return DECT_NRP_PWR_CLASS_4_MAX_TX_POWER_DBM;
+	}
+}
+
+bool dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(int8_t tx_pwr_dbm, uint16_t band_nbr)
+{
+	struct nrf_modem_dect_mac_capability_ntf_cb_params *mdm_capas_ptr =
+		dect_nrf91_ctrl_mdm_capabilities_ref_get();
+
+	if (mdm_capas_ptr == NULL) {
+		LOG_ERR("MDM capabilities not available\n");
+		return false;
+	}
+
+	for (int i = 0; i < mdm_capas_ptr->num_band_info_elems; i++) {
+		if (band_nbr == mdm_capas_ptr->band_info_elems[i].band) {
+			return (tx_pwr_dbm <=
+				dect_nrf91_utils_max_tx_pwr_dbm_by_pwr_class(
+					mdm_capas_ptr->band_info_elems[i].power_class));
+		}
+	}
+	LOG_WRN("%s: band %d not supported\n", __func__, band_nbr);
+	return false;
+}

@@ -15,6 +15,7 @@
 
 #include <nrf_modem_dect_mac.h>
 
+#include "dect_nrf91_utils.h"
 #include "dect_nrf91_settings.h"
 
 K_SEM_DEFINE(dect_settings_init_sema, 0, 1);
@@ -139,6 +140,25 @@ static int dect_nrf91_settings_write_all(struct dect_nrf91_settings *dect_sett)
 	return ret;
 }
 
+static uint16_t dect_nrf91_settings_write_validate(const struct dect_settings *settings_in)
+{
+	uint16_t failure_scope_bitmap = 0;
+
+	if (settings_in->identities.transmitter_long_rd_id == DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {
+		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_IDENTITIES;
+	}
+	if (dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
+		    settings_in->tx.max_power_dbm, settings_in->band_nbr) == false) {
+		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_TX;
+	}
+	if (dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
+		    settings_in->cluster.max_beacon_tx_power_dbm, settings_in->band_nbr) == false) {
+		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_CLUSTER;
+	}
+	/* TODO: shall we validate other fields instead of doing those in L2 shell? */
+	return failure_scope_bitmap;
+}
+
 struct dect_nrf91_settings_write_status
 dect_nrf91_settings_write(struct dect_nrf91_settings *dect_sett_in)
 {
@@ -151,6 +171,16 @@ dect_nrf91_settings_write(struct dect_nrf91_settings *dect_sett_in)
 		dect_sett_in->net_mgmt_common.cmd_params.write_scope_bitmap;
 	struct dect_settings *current_sett = &current_sett_ptr->net_mgmt_common;
 	struct dect_settings *new_sett = &dect_sett_in->net_mgmt_common;
+
+	/* Some validations done here */
+	return_status.failure_scope_bitmap =
+		dect_nrf91_settings_write_validate(&dect_sett_in->net_mgmt_common);
+	if (return_status.failure_scope_bitmap) {
+		return_status.status = -EINVAL;
+		LOG_ERR("Settings write validation failed, failure bitmap: 0x%04X",
+			return_status.failure_scope_bitmap);
+		return return_status;
+	}
 
 	if (write_scope_bitmap_in == DECT_SETTINGS_WRITE_SCOPE_ALL) {
 		return_status.status = dect_nrf91_settings_write_all(dect_sett_in);

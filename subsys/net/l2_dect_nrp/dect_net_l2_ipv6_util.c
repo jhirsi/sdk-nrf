@@ -433,18 +433,6 @@ void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface)
 					    &dect_ipv6s->unicast[i].address.in6_addr);
 		}
 	}
-#if RM_JH
-	/* Remove all old prefixes */
-	if (ctx->global_ipv6_addr_set) {
-		ARRAY_FOR_EACH(dect_ipv6s->prefix, i)
-		{
-			net_if_ipv6_prefix_rm(dect_iface,
-				&dect_ipv6s->prefix[i].prefix,
-				dect_ipv6s->prefix[i].len);
-		}
-		ctx->global_ipv6_addr_set = false;
-	}
-#endif
 	/* ...and finally set new global address */
 	ctx->global_ipv6_addr_set = dect_net_l2_ipv6_util_global_addr_create_add(
 		dect_iface, &ctx->ipv6_prefix_cfg,

@@ -1596,6 +1596,43 @@ static char *dect_common_utils_settings_region_to_string(enum dect_settings_regi
 	}
 }
 
+static char *dect_common_utils_settings_write_scope_to_string(
+	enum dect_settings_cmd_params_write_scope scope)
+{
+	switch (scope) {
+	case DECT_SETTINGS_WRITE_SCOPE_ALL:
+		return "all";
+	case DECT_SETTINGS_WRITE_SCOPE_AUTO_START:
+		return "auto_start";
+	case DECT_SETTINGS_WRITE_SCOPE_REGION:
+		return "region";
+	case DECT_SETTINGS_WRITE_SCOPE_DEVICE_TYPE:
+		return "device_type";
+	case DECT_SETTINGS_WRITE_SCOPE_IDENTITIES:
+		return "identities";
+	case DECT_SETTINGS_WRITE_SCOPE_TX:
+		return "tx";
+	case DECT_SETTINGS_WRITE_SCOPE_POWER_SAVE:
+		return "power_save";
+	case DECT_SETTINGS_WRITE_SCOPE_BAND_NBR:
+		return "band_nbr";
+	case DECT_SETTINGS_WRITE_SCOPE_RSSI_SCAN:
+		return "rssi_scan";
+	case DECT_SETTINGS_WRITE_SCOPE_CLUSTER:
+		return "cluster";
+	case DECT_SETTINGS_WRITE_SCOPE_NW_BEACON:
+		return "network_beacon";
+	case DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION:
+		return "association";
+	case DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN:
+		return "network_join";
+	case DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION:
+		return "security_configuration";
+	default:
+		return "Unknown";
+	}
+}
+
 static int dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(
 	enum dect_nw_beacon_period period)
 {
@@ -2143,7 +2180,9 @@ static void dect_shell_sett_cmd(const struct shell *shell, size_t argc, char **a
 	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_WRITE, context.iface, &newsettings,
 		       sizeof(newsettings));
 	if (ret) {
-		desh_error("Cannot write new settings: %d", ret);
+		desh_error("Cannot write new settings: %d, there was a failure on scope: %s",
+			   ret, dect_common_utils_settings_write_scope_to_string(
+					newsettings.cmd_params.failure_scope_bitmap_out));
 	} else {
 		desh_print("Settings updated.");
 	}

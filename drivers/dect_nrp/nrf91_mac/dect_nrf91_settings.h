@@ -54,6 +54,10 @@ struct dect_nrf91_settings_write_status {
 			  * then re-configure/activate DECT NR+ stack after settings change to make
 			  * sure that the new settings are applied into modem.
 			  */
+	uint16_t failure_scope_bitmap; /* bitmask of dect_settings_cmd_params_write_scope
+					* indicating which scopes failed to be written,
+					* in success zero
+					*/
 };
 
 struct dect_nrf91_settings_write_status dect_nrf91_settings_defaults_set(void);

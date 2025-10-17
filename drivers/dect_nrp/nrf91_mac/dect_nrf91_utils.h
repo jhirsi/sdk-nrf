@@ -39,4 +39,7 @@ int dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(
 
 bool dect_nrf91_utils_cluster_acceptable_for_association(
 	struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *cluster_beacon);
+
+bool dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(int8_t tx_pwr_dbm, uint16_t band_nbr);
+
 #endif /* DECT_NRF91_UTILS_H */
