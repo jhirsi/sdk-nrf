@@ -5,3 +5,6 @@
 
 config DECT_NRP_LIB
 	bool "DECT NR+ library"
+	help
+	  Miscellaneous utility functions for DECT NR+ to be used by different
+	  DECT NR+ subsystems.

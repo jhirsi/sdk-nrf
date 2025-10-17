@@ -52,20 +52,6 @@ bool dect_nrp_utils_net_linkaddr_set_from_long_rd_id(struct net_linkaddr *lladdr
 	return true;
 }
 
-bool dect_nrp_utils_net_linkaddr_reset_from_long_rd_id(struct net_linkaddr *lladdr,
-						       uint32_t long_rd_id)
-{
-	if (!lladdr) {
-		return false;
-	}
-	uint32_t tmp_long_rd_id = htonl(long_rd_id);
-
-	memcpy(lladdr->addr, &tmp_long_rd_id, sizeof(uint32_t));
-	lladdr->len = sizeof(uint32_t);
-
-	return true;
-}
-
 /* NR+ version of zephyr net_ipv6_addr_create_iid(): */
 void dect_nrp_utils_net_ipv6_addr_create_iid(struct in6_addr *addr, struct net_linkaddr *lladdr)
 {
@@ -130,7 +116,6 @@ int8_t dect_nrp_utils_phy_tx_power_to_dbm(uint8_t phy_power)
 	const uint16_t table_size = ARRAY_SIZE(m_dbm_power_tbl);
 
 	if (phy_power >= table_size) {
-		printk("Phy TX pwr value out of range: %d\n", phy_power);
 		phy_power = table_size - 1;
 	}
 	return m_dbm_power_tbl[phy_power];
