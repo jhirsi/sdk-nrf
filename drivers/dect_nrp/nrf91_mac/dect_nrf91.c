@@ -335,7 +335,7 @@ static void dect_nrf91_iface_init(struct net_if *iface)
 
 	ctx->iface = iface;
 
-	dect_nrf91_ctrl_init(iface);
+	dect_nrf91_ctrl_api_init(iface);
 
 	err = net_if_set_link_addr(iface, link_addr, 8, NET_LINK_UNKNOWN);
 	if (err) {
@@ -365,12 +365,12 @@ static int dect_nrf91_init(const struct device *dev)
 
 static int dect_nrf91_ctrl_activate_cmd(const struct device *dev)
 {
-	return dect_nrf91_ctrl_configure_n_activate();
+	return dect_nrf91_ctrl_api_mdm_configure_n_activate();
 }
 
-static int dect_nrf91_ctrl_deactivate_cmd(const struct device *dev)
+static int dect_nrf91_ctrl_api_mdm_deactivate_cmd(const struct device *dev)
 {
-	return dect_nrf91_ctrl_deactivate();
+	return dect_nrf91_ctrl_api_mdm_deactivate();
 }
 
 static int dect_nrf91_driver_rssi_scan(const struct device *dev,
@@ -439,7 +439,8 @@ static int dect_nrf91_driver_scan(const struct device *dev, struct dect_scan_par
 		scan_params.channel_list[i] = params->channel_list[i];
 	}
 
-	err = dect_nrf91_ctrl_nw_scan_cmd(&scan_params, dect_nrf91_mac_dev_context_data.iface, cb);
+	err = dect_nrf91_ctrl_api_nw_scan_cmd(
+		&scan_params, dect_nrf91_mac_dev_context_data.iface, cb);
 	if (err) {
 		LOG_ERR("Error initiating in Network scan: err %d", err);
 	} else {
@@ -481,7 +482,7 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 
 	mdm_params.tx_flow_configs = flow_config;
 
-	ret = dect_nrf91_ctrl_associate_req_cmd(&mdm_params);
+	ret = dect_nrf91_ctrl_api_associate_req_cmd(&mdm_params);
 	if (ret) {
 		LOG_ERR("%s: error in Associate: err %d", (__func__), ret);
 	} else {
@@ -495,7 +496,7 @@ int dect_nrf91_driver_associate_release(const struct device *dev,
 {
 	int ret;
 
-	ret = dect_nrf91_ctrl_associate_release_cmd(
+	ret = dect_nrf91_ctrl_api_associate_release_cmd(
 		params->target_long_rd_id, NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 	if (ret) {
 		LOG_ERR("%s: error in Association Release: err %d", (__func__), ret);
@@ -510,13 +511,13 @@ int dect_nrf91_driver_associate_release(const struct device *dev,
 int dect_nrf91_driver_cluster_start_req(const struct device *dev,
 					struct dect_cluster_start_req_params *params)
 {
-	return dect_nrf91_ctrl_cluster_start_req_cmd(params);
+	return dect_nrf91_ctrl_api_cluster_start_req_cmd(params);
 }
 
 int dect_nrf91_driver_cluster_reconfig_req(const struct device *dev,
 					   struct dect_cluster_reconfig_req_params *params)
 {
-	return dect_nrf91_ctrl_cluster_reconfig_req_cmd(params);
+	return dect_nrf91_ctrl_api_cluster_reconfig_req_cmd(params);
 }
 
 /**************************************************************************************************/
@@ -524,13 +525,13 @@ int dect_nrf91_driver_cluster_reconfig_req(const struct device *dev,
 int dect_nrf91_driver_nw_beacon_start_req(const struct device *dev,
 					  struct dect_nw_beacon_start_req_params *params)
 {
-	return dect_nrf91_ctrl_nw_beacon_start_req_cmd(params);
+	return dect_nrf91_ctrl_api_nw_beacon_start_req_cmd(params);
 }
 
 int dect_nrf91_driver_nw_beacon_stop_req(const struct device *dev,
 					 struct dect_nw_beacon_stop_req_params *params)
 {
-	return dect_nrf91_ctrl_nw_beacon_stop_req_cmd(params);
+	return dect_nrf91_ctrl_api_nw_beacon_stop_req_cmd(params);
 }
 
 /**************************************************************************************************/
@@ -547,7 +548,7 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 		LOG_ERR("%s: no status info pointer", (__func__));
 		return -EINVAL;
 	}
-	status_info.mdm_activated = dect_nrf91_ctrl_mdm_activated();
+	status_info.mdm_activated = dect_nrf91_ctrl_api_mdm_activated();
 
 	tmp_count = 0;
 
@@ -580,14 +581,14 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 
 	/* TODO: Get cluster info if FT device etc.  */
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-		int cluster_channel = dect_nrf91_ctrl_cluster_channel_get();
+		int cluster_channel = dect_nrf91_ctrl_api_cluster_channel_get();
 
 		if (cluster_channel > 0) {
 			status_info.cluster_channel = cluster_channel;
 			status_info.cluster_running = true;
 		}
 	}
-	status_info.nw_beacon_running = dect_nrf91_ctrl_nw_beacon_running();
+	status_info.nw_beacon_running = dect_nrf91_ctrl_api_nw_beacon_running();
 
 	strcpy(status_info.fw_version_str, "Not available");
 #if defined(CONFIG_MODEM_INFO)
@@ -660,7 +661,7 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 		dect_net_l2_settings_changed(
 			dect_nrf91_mac_dev_context_data.iface,
 			&current_settings->net_mgmt_common);
-		if (ret_status.reactivate && dect_nrf91_ctrl_mdm_reactivate()) {
+		if (ret_status.reactivate && dect_nrf91_ctrl_api_mdm_reactivate()) {
 			LOG_DBG("Couldn't reconfigure/activate modem to apply new settings - "
 				"reactivate is needed");
 		} else {
@@ -703,7 +704,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 {
 	__ASSERT_NO_MSG(pkt != NULL);
 
-	dect_nrf91_ctrl_tx_cmd_params_t tx_params;
+	dect_nrf91_ctrl_api_tx_cmd_params_t tx_params;
 	uint32_t target_long_rd_id = 0;
 	static uint32_t transaction_id = DECT_MAC_DATA_TX_HANDLE_START;
 	int ret;
@@ -757,7 +758,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 
 		while (retry_count < 20 &&
 		       data_sent == false) { /* TODO: time (with Kconfig) instead of count */
-			ret = dect_nrf91_ctrl_tx_cmd(&tx_params);
+			ret = dect_nrf91_ctrl_api_tx_cmd(&tx_params);
 			if (ret == -ENOMEM || ret == -EACCES) {
 				k_sleep(K_MSEC(sleep_ms));
 				retry_count++;
@@ -796,7 +797,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 
 static int dect_nrf91_driver_neighbor_list_req(const struct device *dev)
 {
-	return dect_nrf91_ctrl_neighbor_list_req_cmd();
+	return dect_nrf91_ctrl_api_neighbor_list_req_cmd();
 }
 
 static int dect_nrf91_driver_neighbor_info_req(const struct device *dev,
@@ -806,12 +807,12 @@ static int dect_nrf91_driver_neighbor_info_req(const struct device *dev,
 		.long_rd_id = params->long_rd_id,
 	};
 
-	return dect_nrf91_ctrl_neighbor_info_req_cmd(&mdm_params);
+	return dect_nrf91_ctrl_api_neighbor_info_req_cmd(&mdm_params);
 }
 
 static int dect_nrf91_driver_cluster_info_req(const struct device *dev)
 {
-	return dect_nrf91_ctrl_cluster_info_req_cmd();
+	return dect_nrf91_ctrl_api_cluster_info_req_cmd();
 }
 
 static int dect_nrf91_ctrl_network_create_req(const struct device *dev)
@@ -819,7 +820,7 @@ static int dect_nrf91_ctrl_network_create_req(const struct device *dev)
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-		return dect_nrf91_ctrl_network_create_req_cmd();
+		return dect_nrf91_ctrl_api_network_create_req_cmd();
 	} else {
 		return -ENOTSUP;
 	}
@@ -832,14 +833,14 @@ static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
 	int i, ret;
 
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-		if (dect_nrf91_ctrl_network_remove_req_cmd_allowed() == false) {
+		if (dect_nrf91_ctrl_api_network_remove_req_cmd_allowed() == false) {
 			LOG_ERR("%s: Network remove not allowed", (__func__));
 			return -EPERM;
 		}
 		for (i = 0; i < ARRAY_SIZE(ctx->child_associations); i++) {
 			if (ctx->child_associations[i].in_use) {
 				/* We are shooting all without waiting an answer */
-				ret = dect_nrf91_ctrl_associate_release_cmd(
+				ret = dect_nrf91_ctrl_api_associate_release_cmd(
 					ctx->child_associations[i].target_long_rd_id,
 					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 				if (ret) {
@@ -851,7 +852,7 @@ static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
 			}
 		}
 		k_sleep(K_MSEC(2000)); /* Wait for a while that all association are released */
-		return dect_nrf91_ctrl_network_remove_req_cmd();
+		return dect_nrf91_ctrl_api_network_remove_req_cmd();
 	} else {
 		return -ENOTSUP;
 	}
@@ -862,7 +863,7 @@ static int dect_nrf91_ctrl_network_join_req(const struct device *dev)
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
-		return dect_nrf91_ctrl_network_join_req_cmd();
+		return dect_nrf91_ctrl_api_network_join_req_cmd();
 	} else {
 		return -ENOTSUP;
 	}
@@ -873,7 +874,7 @@ static int dect_nrf91_ctrl_network_unjoin_req(const struct device *dev)
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
-		return dect_nrf91_ctrl_network_unjoin_req_cmd();
+		return dect_nrf91_ctrl_api_network_unjoin_req_cmd();
 	} else {
 		return -ENOTSUP;
 	}
@@ -884,7 +885,7 @@ static int dect_nrf91_ctrl_network_unjoin_req(const struct device *dev)
 static const struct dect_nrp_hal_api dect_nrf91_api = {
 	.iface_api.init = dect_nrf91_iface_init,
 	.activate_req = dect_nrf91_ctrl_activate_cmd,
-	.deactivate_req = dect_nrf91_ctrl_deactivate_cmd,
+	.deactivate_req = dect_nrf91_ctrl_api_mdm_deactivate_cmd,
 	.send = dect_nrf91_driver_send,
 	.rssi_scan = dect_nrf91_driver_rssi_scan,
 	.scan = dect_nrf91_driver_scan,
@@ -961,7 +962,7 @@ void dect_nrf91_parent_association_created(
 
 association_release:
 	dect_nrf91_parent_association_list_remove(target_long_rd_id);
-	dect_nrf91_ctrl_associate_release_cmd(
+	dect_nrf91_ctrl_api_associate_release_cmd(
 		target_long_rd_id, NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES);
 }
 
@@ -982,7 +983,7 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id)
 
 association_release:
 	dect_nrf91_child_association_list_remove(target_long_rd_id);
-	dect_nrf91_ctrl_associate_release_cmd(
+	dect_nrf91_ctrl_api_associate_release_cmd(
 		target_long_rd_id,
 		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_INSUFFICIENT_HW_RESOURCES);
 }

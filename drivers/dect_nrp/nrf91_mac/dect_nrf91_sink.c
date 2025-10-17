@@ -73,7 +73,7 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 			LOG_INF("NET_EVENT_IPV6_PREFIX_ADD: our global prefix set to %s/64",
 				net_sprint_ipv6_addr(&ctx->global_prefix_addr));
 			/* Inform modem by starting reconfigure */
-			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
+			dect_nrf91_ctrl_api_cluster_reconfig_start_for_ipv6_prefix_cfg_changed();
 		} else if (ctx->global_prefix_addr_set &&
 			 !net_ipv6_is_prefix(ctx->global_prefix_addr.s6_addr,
 					    ipv6_prefix->addr.s6_addr,
@@ -87,7 +87,7 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 			net_ipaddr_copy(&ctx->global_prefix_addr, &ipv6_prefix->addr);
 
 			/* Inform modem by starting reconfigure */
-			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
+			dect_nrf91_ctrl_api_cluster_reconfig_start_for_ipv6_prefix_cfg_changed();
 		}
 	} else if (mgmt_event == NET_EVENT_IPV6_PREFIX_DEL) {
 		struct net_event_ipv6_prefix *ipv6_prefix =
@@ -108,7 +108,7 @@ static void dect_nrf91_sink_net_mgmt_ipv6_event_handler(struct net_mgmt_event_ca
 			LOG_INF("NET_EVENT_IPV6_PREFIX_DEL: our global prefix was removed");
 
 			/* Inform modem by starting reconfigure */
-			dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed();
+			dect_nrf91_ctrl_api_cluster_reconfig_start_for_ipv6_prefix_cfg_changed();
 		}
 	}
 }

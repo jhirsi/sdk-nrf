@@ -94,7 +94,7 @@ typedef struct {
 	uint32_t data_len;
 	uint32_t long_rd_id;
 	uint32_t transaction_id;
-} dect_nrf91_ctrl_tx_cmd_params_t;
+} dect_nrf91_ctrl_api_tx_cmd_params_t;
 
 #include <zephyr/net/net_if.h>
 struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr {
@@ -136,55 +136,53 @@ struct dect_nrf91_ctrl_rssi_measurement_data_evt {
 	struct nrf_modem_dect_mac_rssi_result rssi_result;
 };
 
-struct dect_mac_common_op_event_msgq_item {
-	dect_nrf91_ctrl_op_t id;
-	void *data;
-};
+#include <dect_net_l2_mgmt.h>
 
-#include "dect_net_l2_mgmt.h"
+/* Internal DECT NR+ ctrl api:
+ * All of these that return integer returns 0 if success and negative on error
+ */
 
-/* DECT NR+ ctrl api: All of these that return integer returns 0 if success and negative on error */
+int dect_nrf91_ctrl_api_mdm_configure_n_activate(void);
+int dect_nrf91_ctrl_api_mdm_deactivate(void);
 
-int dect_nrf91_ctrl_configure_n_activate(void);
-int dect_nrf91_ctrl_deactivate(void);
+int dect_nrf91_ctrl_api_cluster_channel_get(void);
+bool dect_nrf91_ctrl_api_mdm_activated(void);
 
-int dect_nrf91_ctrl_cluster_channel_get(void);
-bool dect_nrf91_ctrl_mdm_activated(void);
+int dect_nrf91_ctrl_api_mdm_reactivate(void);
 
-int dect_nrf91_ctrl_mdm_reactivate(void);
-
-int dect_nrf91_ctrl_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
+int dect_nrf91_ctrl_api_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
 				struct net_if *iface, dect_scan_result_cb_t cb);
-int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params);
-int dect_nrf91_ctrl_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params);
-int dect_nrf91_ctrl_associate_release_cmd(
+int dect_nrf91_ctrl_api_tx_cmd(dect_nrf91_ctrl_api_tx_cmd_params_t *params);
+int dect_nrf91_ctrl_api_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params);
+int dect_nrf91_ctrl_api_associate_release_cmd(
 	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause);
 
-int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params);
+int dect_nrf91_ctrl_api_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params);
 
-int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *params);
-int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params);
-int dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed(void);
+int dect_nrf91_ctrl_api_cluster_start_req_cmd(struct dect_cluster_start_req_params *params);
+int dect_nrf91_ctrl_api_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params);
+int dect_nrf91_ctrl_api_cluster_reconfig_start_for_ipv6_prefix_cfg_changed(void);
 
-int dect_nrf91_ctrl_cluster_info_req_cmd(void);
+int dect_nrf91_ctrl_api_cluster_info_req_cmd(void);
 
-int dect_nrf91_ctrl_network_create_req_cmd(void);
-int dect_nrf91_ctrl_network_remove_req_cmd(void);
-bool dect_nrf91_ctrl_network_remove_req_cmd_allowed(void);
+int dect_nrf91_ctrl_api_network_create_req_cmd(void);
+int dect_nrf91_ctrl_api_network_remove_req_cmd(void);
+bool dect_nrf91_ctrl_api_network_remove_req_cmd_allowed(void);
 
-int dect_nrf91_ctrl_network_join_req_cmd(void);
-int dect_nrf91_ctrl_network_unjoin_req_cmd(void);
+int dect_nrf91_ctrl_api_network_join_req_cmd(void);
+int dect_nrf91_ctrl_api_network_unjoin_req_cmd(void);
 
-int dect_nrf91_ctrl_nw_beacon_start_req_cmd(struct dect_nw_beacon_start_req_params *params);
-int dect_nrf91_ctrl_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params *params);
-bool dect_nrf91_ctrl_nw_beacon_running(void);
+int dect_nrf91_ctrl_api_nw_beacon_start_req_cmd(struct dect_nw_beacon_start_req_params *params);
+int dect_nrf91_ctrl_api_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params *params);
+bool dect_nrf91_ctrl_api_nw_beacon_running(void);
 
-int dect_nrf91_ctrl_neighbor_list_req_cmd(void);
+int dect_nrf91_ctrl_api_neighbor_list_req_cmd(void);
 
-int dect_nrf91_ctrl_init(struct net_if *iface);
+int dect_nrf91_ctrl_api_init(struct net_if *iface);
 
-struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_mdm_capabilities_ref_get(void);
+struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_api_mdm_capabilities_ref_get(void);
 
+/* TODO: to be private for ctrl module? */
 int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size);
 
 #endif /* DECT_NRF91_CTRL_H */

@@ -222,7 +222,7 @@ static struct nrf_modem_dect_mac_phy_band_info *
 dect_common_utils_channel_mdm_band_info_get(uint16_t band_nbr)
 {
 	struct nrf_modem_dect_mac_capability_ntf_cb_params *mdm_capas_ptr =
-		dect_nrf91_ctrl_mdm_capabilities_ref_get();
+		dect_nrf91_ctrl_api_mdm_capabilities_ref_get();
 
 	for (int i = 0; i < mdm_capas_ptr->num_band_info_elems; i++) {
 		if (mdm_capas_ptr->band_info_elems[i].band == band_nbr) {
@@ -368,7 +368,7 @@ static int8_t dect_nrf91_utils_max_tx_pwr_dbm_by_pwr_class(uint8_t power_class)
 bool dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(int8_t tx_pwr_dbm, uint16_t band_nbr)
 {
 	struct nrf_modem_dect_mac_capability_ntf_cb_params *mdm_capas_ptr =
-		dect_nrf91_ctrl_mdm_capabilities_ref_get();
+		dect_nrf91_ctrl_api_mdm_capabilities_ref_get();
 
 	if (mdm_capas_ptr == NULL) {
 		LOG_ERR("MDM capabilities not available\n");

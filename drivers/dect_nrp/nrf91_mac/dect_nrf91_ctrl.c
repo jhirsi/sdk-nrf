@@ -345,6 +345,11 @@ static bool dect_nrf91_ctrl_cluster_channels_list_best_channel_get(
 
 /**************************************************************************************************/
 
+struct dect_mac_common_op_event_msgq_item {
+	dect_nrf91_ctrl_op_t id;
+	void *data;
+};
+
 K_MSGQ_DEFINE(dect_nrf91_ctrl_msgq, sizeof(struct dect_mac_common_op_event_msgq_item), 1000,
 	      4); /* TODO optimize sizes */
 
@@ -394,7 +399,7 @@ int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, 
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_cluster_channel_get(void)
+int dect_nrf91_ctrl_api_cluster_channel_get(void)
 {
 	if (ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTED) {
 		return ctrl_data.configure_params.channel;
@@ -403,7 +408,7 @@ int dect_nrf91_ctrl_cluster_channel_get(void)
 	}
 }
 
-bool dect_nrf91_ctrl_nw_beacon_running(void)
+bool dect_nrf91_ctrl_api_nw_beacon_running(void)
 {
 	if (ctrl_data.ft_nw_beacon_state == CTRL_FT_NW_BEACON_STATE_STARTED) {
 		return true;
@@ -412,7 +417,7 @@ bool dect_nrf91_ctrl_nw_beacon_running(void)
 	}
 }
 
-bool dect_nrf91_ctrl_mdm_activated(void)
+bool dect_nrf91_ctrl_api_mdm_activated(void)
 {
 	if (ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATED) {
 		return true;
@@ -509,7 +514,7 @@ static int dect_nrf91_ctrl_modem_configure_req_from_settings(void)
 	return ret;
 }
 
-int dect_nrf91_ctrl_configure_n_activate(void)
+int dect_nrf91_ctrl_api_mdm_configure_n_activate(void)
 {
 	int ret = 0;
 
@@ -556,7 +561,7 @@ static int dect_nrf91_ctrl_mdm_deactivate_req(void)
 	return err;
 }
 
-int dect_nrf91_ctrl_deactivate(void)
+int dect_nrf91_ctrl_api_mdm_deactivate(void)
 {
 	int ret;
 
@@ -571,7 +576,7 @@ int dect_nrf91_ctrl_deactivate(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_mdm_reactivate(void)
+int dect_nrf91_ctrl_api_mdm_reactivate(void)
 {
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_ACTIVATED) {
 		LOG_DBG("Modem is not activated, cannot reactivate");
@@ -603,7 +608,7 @@ int dect_nrf91_ctrl_mdm_reactivate(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
+int dect_nrf91_ctrl_api_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
 				struct net_if *iface,
 				dect_scan_result_cb_t cb) /* TODO: iface? kun on jo initissä */
 {
@@ -628,7 +633,7 @@ int dect_nrf91_ctrl_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *p
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params)
+int dect_nrf91_ctrl_api_tx_cmd(dect_nrf91_ctrl_api_tx_cmd_params_t *params)
 {
 	struct nrf_modem_dect_dlc_data_tx_params tx_params = {
 		.transaction_id = params->transaction_id,
@@ -699,7 +704,7 @@ int dect_nrf91_ctrl_tx_cmd(dect_nrf91_ctrl_tx_cmd_params_t *params)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *params)
+int dect_nrf91_ctrl_api_cluster_start_req_cmd(struct dect_cluster_start_req_params *params)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
@@ -725,7 +730,7 @@ int dect_nrf91_ctrl_cluster_start_req_cmd(struct dect_cluster_start_req_params *
 		sizeof(struct dect_cluster_start_req_params));
 }
 
-int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params)
+int dect_nrf91_ctrl_api_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_params *params)
 {
 	/* Validate params */
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -745,7 +750,7 @@ int dect_nrf91_ctrl_cluster_reconfig_req_cmd(struct dect_cluster_reconfig_req_pa
 	return dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, params,
 						sizeof(struct dect_cluster_reconfig_req_params));
 }
-int dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed(void)
+int dect_nrf91_ctrl_api_cluster_reconfig_start_for_ipv6_prefix_cfg_changed(void)
 {
 	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
 		LOG_DBG("Cluster not started");
@@ -755,7 +760,7 @@ int dect_nrf91_ctrl_cluster_reconfig_for_ipv6_prefix_cfg_changed(void)
 		DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ);
 }
 
-int dect_nrf91_ctrl_cluster_info_req_cmd(void)
+int dect_nrf91_ctrl_api_cluster_info_req_cmd(void)
 {
 	int err = nrf_modem_dect_mac_cluster_info();
 
@@ -787,7 +792,7 @@ static bool dect_nrf91_ctrl_nw_beacon_common_can_be_started(uint16_t channel)
 	return true;
 }
 
-int dect_nrf91_ctrl_nw_beacon_start_req_cmd(struct dect_nw_beacon_start_req_params *params)
+int dect_nrf91_ctrl_api_nw_beacon_start_req_cmd(struct dect_nw_beacon_start_req_params *params)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
@@ -817,7 +822,7 @@ int dect_nrf91_ctrl_nw_beacon_start_req_cmd(struct dect_nw_beacon_start_req_para
 						sizeof(struct dect_nw_beacon_start_req_params));
 }
 
-int dect_nrf91_ctrl_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params *params)
+int dect_nrf91_ctrl_api_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params *params)
 {
 	if (ctrl_data.ft_nw_beacon_state == CTRL_FT_NW_BEACON_STATE_NONE ||
 	    ctrl_data.ft_nw_beacon_state == CTRL_FT_NW_BEACON_STATE_STOPPING) {
@@ -829,7 +834,7 @@ int dect_nrf91_ctrl_nw_beacon_stop_req_cmd(struct dect_nw_beacon_stop_req_params
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_network_create_req_cmd(void)
+int dect_nrf91_ctrl_api_network_create_req_cmd(void)
 {
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_ACTIVATED) {
 		LOG_ERR("%s: modem not activated, cannot create network", (__func__));
@@ -863,7 +868,7 @@ int dect_nrf91_ctrl_network_create_req_cmd(void)
 	return dect_nrf91_ctrl_msgq_non_data_op_add(DECT_NRF91_CTRL_OP_AUTO_START);
 }
 
-bool dect_nrf91_ctrl_network_remove_req_cmd_allowed(void)
+bool dect_nrf91_ctrl_api_network_remove_req_cmd_allowed(void)
 {
 	if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_NONE &&
 	    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_NONE) {
@@ -872,7 +877,7 @@ bool dect_nrf91_ctrl_network_remove_req_cmd_allowed(void)
 	return true;
 }
 
-int dect_nrf91_ctrl_network_remove_req_cmd(void)
+int dect_nrf91_ctrl_api_network_remove_req_cmd(void)
 {
 	int ret = dect_nrf91_ctrl_mdm_deactivate_req();
 
@@ -886,7 +891,7 @@ int dect_nrf91_ctrl_network_remove_req_cmd(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_network_join_req_cmd(void)
+int dect_nrf91_ctrl_api_network_join_req_cmd(void)
 {
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_ACTIVATED) {
 		LOG_ERR("%s: Modem not activated, cannot join network", (__func__));
@@ -904,25 +909,25 @@ int dect_nrf91_ctrl_network_join_req_cmd(void)
 	return dect_nrf91_ctrl_msgq_non_data_op_add(DECT_NRF91_CTRL_OP_AUTO_START);
 }
 
-int dect_nrf91_ctrl_network_unjoin_req_cmd(void)
+int dect_nrf91_ctrl_api_network_unjoin_req_cmd(void)
 {
 	if (ctrl_data.ass_config.pt_association_state != CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
 		LOG_ERR("Not joined");
 		return -EALREADY;
 	}
-	int err = dect_nrf91_ctrl_associate_release_cmd(
+	int err = dect_nrf91_ctrl_api_associate_release_cmd(
 		ctrl_data.ass_config.parent_long_rd_id,
 		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION);
 
 	if (err) {
-		LOG_ERR("dect_nrf91_ctrl_associate_release_cmd returned err: %d", err);
+		LOG_ERR("dect_nrf91_ctrl_api_associate_release_cmd returned err: %d", err);
 	}
 	return err;
 }
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_neighbor_list_req_cmd(void)
+int dect_nrf91_ctrl_api_neighbor_list_req_cmd(void)
 {
 	int err = nrf_modem_dect_mac_neighbor_list();
 
@@ -935,7 +940,7 @@ int dect_nrf91_ctrl_neighbor_list_req_cmd(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params)
+int dect_nrf91_ctrl_api_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_info_params *params)
 {
 	int err = nrf_modem_dect_mac_neighbor_info(params);
 
@@ -948,7 +953,7 @@ int dect_nrf91_ctrl_neighbor_info_req_cmd(struct nrf_modem_dect_mac_neighbor_inf
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params)
+int dect_nrf91_ctrl_api_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params)
 {
 	int err = nrf_modem_dect_mac_association(params);
 
@@ -959,7 +964,7 @@ int dect_nrf91_ctrl_associate_req_cmd(struct nrf_modem_dect_mac_association_para
 	return err;
 }
 
-int dect_nrf91_ctrl_associate_release_cmd(
+int dect_nrf91_ctrl_api_associate_release_cmd(
 	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause)
 {
 	struct nrf_modem_dect_mac_association_release_params params = {
@@ -1177,7 +1182,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			if (reactivate) {
 				LOG_DBG("Deactivated. Next configure before reactivate");
 				/* Reactivate modem to be able to give commands still */
-				if (dect_nrf91_ctrl_configure_n_activate()) {
+				if (dect_nrf91_ctrl_api_mdm_configure_n_activate()) {
 					LOG_ERR("Error in initiating modem configure and activate");
 				} else {
 					ctrl_data.mdm_activation_state =
@@ -1405,7 +1410,7 @@ send_events:
 					evt_data->long_rd_id, evt_data->long_rd_id);
 
 				/* Release association for this child neighbor */
-				dect_nrf91_ctrl_associate_release_cmd(
+				dect_nrf91_ctrl_api_associate_release_cmd(
 					evt_data->long_rd_id,
 					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
 			}
@@ -2580,7 +2585,7 @@ send_events:
 					ctrl_data.ass_config.parent_long_rd_id ==
 						evt_data->long_rd_id);
 				LOG_INF("Starting releasing the association");
-				dect_nrf91_ctrl_associate_release_cmd(
+				dect_nrf91_ctrl_api_associate_release_cmd(
 					ctrl_data.ass_config.parent_long_rd_id,
 					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
 			}
@@ -2598,7 +2603,7 @@ send_events:
 				"releasing association",
 				params->long_rd_id, params->long_rd_id);
 
-			dect_nrf91_ctrl_associate_release_cmd(
+			dect_nrf91_ctrl_api_associate_release_cmd(
 				params->long_rd_id,
 				NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY);
 			break;
@@ -3372,7 +3377,7 @@ static void dect_nrf91_ctrl_mac_init(void)
 
 /**************************************************************************************************/
 
-struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_mdm_capabilities_ref_get(void)
+struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_api_mdm_capabilities_ref_get(void)
 {
 	return &ctrl_data.mdm_capas;
 }
@@ -3385,15 +3390,15 @@ static void dect_nrf91_ctrl_on_modem_lib_init(int ret, void *ctx)
 	dect_nrf91_ctrl_mac_init();
 }
 
-NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_init_hook, dect_nrf91_ctrl_on_modem_lib_init, NULL);
+NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_on_modem_lib_init, NULL);
 
-int dect_nrf91_ctrl_init(struct net_if *iface)
+int dect_nrf91_ctrl_api_init(struct net_if *iface)
 {
 	memset(&ctrl_data, 0, sizeof(struct dect_nrf91_ctrl_data));
 
 	ctrl_data.iface = iface;
 	net_if_carrier_off(ctrl_data.iface);
-	LOG_DBG("dect_nrf91_ctrl_init");
+	LOG_DBG("dect_nrf91_ctrl_api_init");
 
 	return 0;
 }
