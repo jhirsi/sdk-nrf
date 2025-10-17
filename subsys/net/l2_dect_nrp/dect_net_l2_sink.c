@@ -23,7 +23,7 @@
 #include <net/dect_nrp_utils.h>
 
 #include "dect_net_l2_internal.h"
-#include "dect_net_l2_ipv6_util.h"
+#include "dect_net_l2_ipv6.h"
 #include "dect_net_l2_sink.h"
 
 #include <zephyr/logging/log.h>

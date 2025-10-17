@@ -14,36 +14,36 @@ extern "C" {
 
 #include "dect_net_l2_internal.h"
 
-void dect_net_l2_util_parent_added_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_parent_added_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
-void dect_net_l2_util_child_added_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_child_added_handle(
 	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface,
 	uint32_t child_long_rd_id, bool first_child);
-
-void dect_net_l2_util_child_removed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_child_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface, uint32_t child_long_rd_id);
-void dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
+
+void dect_net_l2_ipv6_global_addressing_child_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface);
-void dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_global_addressing_child_changed_handle(
 	struct dect_net_l2_context *ctx,
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface);
 
-void dect_net_l2_util_parent_removed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_parent_addressing_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id);
 
-void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface);
+void dect_net_l2_ipv6_global_addressing_replace(struct net_if *dect_iface);
 
-void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
+void dect_net_l2_ipv6_addressing_parent_changed_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 
-bool dect_net_l2_util_sink_ipv6_addressing_changed_handle(
+bool dect_net_l2_ipv6_addressing_sink_changed_handle(
 	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
 
 #ifdef __cplusplus

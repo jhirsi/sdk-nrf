@@ -13,6 +13,7 @@ if NET_L2_DECT
 config NET_L2_DECT_MGMT
 	bool "DECT NR+ Net Management support"
 	depends on NET_L2_DECT
+	depends on NET_IPV6
 	select NET_MGMT
 	select NET_MGMT_EVENT
 	select NET_MGMT_EVENT_INFO

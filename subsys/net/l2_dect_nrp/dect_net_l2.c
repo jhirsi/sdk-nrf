@@ -17,7 +17,7 @@
 #include <dect_net_l2.h>
 #include <dect_net_l2_mgmt.h>
 
-#include "dect_net_l2_ipv6_util.h"
+#include "dect_net_l2_ipv6.h"
 #include "dect_net_l2_sink.h"
 #include "dect_net_l2_internal.h"
 
@@ -592,7 +592,7 @@ void dect_net_l2_parent_association_created(
 		if (!parent_associations[i].in_use) {
 			parent_associations[i].in_use = true;
 			parent_associations[i].target_long_rd_id = target_long_rd_id;
-			dect_net_l2_util_parent_added_ipv6_addressing_handle(
+			dect_net_l2_ipv6_addressing_parent_added_handle(
 				&parent_associations[i], iface, target_long_rd_id,
 				ipv6_prefix_config);
 			dect_mgmt_parent_association_created_evt(iface, target_long_rd_id);
@@ -628,7 +628,7 @@ void dect_net_l2_child_association_created(struct net_if *iface, uint32_t child_
 			child_associations[i].target_long_rd_id = child_long_rd_id;
 
 			first_child = (dect_net_l2_association_count_get() == 1);
-			dect_net_l2_util_child_added_ipv6_addressing_handle(
+			dect_net_l2_ipv6_addressing_child_added_handle(
 				&child_associations[i], iface, child_long_rd_id, first_child);
 			dect_mgmt_child_association_created_evt(iface, child_long_rd_id);
 
@@ -668,7 +668,7 @@ void dect_net_l2_association_removed(
 		if (child_associations[i].in_use &&
 		    child_associations[i].target_long_rd_id == long_rd_id) {
 			child_associations[i].in_use = false;
-			dect_net_l2_util_child_removed_ipv6_addressing_handle(
+			dect_net_l2_ipv6_addressing_child_removed_handle(
 				&child_associations[i], iface, long_rd_id);
 			dect_mgmt_association_released_evt(
 				iface, long_rd_id, DECT_NEIGHBOR_ROLE_CHILD,
@@ -686,7 +686,7 @@ void dect_net_l2_association_removed(
 		    parent_associations[i].target_long_rd_id == long_rd_id) {
 			parent_associations[i].in_use = false;
 
-			dect_net_l2_util_parent_removed_ipv6_addressing_handle(
+			dect_net_l2_ipv6_parent_addressing_removed_handle(
 				&parent_associations[i], iface, long_rd_id);
 			dect_mgmt_association_released_evt(
 				iface, long_rd_id, DECT_NEIGHBOR_ROLE_PARENT,
@@ -722,7 +722,7 @@ void dect_net_l2_parent_ipv6_config_changed(
 		dect_net_l2_association_ref_get(parent_long_rd_id);
 
 	if (assoc_data) {
-		dect_net_l2_util_parent_ipv6_addressing_changed_handle(
+		dect_net_l2_ipv6_addressing_parent_changed_handle(
 			assoc_data, iface, parent_long_rd_id,
 			ipv6_prefix_config);
 	}
@@ -739,13 +739,13 @@ void dect_net_l2_sink_ipv6_config_changed(
 	__ASSERT_NO_MSG(l2_ctx);
 
 	/* Update our addressing */
-	update_global = dect_net_l2_util_sink_ipv6_addressing_changed_handle(
+	update_global = dect_net_l2_ipv6_addressing_sink_changed_handle(
 		iface, ipv6_prefix_config);
 
 	/* Update children, by first removing all global nbrs */
 	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
 		if (child_associations[i].in_use) {
-			dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
+			dect_net_l2_ipv6_global_addressing_child_removed_handle(
 				&child_associations[i], iface);
 		}
 	}
@@ -754,7 +754,7 @@ void dect_net_l2_sink_ipv6_config_changed(
 	if (update_global) {
 		for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
 			if (child_associations[i].in_use) {
-				dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
+				dect_net_l2_ipv6_global_addressing_child_changed_handle(
 					l2_ctx, &child_associations[i], iface);
 			}
 		}

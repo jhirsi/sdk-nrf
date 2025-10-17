@@ -13,7 +13,7 @@
 #include <dect_net_l2_mgmt.h>
 #include <net/dect_nrp_utils.h>
 
-#include "dect_net_l2_ipv6_util.h"
+#include "dect_net_l2_ipv6.h"
 #include "dect_net_l2_sink.h"
 
 #include <zephyr/logging/log.h>
@@ -178,7 +178,7 @@ static bool dect_net_l2_ipv6_util_global_addr_create_add(
 	return added;
 }
 
-void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
+void dect_net_l2_ipv6_addressing_parent_changed_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
@@ -192,7 +192,7 @@ void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
 		LOG_INF("Parent IPv6 prefix added as %s/%d",
 			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
 			ipv6_prefix_config->prefix_len * 8);
-		dect_net_l2_util_parent_added_ipv6_addressing_handle(
+		dect_net_l2_ipv6_addressing_parent_added_handle(
 			list_item, iface, parent_long_rd_id, ipv6_prefix_config);
 	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
 		   ipv6_prefix_config->prefix_len == 0) {
@@ -235,7 +235,7 @@ void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
 		ctx->global_ipv6_addr_set = false;
 
 		/* Add new prefix */
-		dect_net_l2_util_parent_added_ipv6_addressing_handle(
+		dect_net_l2_ipv6_addressing_parent_added_handle(
 			list_item, iface, parent_long_rd_id, ipv6_prefix_config);
 	} else {
 		/* No change */
@@ -244,7 +244,7 @@ void dect_net_l2_util_parent_ipv6_addressing_changed_handle(
 	}
 }
 
-void dect_net_l2_util_parent_added_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_parent_added_handle(
 	struct dect_net_l2_association_data *list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
@@ -289,7 +289,7 @@ void dect_net_l2_util_parent_added_ipv6_addressing_handle(
 #endif
 }
 
-void dect_net_l2_util_child_added_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_child_added_handle(
 	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface,
 	uint32_t child_long_rd_id, bool first_child)
 {
@@ -314,7 +314,7 @@ void dect_net_l2_util_child_added_ipv6_addressing_handle(
 				iface);
 		}
 		/* Update also our global address */
-		dect_net_l2_addr_util_global_addr_replace(iface);
+		dect_net_l2_ipv6_global_addressing_replace(iface);
 	}
 
 	/* Add child as a neighbor and also in association list */
@@ -326,7 +326,7 @@ void dect_net_l2_util_child_added_ipv6_addressing_handle(
 #endif
 }
 
-void dect_net_l2_util_child_removed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_addressing_child_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface, uint32_t child_long_rd_id)
 {
@@ -342,7 +342,7 @@ void dect_net_l2_util_child_removed_ipv6_addressing_handle(
 	ass_list_item->local_ipv6_addr_set = false;
 }
 
-void dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_global_addressing_child_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item, struct net_if *iface)
 {
 	if (ass_list_item == NULL) {
@@ -359,7 +359,7 @@ void dect_net_l2_util_child_global_addr_removed_ipv6_addressing_handle(
 	ass_list_item->global_ipv6_addr_set = false;
 }
 
-void dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_global_addressing_child_changed_handle(
 	struct dect_net_l2_context *ctx,
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface)
@@ -376,7 +376,7 @@ void dect_net_l2_util_child_global_addr_changed_ipv6_addressing_handle(
 #endif
 }
 
-void dect_net_l2_util_parent_removed_ipv6_addressing_handle(
+void dect_net_l2_ipv6_parent_addressing_removed_handle(
 	struct dect_net_l2_association_data *ass_list_item,
 	struct net_if *iface, uint32_t parent_long_rd_id)
 {
@@ -409,7 +409,7 @@ void dect_net_l2_util_parent_removed_ipv6_addressing_handle(
 	ass_list_item->local_ipv6_addr_set = false;
 }
 
-void dect_net_l2_addr_util_global_addr_replace(struct net_if *dect_iface)
+void dect_net_l2_ipv6_global_addressing_replace(struct net_if *dect_iface)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(dect_iface);
 	struct net_if_ipv6 *dect_ipv6s = dect_iface->config.ip.ipv6;
@@ -475,7 +475,7 @@ void dect_net_l2_addr_util_prefix_replace(
 	}
 }
 
-bool dect_net_l2_util_sink_ipv6_addressing_changed_handle(
+bool dect_net_l2_ipv6_addressing_sink_changed_handle(
 	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
@@ -488,7 +488,7 @@ bool dect_net_l2_util_sink_ipv6_addressing_changed_handle(
 		LOG_DBG("Sink IPv6 prefix added as %s/%d",
 			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
 			ipv6_prefix_config->prefix_len * 8);
-		dect_net_l2_addr_util_global_addr_replace(iface);
+		dect_net_l2_ipv6_global_addressing_replace(iface);
 		dect_net_l2_addr_util_prefix_replace(ctx, iface, ipv6_prefix_config);
 		global_address_changed = true;
 	} else if (ctx->ipv6_prefix_cfg.prefix_len > 0 &&
@@ -523,7 +523,7 @@ bool dect_net_l2_util_sink_ipv6_addressing_changed_handle(
 			ctx->ipv6_prefix_cfg.prefix_len * 8,
 			net_sprint_ipv6_addr(&ipv6_prefix_config->prefix),
 			ipv6_prefix_config->prefix_len * 8);
-		dect_net_l2_addr_util_global_addr_replace(iface);
+		dect_net_l2_ipv6_global_addressing_replace(iface);
 		dect_net_l2_addr_util_prefix_replace(ctx, iface, ipv6_prefix_config);
 		global_address_changed = true;
 	} else {
