@@ -455,7 +455,7 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 	int ret;
 	struct nrf_modem_dect_mac_association_params mdm_params;
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-	struct nrf_modem_dect_mac_tx_flow_config flow_config[6];
+	struct nrf_modem_dect_mac_tx_flow_config flow_config[1];
 
 	/* Association req only with PT devices,
 	 * TODO: should it be accepted also with FT? mdm seems to accept also when beacon running
@@ -471,12 +471,9 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 
 	mdm_params.info_triggers.num_beacon_rx_failures = 2;
 
-	/* TODO: from settings or from command params? */
 	flow_config[0].flow_id = 1;
-	flow_config[0].priority = 1;
 	flow_config[0].dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3;
-	flow_config[0].dlc_sdu_lifetime = 255;
-
+	flow_config[0].dlc_sdu_lifetime = NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S;
 	mdm_params.tx_flow_configs = flow_config;
 
 	ret = dect_nrf91_ctrl_api_associate_req_cmd(&mdm_params);
@@ -686,8 +683,6 @@ static int dect_nrf91_driver_settings_write(const struct device *dev,
 /**************************************************************************************************/
 static K_MUTEX_DEFINE(send_buf_lock); /* Only one TX requests at a time */
 
-#define NRF91_DECT_UL_BUFFER_SIZE DECT_NRP_MTU
-
 #if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
 /* We are using handle as array index */
 BUILD_ASSERT(DECT_MAC_DATA_TX_HANDLE_COUNT == DECT_NRF91_DLC_DATA_INFO_MAX_COUNT,
@@ -746,8 +741,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 		tx_params.data_len = data_len;
 		tx_params.long_rd_id = target_long_rd_id;
 		tx_params.flow_id = 1;
-		tx_params.transaction_id =
-			transaction_id++; /* TODO transaction_id handling to ctrl side */
+		tx_params.transaction_id = transaction_id++;
 
 		while (retry_count < 20 &&
 		       data_sent == false) { /* TODO: time (with Kconfig) instead of count */

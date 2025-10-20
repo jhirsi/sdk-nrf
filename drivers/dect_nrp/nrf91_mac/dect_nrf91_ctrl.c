@@ -1042,29 +1042,18 @@ static void dect_mac_ctrl_trigger_association(void)
 	LOG_INF("  transmitter id (long RD ID)....................%u (0x%08x)",
 		ctrl_data.ass_config.parent_long_rd_id, ctrl_data.ass_config.parent_long_rd_id);
 
-	struct nrf_modem_dect_mac_tx_flow_config flow_config[3] = {
+	struct nrf_modem_dect_mac_tx_flow_config flow_config[1] = {
 		{
 			.flow_id = 1,
 			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
 			.dlc_sdu_lifetime = NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
-		},
-		{ /* TODO: onko turhia? */
-			.flow_id = 2,
-			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-			.dlc_sdu_lifetime = 255,
-		},
-		{
-			.flow_id = 3,
-			.priority = 3,
-			.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-			.dlc_sdu_lifetime = 255,
-		},
+		}
 	};
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 	struct nrf_modem_dect_mac_association_params params = {
 		.long_rd_id = ctrl_data.ass_config.parent_long_rd_id,
 		.network_id = ctrl_data.ass_config.network_id,
-		.num_flows = 3,
+		.num_flows = 1,
 		.tx_flow_configs = flow_config,
 		.info_triggers.num_beacon_rx_failures =
 			set_ptr->net_mgmt_common.association.max_beacon_rx_failures,
