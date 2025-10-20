@@ -233,8 +233,9 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 {
 	bool cont = false;
 	const struct dect_nrf91_ctrl_rssi_scan_result_data *current_best = NULL;
+	int max_index = ctrl_data.rssi_scan_data.current_results_index;
 
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -259,7 +260,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 	/* 1st: if any channel where all subslots are "free", is found:
 	 * Note: we have some extra checks here to search the best of "all free"
 	 */
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -269,7 +270,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 			goto exit;
 		}
 	}
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -279,7 +280,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 			goto exit;
 		}
 	}
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -288,7 +289,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 			goto exit;
 		}
 	}
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -297,7 +298,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 			goto exit;
 		}
 	}
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -310,7 +311,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 	/* 2nd: select the channel that has the lowest number of "busy" subslots */
 	uint8_t min_busy_subslots = UINT8_MAX;
 
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -322,7 +323,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 	uint16_t same_best_busy_subslots_count = 0;
 	uint16_t best_possible_subslots_count = 10000; /* Lower the better */
 
-	for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+	for (int i = 0; i < max_index; i++) {
 		const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 			&ctrl_data.rssi_scan_data.results[i];
 
@@ -333,7 +334,7 @@ static bool dect_nrf91_ctrl_rssi_scan_data_results_best_get(
 	/* if multiple channels or consecutive channels have the same number of "busy" subslots: */
 	if (same_best_busy_subslots_count > 1) {
 		/* 2b: then select the channel that has the lowest number of "possible" subslots */
-		for (int i = 0; i < DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS; i++) {
+		for (int i = 0; i < max_index; i++) {
 			const struct dect_nrf91_ctrl_rssi_scan_result_data *res =
 				&ctrl_data.rssi_scan_data.results[i];
 
