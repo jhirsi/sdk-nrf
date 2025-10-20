@@ -74,8 +74,6 @@ typedef struct {
 	bool auto_start;
 	bool auto_activate;
 
-	int8_t expected_mcs1_rx_rssi_level;
-
 	int8_t tx_pwr;
 	uint8_t tx_mcs;
 	uint8_t band;

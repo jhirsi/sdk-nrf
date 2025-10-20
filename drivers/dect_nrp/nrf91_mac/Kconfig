@@ -13,6 +13,14 @@ config DECT_NRP_MAC_NRF
 
 if DECT_NRP_MAC_NRF
 
+config DECT_NRP_MAC_NRF_RX_MCS1_EXPECTED_RSSI_LEVEL
+	int "Expected RSSI level for MCS1"
+	default -68
+	range -128 0
+	help
+	  RX RSSI level for power control in modem, value in dBm.
+	  Device expects to receive transmissions (MCS#1) at this RSSI level.
+
 config NET_LINK_ADDR_CUSTOM_LENGTH
 	int "Size of custom link layer address length for DECT NR+"
 	default 8

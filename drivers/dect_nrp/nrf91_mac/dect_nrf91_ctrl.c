@@ -437,7 +437,7 @@ static int dect_nrf91_ctrl_configure_cmd(dect_nrf91_ctrl_configure_params_t *par
 
 	struct nrf_modem_dect_control_configure_params config = {
 		.max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(params->tx_pwr),
-		.expected_mcs1_rx_rssi_level = -70, /* TODO: setting? */
+		.expected_mcs1_rx_rssi_level = CONFIG_DECT_NRP_MAC_NRF_RX_MCS1_EXPECTED_RSSI_LEVEL,
 		.max_mcs = params->tx_mcs,
 		.long_rd_id = params->long_rd_id,
 		.phy_band_group_index = params->band_group_index,
