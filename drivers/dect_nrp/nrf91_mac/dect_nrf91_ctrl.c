@@ -417,7 +417,8 @@ static int dect_nrf91_ctrl_msgq_non_data_op_add(dect_nrf91_ctrl_op_t event_id)
 	return 0;
 }
 
-static int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size)
+static int dect_nrf91_ctrl_msgq_data_op_add(
+	dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size)
 {
 	int ret = 0;
 	struct dect_mac_common_op_event_msgq_item event;
@@ -2162,17 +2163,14 @@ send_events:
 							evt_data->status));
 				} else if (ctrl_data.ft_nw_beacon_state ==
 					   CTRL_FT_NW_BEACON_STATE_STARTING) {
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
 					dect_mgmt_nw_beacon_start_evt(
 						ctrl_data.iface,
 						dect_nrf91_utils_modem_status_to_net_mgmt_status(
 							evt_data->status));
 
-					/* TODO: cluster is still running*/
+					/* Eventhough nw beacon failed, cluster is still running*/
 					if (ctrl_data.ft_network_state ==
 					    CTRL_FT_NETWORK_STATE_STARTING) {
-						ctrl_data.ft_network_state =
-							CTRL_FT_NETWORK_STATE_CREATED;
 						dect_mgmt_network_status_evt(
 							ctrl_data.iface,
 							(struct dect_network_status_evt){
@@ -2182,6 +2180,7 @@ send_events:
 						LOG_WRN("Network beacon start failed, "
 							"but cluster is still running");
 					}
+					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
 				}
 				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
 			} else {
