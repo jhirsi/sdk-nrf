@@ -139,10 +139,6 @@ static K_WORK_DEFINE(shadow_update_work, nrf_cloud_update_shadow_work_fn);
 
 static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 {
-#if RM_JH
-	const int reconnection_delay = 10;
-#endif
-
 	switch (evt->type) {
 	case NRF_CLOUD_EVT_TRANSPORT_CONNECTED:
 		desh_print("nRF Cloud event: NRF_CLOUD_EVT_TRANSPORT_CONNECTED");

@@ -3,11 +3,22 @@
 #
 # SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
 
-#TODO: poor name for the feature that is custom cmng that stores credentials to settings?
 config DESH_NATIVE_TLS
-	bool "Custom AT%CMNG command to store credentials"
+	bool "Custom AT%CMNG command to store credentials for native TLS to settings"
+	depends on SETTINGS
 	default n
 	select AT_CMD_CUSTOM
+	help
+	  Enable custom AT%CMNG command to store TLS credentials to settings
+	  for native TLS usage.
+	  When enabled, the AT%CMNG command can be used to store TLS credentials
+	  (CA certificate, client certificate, private key) to the settings
+	  storage, from where native TLS (Mbed TLS) can load them when
+	  establishing a TLS connection.
+	  Note: This feature requires SETTINGS to be enabled and as a default in desh, settings
+	  is unsecured storage, this feature should not be used in production
+	  devices without adding additional security to protect the
+	  stored credentials.
 
 if DESH_NATIVE_TLS
 
