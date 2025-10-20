@@ -624,37 +624,37 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 		break;
 	}
 	case NET_EVENT_DECT_NETWORK_STATUS: {
-		desh_print("NET_EVENT_DECT_NETWORK_STATUS");
+		desh_print("NET_EVENT_DECT_NETWORK_STATUS:");
 		const struct dect_network_status_evt *evt =
 			(const struct dect_network_status_evt *)cb->info;
 
 		switch (evt->network_status) {
 		case DECT_NETWORK_STATUS_FAILURE:
 			if (evt->dect_err_cause == DECT_MAC_STATUS_OS_ERROR) {
-				desh_warn("Network status: failure (OS error %d)",
+				desh_warn("  Network status: failure (OS error %d)",
 					  evt->os_err_cause);
 			} else {
 				dect_shell_util_mac_error_to_string(evt->dect_err_cause, err_str,
 								    sizeof(err_str));
 
-				desh_warn("Network status: failure %d (%s)", evt->dect_err_cause,
+				desh_warn("  Network status: failure %d (%s)", evt->dect_err_cause,
 					  err_str);
 			}
 			break;
 		case DECT_NETWORK_STATUS_CREATED:
-			desh_print("Network status: created");
+			desh_print("  Network status: created");
 			break;
 		case DECT_NETWORK_STATUS_REMOVED:
-			desh_print("Network status: removed");
+			desh_print("  Network status: removed");
 			break;
 		case DECT_NETWORK_STATUS_JOINED:
-			desh_print("Network status: joined");
+			desh_print("  Network status: joined");
 			break;
 		case DECT_NETWORK_STATUS_UNJOINED:
-			desh_print("Network status: unjoined");
+			desh_print("  Network status: unjoined");
 			break;
 		default:
-			desh_error("Unknown network status: %d", evt->network_status);
+			desh_error("  Unknown network status: %d", evt->network_status);
 			break;
 		}
 		break;
