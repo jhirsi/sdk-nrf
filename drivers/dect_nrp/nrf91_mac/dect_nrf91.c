@@ -342,7 +342,7 @@ static void dect_nrf91_iface_init(struct net_if *iface)
 		LOG_ERR("%s: cannot set link addr: %d", (__func__), err);
 		return;
 	}
-	err = net_if_set_name(ctx->iface, "nrf91_dect");
+	err = net_if_set_name(ctx->iface, CONFIG_DECT_NRP_MAC_DEVICE_NAME);
 	if (err) {
 		LOG_WRN("%s: could not set interface name", (__func__));
 	}
@@ -903,7 +903,7 @@ static const struct dect_nrp_hal_api dect_nrf91_api = {
 	.network_unjoin_req = dect_nrf91_ctrl_network_unjoin_req,
 };
 
-NET_DEVICE_INIT(nrf91_dect_mac_driver, "nrf91_dect_mac_driver", dect_nrf91_init, NULL,
+NET_DEVICE_INIT(nrf91_dect_mac_driver, CONFIG_DECT_NRP_MAC_DEVICE_NAME, dect_nrf91_init, NULL,
 		&dect_nrf91_mac_dev_context_data, NULL, CONFIG_KERNEL_INIT_PRIORITY_DEVICE,
 		&dect_nrf91_api, DECT_L2, NET_L2_GET_CTX_TYPE(DECT_L2), DECT_NRP_MTU);
 

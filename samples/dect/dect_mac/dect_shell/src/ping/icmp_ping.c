@@ -565,9 +565,10 @@ void icmp_ping_cmd_defaults_set(struct icmp_ping_shell_cmd_argv *ping_args)
 	ping_args->len = ICMP_PARAM_LENGTH_DEFAULT;
 
 	ping_args->ping_iface = net_if_get_by_index(
-		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
+		net_if_get_by_name(CONFIG_DECT_NRP_MAC_DEVICE_NAME));
 	if (!ping_args->ping_iface) {
-		desh_error("%s: Interface nrf91_dect not found", (__func__));
+		desh_error("%s: Interface %s not found", (__func__),
+			CONFIG_DECT_NRP_MAC_DEVICE_NAME);
 	}
 }
 

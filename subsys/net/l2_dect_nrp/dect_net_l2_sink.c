@@ -439,10 +439,10 @@ static int dect_net_l2_sink_init(void)
 	LOG_INF("Ethernet interface found for sink");
 #endif
 	iface_for_dect = net_if_get_by_index(
-		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
-
+		net_if_get_by_name(CONFIG_DECT_NRP_MAC_DEVICE_NAME));
 	if (!iface_for_dect) {
-		LOG_ERR("%s: interface nrf91_dect not found", (__func__));
+		LOG_ERR("%s: interface %s not found", (__func__),
+			CONFIG_DECT_NRP_MAC_DEVICE_NAME);
 	}
 
 #if defined(CONFIG_MODEM_CELLULAR)

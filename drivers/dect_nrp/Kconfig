@@ -21,6 +21,13 @@ choice DECT_NRP_MAC_DRIVER
 		bool "nrf91 mac driver"
 endchoice
 
+config DECT_NRP_MAC_DEVICE_NAME
+	string "DECT NR+ modem mac device name"
+	default "DECT_NRP_NRF91" if DECT_NRP_MAC_DRIVER_NRF
+	default "NONE" if !DECT_NRP_MAC_DRIVER_NRF
+	help
+	  DECT NR+ modem mac device name.
+
 choice DECT_NRP_MAC_DEFAULT_DEV_TYPE
 	prompt "Select default device type"
 	default DECT_NRP_MAC_DEFAULT_DEV_TYPE_PT
@@ -78,6 +85,9 @@ source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
 #Include vendor specifics
 if DECT_NRP_MAC_DRIVER_NRF
+
+
+
 rsource "nrf91_mac/Kconfig"
 endif # DECT_NRP_MAC_DRIVER_NRF
 endif # DECT_NRP_MAC

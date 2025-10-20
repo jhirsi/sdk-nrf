@@ -344,9 +344,9 @@ int auto_connect_init(void)
 #endif
 	context.connected = false;
 	context.iface = net_if_get_by_index(
-		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
+		net_if_get_by_name(CONFIG_DECT_NRP_MAC_DEVICE_NAME));
 	if (!context.iface) {
-		printk("Interface nrf91_dect not found\n");
+		printk("Interface %s not found\n", CONFIG_DECT_NRP_MAC_DEVICE_NAME);
 	}
 
 	/* Settings init */

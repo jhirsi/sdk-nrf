@@ -122,10 +122,11 @@ static int dect_nrf91_sink_init(void)
 	memset(ctx, 0, sizeof(*ctx));
 
 	ctx->iface_for_dect = net_if_get_by_index(
-		net_if_get_by_name("nrf91_dect")); /* TODO: kconfig for the used name */
+		net_if_get_by_name(CONFIG_DECT_NRP_MAC_DEVICE_NAME));
 
 	if (!ctx->iface_for_dect) {
-		LOG_ERR("%s: interface nrf91_dect not found", (__func__));
+		LOG_ERR("%s: interface %s not found", (__func__),
+			CONFIG_DECT_NRP_MAC_DEVICE_NAME);
 	}
 
 	net_mgmt_init_event_callback(&dect_nrf91_net_mgmt_ipv6_event_cb,
