@@ -12,6 +12,8 @@
 
 #include "dect_nrf91_common.h"
 
+#define NRF91_DECT_UL_BUFFER_SIZE DECT_NRP_MTU
+
 #define DECT_MAC_DATA_TX_HANDLE_START 1000
 #define DECT_MAC_DATA_TX_HANDLE_END   1039
 #define DECT_MAC_DATA_TX_HANDLE_IN_RANGE(x)                                                        \
@@ -21,7 +23,7 @@
 
 typedef enum {
 	DECT_NRF91_CTRL_OP_MDM_CAPABILITIES,
-	DECT_NRF91_CTRL_OP_MDM_CONFIGURED,
+	DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP,
 	DECT_NRF91_CTRL_OP_MDM_CFUN_RESP,
 	DECT_NRF91_CTRL_OP_MDM_ACTIVATED,
 	DECT_NRF91_CTRL_OP_MDM_DEACTIVATED,
@@ -58,37 +60,10 @@ typedef enum {
 	DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_RESP,
 	DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED,
 } dect_nrf91_ctrl_op_t;
-
-typedef enum {
-	DECT_NRF91_CTRL_DEVICE_TYPE_FT,
-	DECT_NRF91_CTRL_DEVICE_TYPE_PT,
-	DECT_NRF91_CTRL_DEVICE_TYPE_NA,
-} dect_nrf91_ctrl_device_type_t;
-
-/* TODO: use nrf_modem_dect_control_configure_params directly? */
-typedef struct {
-	dect_nrf91_ctrl_device_type_t device_type;
-	bool debug;
-
-	bool power_save;
-	bool auto_start;
-	bool auto_activate;
-
-	int8_t tx_pwr;
-	uint8_t tx_mcs;
-	uint8_t band;
-	uint8_t band_group_index;
-
-	uint16_t channel;
-
-	uint32_t long_rd_id;
-	uint32_t network_id;
-} dect_nrf91_ctrl_configure_params_t;
-
 typedef struct {
 	uint8_t flow_id;
 
-	uint8_t data[1280];
+	uint8_t data[DECT_NRP_MTU];
 	uint32_t data_len;
 	uint32_t long_rd_id;
 	uint32_t transaction_id;
@@ -102,42 +77,15 @@ struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr {
 	struct net_pkt *pkt;
 };
 
-struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item {
-	uint32_t transaction_id;
-};
 
 #define DECT_NRF91_DLC_DATA_INFO_MAX_COUNT 40
-
-struct dect_nrf91_ctrl_dlc_data_tx_resp_evt {
-	enum nrf_modem_dect_mac_err status;
-	uint8_t flow_id;
-	uint32_t long_rd_id;
-
-	uint8_t num_acked_data;
-#if defined(CONFIG_DECT_NRP_MAC_MDM_BUNDLED_TX_RESPS)
-	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item
-		acked_data[DECT_NRF91_DLC_DATA_INFO_MAX_COUNT];
-#else
-	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item acked_data[1];
-#endif
-};
-
-#define DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT 50
-struct dect_nrf91_ctrl_neighbor_list_resp_evt {
-	int status;
-	uint8_t num_neighbors;
-	uint32_t neighbor_long_rd_ids[DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT];
-};
-
 #define DECT_NRF91_RSSI_MEAS_ARR_SIZE (DECT_NRP_RSSI_MEAS_SUBSLOT_COUNT / 8)
-struct dect_nrf91_ctrl_rssi_measurement_data_evt {
-	struct nrf_modem_dect_mac_rssi_result rssi_result;
-};
 
 #include <dect_net_l2_mgmt.h>
 
 /* Internal DECT NR+ ctrl api:
- * All of these that return integer returns 0 if success and negative on error
+ * Unless otherwise stated, all of these that return integer returns 0 if success
+ * and negative on error.
  */
 
 int dect_nrf91_ctrl_api_mdm_configure_n_activate(void);
@@ -148,8 +96,12 @@ bool dect_nrf91_ctrl_api_mdm_activated(void);
 
 int dect_nrf91_ctrl_api_mdm_reactivate(void);
 
-int dect_nrf91_ctrl_api_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
-				struct net_if *iface, dect_scan_result_cb_t cb);
+int dect_nrf91_ctrl_api_rssi_scan_start_cmd(struct nrf_modem_dect_mac_rssi_scan_params *params);
+
+int dect_nrf91_ctrl_api_nw_scan_cmd(
+	struct nrf_modem_dect_mac_network_scan_params *params,
+	dect_scan_result_cb_t cb);
+
 int dect_nrf91_ctrl_api_tx_cmd(dect_nrf91_ctrl_api_tx_cmd_params_t *params);
 int dect_nrf91_ctrl_api_associate_req_cmd(struct nrf_modem_dect_mac_association_params *params);
 int dect_nrf91_ctrl_api_associate_release_cmd(
@@ -178,9 +130,9 @@ int dect_nrf91_ctrl_api_neighbor_list_req_cmd(void);
 
 int dect_nrf91_ctrl_api_init(struct net_if *iface);
 
+/** Get a reference to the DECT modem capabilities notification callback parameters
+ * @return Pointer to the capabilities notification callback parameters
+ */
 struct nrf_modem_dect_mac_capability_ntf_cb_params *dect_nrf91_ctrl_api_mdm_capabilities_ref_get(void);
-
-/* TODO: to be private for ctrl module? */
-int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size);
 
 #endif /* DECT_NRF91_CTRL_H */

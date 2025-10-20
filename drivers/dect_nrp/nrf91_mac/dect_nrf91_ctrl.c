@@ -21,7 +21,7 @@
 
 #include <net/dect_nrp_utils.h>
 
-#include "dect_net_l2_mgmt.h"
+#include <dect_net_l2_mgmt.h>
 
 #include "dect_nrf91_common.h"
 #include "dect_nrf91_utils.h"
@@ -133,6 +133,25 @@ struct dect_nrf91_ctrl_dlc_data_tx_info {
 	bool req_on_going;
 };
 
+typedef struct {
+	bool debug;
+
+	bool power_save;
+	bool auto_start;
+	bool auto_activate;
+
+	int8_t tx_pwr;
+	uint8_t tx_mcs;
+	uint8_t band;
+	uint8_t band_group_index;
+
+	uint16_t channel;
+
+	uint32_t long_rd_id;
+	uint32_t network_id;
+} dect_nrf91_ctrl_configure_params_t;
+
+
 /* States of all commands */
 /* TODO: better hierarchy for state data? */
 static struct dect_nrf91_ctrl_data {
@@ -168,6 +187,36 @@ static struct dect_nrf91_ctrl_data {
 #endif
 	struct net_if *iface;
 } ctrl_data;
+
+/**************************************************************************************************/
+
+struct dect_nrf91_ctrl_rssi_measurement_data_evt {
+	struct nrf_modem_dect_mac_rssi_result rssi_result;
+};
+
+#define DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT 50
+struct dect_nrf91_ctrl_neighbor_list_resp_evt {
+	int status;
+	uint8_t num_neighbors;
+	uint32_t neighbor_long_rd_ids[DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT];
+};
+
+struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item {
+	uint32_t transaction_id;
+};
+struct dect_nrf91_ctrl_dlc_data_tx_resp_evt {
+	enum nrf_modem_dect_mac_err status;
+	uint8_t flow_id;
+	uint32_t long_rd_id;
+
+	uint8_t num_acked_data;
+#if defined(CONFIG_DECT_NRP_MAC_MDM_BUNDLED_TX_RESPS)
+	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item
+		acked_data[DECT_NRF91_DLC_DATA_INFO_MAX_COUNT];
+#else
+	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item acked_data[1];
+#endif
+};
 
 /**************************************************************************************************/
 
@@ -353,7 +402,7 @@ struct dect_mac_common_op_event_msgq_item {
 K_MSGQ_DEFINE(dect_nrf91_ctrl_msgq, sizeof(struct dect_mac_common_op_event_msgq_item), 1000,
 	      4); /* TODO optimize sizes */
 
-int dect_nrf91_ctrl_msgq_non_data_op_add(dect_nrf91_ctrl_op_t event_id)
+static int dect_nrf91_ctrl_msgq_non_data_op_add(dect_nrf91_ctrl_op_t event_id)
 {
 	int ret = 0;
 	struct dect_mac_common_op_event_msgq_item event;
@@ -368,7 +417,7 @@ int dect_nrf91_ctrl_msgq_non_data_op_add(dect_nrf91_ctrl_op_t event_id)
 	return 0;
 }
 
-int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size)
+static int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size)
 {
 	int ret = 0;
 	struct dect_mac_common_op_event_msgq_item event;
@@ -473,7 +522,6 @@ static int dect_nrf91_ctrl_modem_configure_req_from_settings(void)
 	}
 	params.long_rd_id = set_ptr->net_mgmt_common.identities.transmitter_long_rd_id;
 	params.network_id = set_ptr->net_mgmt_common.identities.network_id;
-	params.device_type = set_ptr->net_mgmt_common.device_type;
 	params.band = set_ptr->net_mgmt_common.band_nbr;
 	params.band_group_index = 0;
 	if (params.band == 4) {
@@ -599,9 +647,24 @@ int dect_nrf91_ctrl_api_mdm_reactivate(void)
 
 /**************************************************************************************************/
 
-int dect_nrf91_ctrl_api_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_params *params,
-				struct net_if *iface,
-				dect_scan_result_cb_t cb) /* TODO: iface? kun on jo initissä */
+int dect_nrf91_ctrl_api_rssi_scan_start_cmd(struct nrf_modem_dect_mac_rssi_scan_params *params)
+{
+	if (ctrl_data.rssi_scan_data.cmd_on_going) {
+		LOG_ERR("RSSI scan already on going");
+		return -EALREADY;
+	}
+	int err = dect_nrf91_ctrl_msgq_data_op_add(
+		DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD,
+		params,
+		sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
+
+	return err;
+}
+
+/**************************************************************************************************/
+
+int dect_nrf91_ctrl_api_nw_scan_cmd(
+	struct nrf_modem_dect_mac_network_scan_params *params, dect_scan_result_cb_t cb)
 {
 	if (ctrl_data.scan_data.on_going) {
 		LOG_ERR("Network scan already on going");
@@ -614,11 +677,9 @@ int dect_nrf91_ctrl_api_nw_scan_cmd(struct nrf_modem_dect_mac_network_scan_param
 		ctrl_data.scan_data.scan_result_cb = cb;
 		ctrl_data.scan_data.scan_params = *params;
 		memset(ctrl_data.scan_data.cluster_channels, 0,
-		     sizeof(ctrl_data.scan_data.cluster_channels));
+		       sizeof(ctrl_data.scan_data.cluster_channels));
 		ctrl_data.scan_data.current_cluster_channel_index = 0;
-		ctrl_data.iface = iface;
 	}
-
 	return err;
 }
 
@@ -1049,7 +1110,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			ctrl_data.mdm_capas = *evt_data;
 			break;
 		}
-		case DECT_NRF91_CTRL_OP_MDM_CONFIGURED: {
+		case DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP: {
 			enum nrf_modem_dect_mac_err *status =
 				(enum nrf_modem_dect_mac_err *)event.data;
 
@@ -3002,7 +3063,7 @@ dect_nrf91_ctrl_mdm_cfun_cb(struct nrf_modem_dect_mac_control_functional_mode_cb
 static void
 dect_nrf91_ctrl_mdm_configure_cb(struct nrf_modem_dect_mac_control_configure_cb_params *params)
 {
-	dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_MDM_CONFIGURED, &params->status,
+	dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP, &params->status,
 					 sizeof(params->status));
 }
 
@@ -3373,6 +3434,7 @@ NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_on_modem_li
 
 int dect_nrf91_ctrl_api_init(struct net_if *iface)
 {
+	__ASSERT_NO_MSG(iface);
 	memset(&ctrl_data, 0, sizeof(struct dect_nrf91_ctrl_data));
 
 	ctrl_data.iface = iface;

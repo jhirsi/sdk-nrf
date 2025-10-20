@@ -393,13 +393,11 @@ static int dect_nrf91_driver_rssi_scan(const struct device *dev,
 		scan_params.channel_list[i] = params->channel_list[i];
 	}
 
-	err = dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD,
-					       &scan_params,
-					       sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
+	err = dect_nrf91_ctrl_api_rssi_scan_start_cmd(&scan_params);
 	if (err) {
-		LOG_ERR("%s: error initiating in RSSI scan: err %d", (__func__), err);
+		LOG_ERR("Error initiating RSSI scan: err %d", err);
 	} else {
-		LOG_INF("%s: RSSI scan initiated", (__func__));
+		LOG_INF("RSSI scan initiated");
 	}
 
 	return err;
@@ -439,8 +437,7 @@ static int dect_nrf91_driver_scan(const struct device *dev, struct dect_scan_par
 		scan_params.channel_list[i] = params->channel_list[i];
 	}
 
-	err = dect_nrf91_ctrl_api_nw_scan_cmd(
-		&scan_params, dect_nrf91_mac_dev_context_data.iface, cb);
+	err = dect_nrf91_ctrl_api_nw_scan_cmd(&scan_params, cb);
 	if (err) {
 		LOG_ERR("Error initiating in Network scan: err %d", err);
 	} else {

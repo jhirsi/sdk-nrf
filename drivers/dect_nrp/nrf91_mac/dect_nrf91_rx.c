@@ -13,7 +13,9 @@
 
 #include <nrf_modem_dect_mac.h>
 
+#include <dect_net_l2_mgmt.h>
 #include <net/dect_nrp_utils.h>
+
 
 #include "dect_nrf91_common.h"
 #include "dect_nrf91_ctrl.h"
