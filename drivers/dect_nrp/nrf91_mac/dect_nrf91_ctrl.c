@@ -368,15 +368,6 @@ int dect_nrf91_ctrl_msgq_non_data_op_add(dect_nrf91_ctrl_op_t event_id)
 	return 0;
 }
 
-#ifdef RM_JH
-static int dect_nrf91_ctrl_msgq_non_data_op_add_delayed(dect_nrf91_ctrl_op_t event_id,
-							k_timeout_t delay)
-{
-	k_sleep(delay);
-	return dect_nrf91_ctrl_msgq_non_data_op_add(event_id);
-}
-#endif
-
 int dect_nrf91_ctrl_msgq_data_op_add(dect_nrf91_ctrl_op_t event_id, void *data, size_t data_size)
 {
 	int ret = 0;
@@ -3194,33 +3185,13 @@ dect_nrf91_ctrl_mdm_dlc_data_rx_ntf_cb(struct nrf_modem_dect_dlc_data_rx_ntf_cb_
 static void dect_nrf91_ctrl_mdm_dlc_data_tx_cb(struct nrf_modem_dect_dlc_data_tx_cb_params *params)
 {
 	struct dect_nrf91_ctrl_dlc_data_tx_resp_evt evt_data;
-#if RM_JH
-	printk("DLC Data TX completed, receiver: 0x%X, flow ID: %hhu, status: %u\n",
-	       params->long_rd_id, params->flow_id, params->status);
-	for (int i = 0; i < params->num_transaction_ids; i++) {
-		printk("  ID #%d: %d\n", i + 1, params->transaction_ids[i]);
-	}
-#endif
-#if defined(CONFIG_DECT_NRP_MAC_NRF_MDM_BUNDLED_TX_RESPS)
-	evt_data.status = params->status;
-	evt_data.long_rd_id = params->long_rd_id;
-	evt_data.flow_id = params->flow_id;
-	evt_data.num_acked_data = params->num_transaction_ids;
-	for (int i = 0; i < params->num_transaction_ids; i++) {
-		if (i >= DECT_NRF91_DLC_DATA_INFO_MAX_COUNT) {
-			printk("Too many transaction IDs, only first %d will be used\n",
-			       DECT_NRF91_DLC_DATA_INFO_MAX_COUNT);
-			break;
-		}
-		evt_data.acked_data[i].transaction_id = params->transaction_ids[i];
-	}
-#else
+
 	evt_data.status = params->status;
 	evt_data.long_rd_id = params->long_rd_id;
 	evt_data.flow_id = params->flow_id;
 	evt_data.num_acked_data = 1;
 	evt_data.acked_data[0].transaction_id = params->transaction_id;
-#endif
+
 	dect_nrf91_ctrl_msgq_data_op_add(DECT_NRF91_CTRL_OP_MDM_DLC_DATA_RESP, &evt_data,
 					 sizeof(struct dect_nrf91_ctrl_dlc_data_tx_resp_evt));
 }

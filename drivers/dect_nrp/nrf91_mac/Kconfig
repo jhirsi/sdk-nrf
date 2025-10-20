@@ -36,12 +36,6 @@ config DECT_NRP_MAC_NRF_RX_THREAD_STACK_SIZE
 	help
 	  This option sets the driver's stack size for its internal RX thread.
 
-config DECT_NRP_MAC_NRF_MDM_BUNDLED_TX_RESPS
-	bool "Modem sending bundled TX resps"
-	default n
-	help
-	  Enable bundled TX resps from modem. Needs custom mfw. To be removed?
-
 endif # DECT_NRP_MAC_NRF
 
 endmenu
