@@ -86,6 +86,8 @@ static struct dect_nrf91_settings settings_data = settings_data_defaults;
 
 LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
+BUILD_ASSERT(CONFIG_DECT_NRP_MAC_RANDOM_RANGE_END > CONFIG_DECT_NRP_MAC_RANDOM_RANGE_START);
+
 static void dect_nrf91_settings_tx_id_default_set(void)
 {
 	if (settings_data.net_mgmt_common.identities.transmitter_long_rd_id ==
@@ -97,12 +99,14 @@ static void dect_nrf91_settings_tx_id_default_set(void)
 			new_tx_id = CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID;
 		} else {
 			/* MAC spec: 4.2.3.2: long rd id is in range of 0x00000001-0xFFFFFFFD */
-			/* TODO: have a configurable range */
 			uint32_t random_value = sys_rand32_get();
 
 			__ASSERT_NO_MSG(
 				IS_ENABLED(CONFIG_DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_RANDOM));
-			random_value = (random_value % 0xFFFFFFFD) + 1;
+			random_value =
+				(random_value % (CONFIG_DECT_NRP_MAC_RANDOM_RANGE_END -
+						 CONFIG_DECT_NRP_MAC_RANDOM_RANGE_START + 1)) +
+				CONFIG_DECT_NRP_MAC_RANDOM_RANGE_START;
 			new_tx_id = random_value;
 		}
 		/* Write defaults */

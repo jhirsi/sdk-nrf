@@ -66,6 +66,20 @@ config DECT_NRP_MAC_DEFAULT_LONG_RD_ID
 	help
 	  Default long rd id used if DECT_NRP_MAC_DEFAULT_LONG_RD_ID_TYPE_HARD_CODED is selected.
 
+config DECT_NRP_MAC_RANDOM_RANGE_START
+	int "Random long rd id range start"
+	range 1 4294967293
+	default 1
+	help
+	  Random long rd id range start.
+
+config DECT_NRP_MAC_RANDOM_RANGE_END
+	int "Random long rd id range end"
+	range 1 4294967293
+	default 4294967293
+	help
+	  Random long rd id range end.
+
 config DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT
 	int "Maximum number of associations"
 	default 50
