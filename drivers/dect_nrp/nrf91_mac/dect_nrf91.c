@@ -34,7 +34,7 @@ struct dect_nrf91_mac_dev_context {
 
 	struct dect_nrf91_association_data
 		child_associations[CONFIG_DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT];
-	struct dect_nrf91_association_data parent_associations[1]; /* TODO: magic */
+	struct dect_nrf91_association_data parent_associations[1];
 };
 
 static struct dect_nrf91_mac_dev_context dect_nrf91_mac_dev_context_data;
@@ -457,9 +457,7 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 	struct nrf_modem_dect_mac_tx_flow_config flow_config[1];
 
-	/* Association req only with PT devices,
-	 * TODO: should it be accepted also with FT? mdm seems to accept also when beacon running
-	 */
+	/* Association req only with PT devices */
 	if (set_ptr->net_mgmt_common.device_type != DECT_DEVICE_TYPE_PT) {
 		LOG_ERR("%s: Association request only supported for PT devices", (__func__));
 		return -EINVAL;

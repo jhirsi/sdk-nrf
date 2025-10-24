@@ -3378,9 +3378,6 @@ static void dect_nrf91_ctrl_mac_init(void)
 		printk("Error in callback set, error: %d\n", ret);
 	}
 
-	/* TODO: init need to be changed, we will need to enable also MODE_PHY with dect_shell for
-	 * certification
-	 */
 	ret = nrf_modem_dect_control_systemmode_set(NRF_MODEM_DECT_MODE_MAC);
 	if (ret != 0) {
 		printk("Error in systemmode set, error: %d\n", ret);

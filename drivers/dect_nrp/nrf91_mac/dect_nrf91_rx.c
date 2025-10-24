@@ -5,7 +5,9 @@
  */
 
 #include <zephyr/kernel.h>
+#include <zephyr/net/net_pkt.h>
 #include <zephyr/net/net_if.h>
+#include <zephyr/net/net_ip.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -28,28 +30,21 @@ LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 /**************************************************************************************************/
 
-#include <zephyr/net/net_pkt.h>
-#include <zephyr/net/net_if.h>
-#include <zephyr/net/net_ip.h>
-
-/* TODO: "socket" net context support? see net_pkt_set_context usages
- * or just support for multiple src addresses?
- */
-static struct net_linkaddr ll_src;
-static struct net_linkaddr ll_dst;
-
 static bool dect_nrf91_data_rx_with_pkt_ptr(struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr *params)
 {
+	struct net_linkaddr ll_src;
+	struct net_linkaddr ll_dst;
 	/* Pkt has been allocated and written, now set the addressing part */
 	struct net_pkt *rcv_pkt = params->pkt;
+
 	int ret;
 	bool handled = false;
 
 	__ASSERT_NO_MSG(rcv_pkt != NULL);
 
-	/* TODO: MTU checking?*/
-
-	/* Set ll source and destination addresses based on long RD IDs */
+	/* Set ll source and destination addresses based on long RD IDs:
+	 * src as received and dst as configured in this device for long rd id
+	 */
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
 	dect_nrp_utils_net_linkaddr_set_from_long_rd_id(&ll_src, params->mdm_params.long_rd_id);
