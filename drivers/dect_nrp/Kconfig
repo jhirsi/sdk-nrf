@@ -23,8 +23,8 @@ endchoice
 
 config DECT_NRP_MAC_DEVICE_NAME
 	string "DECT NR+ modem mac device name"
-	default "DECT_NRP_NRF91" if DECT_NRP_MAC_DRIVER_NRF
-	default "NONE" if !DECT_NRP_MAC_DRIVER_NRF
+	default "dect_nrf91" if DECT_NRP_MAC_DRIVER_NRF
+	default "dect_none" if !DECT_NRP_MAC_DRIVER_NRF
 	help
 	  DECT NR+ modem mac device name.
 
