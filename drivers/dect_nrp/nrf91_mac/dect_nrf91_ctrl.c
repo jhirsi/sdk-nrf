@@ -3408,15 +3408,18 @@ struct nrf_modem_dect_mac_capability_ntf_cb_params
 	return &ctrl_data.mdm_capas;
 }
 
+#if defined(CONFIG_TEST)
+void dect_nrf91_ctrl_on_modem_lib_init(int ret, void *ctx)
+#else
+NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_on_modem_lib_init, NULL);
 static void dect_nrf91_ctrl_on_modem_lib_init(int ret, void *ctx)
+#endif
 {
 	ARG_UNUSED(ret);
 	ARG_UNUSED(ctx);
 
 	dect_nrf91_ctrl_mac_init();
 }
-
-NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_on_modem_lib_init, NULL);
 
 int dect_nrf91_ctrl_api_init(struct net_if *iface)
 {
