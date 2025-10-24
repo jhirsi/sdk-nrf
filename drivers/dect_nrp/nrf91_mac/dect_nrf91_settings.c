@@ -148,14 +148,23 @@ static uint16_t dect_nrf91_settings_write_validate(const struct dect_settings *s
 {
 	uint16_t failure_scope_bitmap = 0;
 
-	if (settings_in->identities.transmitter_long_rd_id == DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {
+	/* TODO print settings_in */
+	LOG_INF("Settings in: %d", settings_in->cmd_params.write_scope_bitmap);
+
+	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_IDENTITIES) ||
+	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
+	    settings_in->identities.transmitter_long_rd_id == DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {
 		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_IDENTITIES;
 	}
-	if (dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
+	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_TX) ||
+	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
+		dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
 		    settings_in->tx.max_power_dbm, settings_in->band_nbr) == false) {
 		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_TX;
 	}
-	if (dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
+	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_CLUSTER) ||
+	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
+		dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(
 		    settings_in->cluster.max_beacon_tx_power_dbm, settings_in->band_nbr) == false) {
 		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_CLUSTER;
 	}
