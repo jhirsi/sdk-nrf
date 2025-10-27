@@ -1,0 +1,58 @@
+# SPDX-License-Identifier: Apache-2.0
+# Copyright (c) 2025 Nordic Semiconductor ASA
+#
+# Kconfig for DECT NR+ Integration Tests
+# Provides minimal definitions needed for DECT stack compilation without full modem library
+
+# Define NRF_MODEM_VARIANT_DECT_MAC for DECT driver compilation
+# This is normally defined by the nrf_modem library, but we mock all modem functions
+config NRF_MODEM_VARIANT_DECT_MAC
+	bool "DECT MAC modem variant for testing"
+	default y
+	help
+	  Mock definition of NRF_MODEM_VARIANT_DECT_MAC for DECT driver compilation.
+	  This allows the DECT drivers to compile without requiring the actual modem library.
+	  All nrf_modem_dect_mac.h functions are mocked in the test implementation.
+
+# Enable SETTINGS support needed by DECT drivers
+config SETTINGS
+	bool "Settings subsystem"
+	default y
+	help
+	  Settings support needed by DECT drivers.
+
+# Define DECT_NRP_LIB that is selected by DECT drivers
+config DECT_NRP_LIB
+	bool "DECT NR+ Library support"
+	default y
+	help
+	  Mock DECT NR+ library configuration for testing.
+	  In real builds this would pull in nrfxlib components.
+
+# Modem shared memory configurations needed by MAC drivers
+config NRF_MODEM_LIB_SHMEM_TX_SIZE
+	int "Modem shared memory TX size"
+	default 12288
+	help
+	  Mock definition for modem shared memory TX size.
+	  Used by MAC driver for validation.
+
+config NRF_MODEM_LIB_SHMEM_RX_SIZE
+	int "Modem shared memory RX size"
+	default 6144
+	help
+	  Mock definition for modem shared memory RX size.
+	  Used by MAC driver for validation.
+
+config NRF_MODEM_SHMEM_CTRL_SIZE
+	hex "Modem shared memory control size"
+	default 0x4e8
+	help
+	  Mock definition for modem shared memory control size.
+	  Used by MAC driver for validation.
+
+# Most modem CONFIG values are already defined in the main SDK
+# We only need to ensure they have reasonable defaults for testing
+# The values will be set in prj.conf
+
+source "Kconfig.zephyr"

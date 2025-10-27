@@ -1,0 +1,19 @@
+tests:
+  dect_unity_integration_test:
+    harness: unity
+    tags:
+      - dect
+      - nrp
+      - integration
+      - unity
+      - native_sim
+      - stack_integration
+    platform_allow:
+      - native_sim
+    integration_platforms:
+      - native_sim
+    timeout: 60
+    extra_configs:
+      - CONFIG_UNITY=y
+      - CONFIG_DECT_NRP_MAC=y
+      - CONFIG_DECT_NRP_MAC_DRIVER_NRF=y

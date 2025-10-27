@@ -1,0 +1,18 @@
+# Generated flash simulation file for native_sim target
+# This file simulates flash memory and is created automatically during test execution
+flash.bin
+
+# Build artifacts (if not already covered by parent .gitignore)
+build/
+*.gcno
+*.gcda
+*.gcov
+
+# Test coverage reports
+coverage/
+coverage.info
+*.coverage
+
+# Temporary test files
+*.tmp
+test_output.txt
