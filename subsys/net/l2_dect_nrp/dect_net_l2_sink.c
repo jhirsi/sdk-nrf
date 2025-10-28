@@ -13,10 +13,6 @@
 #include <zephyr/net/conn_mgr_connectivity.h>
 #endif
 
-#if defined(CONFIG_NET_CONNECTION_MANAGER)
-#include <zephyr/net/conn_mgr_monitor.h>
-#endif
-
 #include "route.h"
 #include "ipv6.h"
 
@@ -464,15 +460,7 @@ static int dect_net_l2_sink_init(void)
 			      dect_net_l2_sink_lte_ipv6_nbr_router_deleted_worker);
 #endif
 	k_work_init_delayable(&dect_sink_rs_work, dect_net_l2_sink_rs_work_handler);
-#if defined(CONFIG_NET_CONNECTION_MANAGER)
-	/* conn mgr does not have decent support for multiple interfaces for L4 events,
-	 * thus we want to ignore the sink interface because we want that those
-	 * are served for dect nr+ interface. TODO? we could have a config for this?
-	 */
-	if (iface_for_prefix) {
-		conn_mgr_ignore_iface(iface_for_prefix);
-	}
-#endif
+
 	return 0;
 }
 
