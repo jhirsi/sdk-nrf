@@ -131,6 +131,32 @@ static void auto_connect_work_fn(struct k_work *item)
 K_WORK_DELAYABLE_DEFINE(auto_connect_work, auto_connect_work_fn);
 
 /**************************************************************************************************/
+
+#if defined(CONFIG_DATE_TIME_NTP)
+#include <date_time.h>
+static void date_time_event_handler(const struct date_time_evt *evt)
+{
+	switch (evt->type) {
+	case DATE_TIME_OBTAINED_MODEM:
+		desh_print("DATE_TIME_OBTAINED_MODEM");
+		break;
+	case DATE_TIME_OBTAINED_NTP:
+		desh_print("DATE_TIME_OBTAINED_NTP");
+		break;
+	case DATE_TIME_OBTAINED_EXT:
+		desh_print("DATE_TIME_OBTAINED_EXT");
+		break;
+	case DATE_TIME_NOT_OBTAINED:
+		desh_print("DATE_TIME_NOT_OBTAINED");
+		break;
+	default:
+		break;
+	}
+}
+#endif
+
+/**************************************************************************************************/
+
 #if defined(CONFIG_NET_CONNECTION_MANAGER)
 #define L4_EVENT_MASK                                                                              \
 	(NET_EVENT_L4_CONNECTED | NET_EVENT_L4_DISCONNECTED | NET_EVENT_L4_IPV6_CONNECTED |        \
@@ -143,24 +169,25 @@ static struct net_mgmt_event_callback conn_cb;
 static void l4_event_handler(struct net_mgmt_event_callback *cb, uint64_t event,
 			     struct net_if *iface)
 {
-	if (iface != context.iface) {
-		desh_warn("Received L4 event for an unexpected interface (%p), expected %p", iface,
-			  context.iface);
-		return;
-	}
 	switch (event) {
 	case NET_EVENT_L4_CONNECTED:
 		desh_print("NET_EVENT_L4_CONNECTED: Network connectivity established "
-			   "and global IPv6 address assigned");
+			   "and global IPv6 address assigned, iface %p", iface);
 		break;
 	case NET_EVENT_L4_DISCONNECTED:
-		desh_print("NET_EVENT_L4_DISCONNECTED: IP down");
+		desh_print("NET_EVENT_L4_DISCONNECTED: IP down, iface %p", iface);
 		break;
 	case NET_EVENT_L4_IPV6_CONNECTED:
-		desh_print("NET_EVENT_L4_IPV6_CONNECTED: IPv6 connectivity established");
+		desh_print("NET_EVENT_L4_IPV6_CONNECTED: IPv6 connectivity established, iface %p",
+			iface);
+#if defined(CONFIG_DATE_TIME_NTP)
+		/* Get time over NTP */
+		date_time_update_async(date_time_event_handler);
+#endif
 		break;
 	case NET_EVENT_L4_IPV6_DISCONNECTED:
-		desh_print("NET_EVENT_L4_IPV6_DISCONNECTED: IPv6 connectivity lost");
+		desh_print("NET_EVENT_L4_IPV6_DISCONNECTED: IPv6 connectivity lost, iface %p",
+			iface);
 		break;
 	default:
 		break;
