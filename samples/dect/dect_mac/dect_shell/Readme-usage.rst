@@ -25,7 +25,8 @@ The sample supports the following development kits and requires at least two kit
 Overview
 ********
 
-DeSh enables testing of :ref:`nrf_modem_dect_mac` interface and related modem features.
+DeSh enables testing of DECT NR+ networking stack with :ref:`nrf_modem_dect_mac` interface and
+related modem features.
 This sample is also a test application for aforementioned features.
 
 The subsections list the DeSh features and show shell command examples for their usage.
@@ -48,7 +49,6 @@ Main command structure:
      auto_connect
        enable
        disable
-       delay
        sett_read
      cloud
        connect
@@ -86,6 +86,32 @@ Main command structure:
        timestamps
        cloud (with MQTT)
      version
+
+Quick Start Tutorial
+====================
+
+**Step 1: Basic Two-Device Setup**
+
+Device 1 (FT - Network Creator)::
+
+   dect sett --dev_type FT
+   dect activate
+   dect connect
+   # Wait for "Network status: created" message
+
+Device 2 (PT - Network Joiner)::
+
+   dect sett --dev_type PT
+   dect activate
+   dect connect
+   # Wait for "Network status: joined" message
+
+**Step 2: Verify Connection**
+
+Both devices::
+
+   dect status                          # Should show associations
+   ping -d <neighbor_ipv6_address>      # Test connectivity
 
 Write and read hostname
 ======================
