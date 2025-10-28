@@ -554,28 +554,6 @@ static void dect_net_l2_join_ipv6_mdns_group(struct net_if *iface)
 
 /**************************************************************************************************/
 
-#if defined(CONFIG_DATE_TIME_NTP)
-#include <date_time.h>
-static void date_time_event_handler(const struct date_time_evt *evt)
-{
-	switch (evt->type) {
-	case DATE_TIME_OBTAINED_MODEM:
-		LOG_INF("DATE_TIME_OBTAINED_MODEM");
-		break;
-	case DATE_TIME_OBTAINED_NTP:
-		LOG_INF("DATE_TIME_OBTAINED_NTP");
-		break;
-	case DATE_TIME_OBTAINED_EXT:
-		LOG_INF("DATE_TIME_OBTAINED_EXT");
-		break;
-	case DATE_TIME_NOT_OBTAINED:
-		LOG_INF("DATE_TIME_NOT_OBTAINED");
-		break;
-	default:
-		break;
-	}
-}
-#endif
 
 /**************************************************************************************************/
 
@@ -603,10 +581,6 @@ void dect_net_l2_parent_association_created(
 			net_if_dormant_off(iface);
 
 			dect_net_l2_join_ipv6_mdns_group(iface);
-#if defined(CONFIG_DATE_TIME_NTP)
-			/* Get time over NTP */
-			date_time_update_async(date_time_event_handler);
-#endif
 
 			found = true;
 			break;
