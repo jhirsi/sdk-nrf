@@ -13,7 +13,6 @@ LOG_MODULE_REGISTER(NET_L2_DECT_CONN_MGR, CONFIG_NET_L2_DECT_CONN_MGR_LOG_LEVEL)
 
 static struct net_mgmt_event_callback dect_mgmt_cb;
 static int64_t connection_timeout;
-static bool auto_connect_wait_sink_up;
 
 static int connect(struct net_if *iface)
 {
@@ -133,7 +132,6 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 		if (evt->status == DECT_MAC_STATUS_OK &&
 		    !conn_mgr_if_get_flag(iface, CONN_MGR_IF_NO_AUTO_CONNECT) &&
 		    net_if_is_admin_up(iface) == false) {
-			auto_connect_wait_sink_up = false;
 			ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_READ,
 				       iface, &current_settings, sizeof(current_settings));
 			if (ret) {
@@ -141,27 +139,11 @@ static void dect_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt
 				       "cannot read current settings: %d", ret);
 				break;
 			}
-			if (IS_ENABLED(CONFIG_NET_L2_DECT_BR) &&
-			    current_settings.device_type == DECT_DEVICE_TYPE_FT) {
-				/* For FT with sink/BR support,
-				 * we need to wait until sink BR connection is created
-				 */
-				auto_connect_wait_sink_up = true;
-				LOG_INF("NET_EVENT_DECT_ACTIVATE_DONE: auto connect - wait sink");
-			} else {
-				LOG_INF("NET_EVENT_DECT_ACTIVATE_DONE: auto connect");
-				/* For PT and plain FT, we can start connecting right away */
-				net_if_up(iface);
-			}
-		}
-		break;
-	}
-	case NET_EVENT_DECT_SINK_STATUS: {
-		struct dect_sink_status_evt *evt = (struct dect_sink_status_evt *)cb->info;
-
-		if (auto_connect_wait_sink_up &&
-		    evt->sink_status == DECT_SINK_STATUS_CONNECTED) {
-			auto_connect_wait_sink_up = false;
+			/* Trigger connecting right away, no need to wait if sink is up for FT.
+			 * IPv6 addressing changes are passed on the run later when global
+			 * connectivity.
+			 */
+			LOG_INF("NET_EVENT_DECT_ACTIVATE_DONE: Auto-connecting...");
 			net_if_up(iface);
 		}
 		break;
