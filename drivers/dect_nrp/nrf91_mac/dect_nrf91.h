@@ -26,6 +26,6 @@ void dect_nrf91_child_association_created(uint32_t target_long_rd_id);
 void dect_nrf91_child_association_removed(
 	uint32_t long_rd_id, enum nrf_modem_dect_mac_release_cause rel_cause,
 	bool neighbor_initiated);
-void dect_nrf91_child_association_all_removed(void);
+void dect_nrf91_child_association_all_removed(enum nrf_modem_dect_mac_release_cause rel_cause);
 
 #endif /* DECT_NRF91_H */

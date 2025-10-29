@@ -148,9 +148,6 @@ static uint16_t dect_nrf91_settings_write_validate(const struct dect_settings *s
 {
 	uint16_t failure_scope_bitmap = 0;
 
-	/* TODO print settings_in */
-	LOG_INF("Settings in: %d", settings_in->cmd_params.write_scope_bitmap);
-
 	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_IDENTITIES) ||
 	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
 	    settings_in->identities.transmitter_long_rd_id == DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {

@@ -1078,7 +1078,6 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 		k_msgq_get(&dect_nrf91_ctrl_msgq, &event, K_FOREVER);
 
 		switch (event.id) {
-
 		case DECT_NRF91_CTRL_OP_MDM_CAPABILITIES: {
 			struct nrf_modem_dect_mac_capability_ntf_cb_params *evt_data =
 				(struct nrf_modem_dect_mac_capability_ntf_cb_params *)event.data;
@@ -1191,7 +1190,6 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			LOG_INF("Modem activated - ready for commands");
 			break;
 		}
-
 		case DECT_NRF91_CTRL_OP_MDM_DEACTIVATED: {
 			bool reactivate =
 				(ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_DEACTIVATE)
@@ -1212,8 +1210,14 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 					 */
 					reactivate = true;
 				}
-				dect_nrf91_child_association_all_removed();
+				dect_nrf91_child_association_all_removed(
+					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON);
 				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
+			} else if (ctrl_data.ass_config.pt_association_state ==
+				CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+				dect_nrf91_parent_association_removed(
+					ctrl_data.ass_config.parent_long_rd_id,
+					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON, false);
 			}
 			ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
 			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
@@ -1222,6 +1226,7 @@ static void dect_nrf91_ctrl_msgq_thread_handler(void)
 			ctrl_data.ft_cluster_reconfig_params.channel = DECT_CLUSTER_CHANNEL_ANY;
 			ctrl_data.ft_cluster_reconfig_ongoing = false;
 			ctrl_data.configure_params.auto_start = false;
+			ctrl_data.ass_config.pt_association_state = CTRL_PT_ASSOCIATION_STATE_NONE;
 
 			if (reactivate) {
 				LOG_DBG("Deactivated. Next configure before reactivate");
@@ -1634,7 +1639,6 @@ send_events:
 			}
 			break;
 		}
-
 		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: {
 			struct nrf_modem_dect_mac_rssi_scan_params *params =
 				(struct nrf_modem_dect_mac_rssi_scan_params *)event.data;
@@ -1696,7 +1700,6 @@ send_events:
 			}
 			break;
 		}
-
 		case DECT_NRF91_CTRL_OP_MDM_RSSI_RESULT: {
 			struct dect_nrf91_ctrl_rssi_measurement_data_evt *evt_data =
 				(struct dect_nrf91_ctrl_rssi_measurement_data_evt *)event.data;
@@ -2221,7 +2224,6 @@ send_events:
 			}
 			break;
 		}
-
 		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD: {
 			/* TODO: PT mobility? we are getting these for every
 			 * received beacon when associated and we have a rssi level from rx

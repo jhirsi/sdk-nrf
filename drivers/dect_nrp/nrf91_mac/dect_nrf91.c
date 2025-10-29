@@ -1063,7 +1063,7 @@ void dect_nrf91_child_association_removed(
 	}
 }
 
-void dect_nrf91_child_association_all_removed(void)
+void dect_nrf91_child_association_all_removed(enum nrf_modem_dect_mac_release_cause rel_cause)
 {
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 
@@ -1072,7 +1072,7 @@ void dect_nrf91_child_association_all_removed(void)
 			dect_net_l2_association_removed(
 				ctx->iface,
 				ctx->child_associations[i].target_long_rd_id,
-				DECT_MAC_RELEASE_CAUSE_CONNECTION_TERMINATION,
+				(enum dect_association_release_cause)rel_cause,
 				false);
 			dect_nrf91_child_association_list_remove(
 				ctx->child_associations[i].target_long_rd_id);
