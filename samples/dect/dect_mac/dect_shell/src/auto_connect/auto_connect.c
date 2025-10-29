@@ -263,7 +263,7 @@ static void auto_connect_net_mgmt_event_handler(struct net_mgmt_event_callback *
 			desh_print("PT: Joined a network");
 			context.connected = true;
 		} else if (evt->network_status == DECT_NETWORK_STATUS_UNJOINED) {
-			desh_print("PT: Joined a network");
+			desh_print("PT: unjoined a network");
 			context.connected = true;
 		} else if (evt->network_status == DECT_NETWORK_STATUS_FAILURE) {
 			if (evt->dect_err_cause == DECT_MAC_STATUS_OS_ERROR) {
