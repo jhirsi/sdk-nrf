@@ -1803,16 +1803,18 @@ send_events:
 			enum nrf_modem_dect_mac_err *status =
 				(enum nrf_modem_dect_mac_err *)event.data;
 			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			dect_mgmt_rssi_scan_done_evt(
-				ctrl_data.iface,
-				dect_nrf91_utils_modem_status_to_net_mgmt_status(*status));
-
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK &&
-			    !(ctrl_data.ft_cluster_reconfig_ongoing &&
+			bool reconfig_on_same_channel = (ctrl_data.ft_cluster_reconfig_ongoing &&
 				ctrl_data.configure_params.channel ==
-				ctrl_data.ft_cluster_reconfig_prev_cluster_channel)) {
+				ctrl_data.ft_cluster_reconfig_prev_cluster_channel);
 
+			if (!reconfig_on_same_channel) {
+				/* Reconfig for prefix on going, RSSI scan result is bypassed */
+				dect_mgmt_rssi_scan_done_evt(
+					ctrl_data.iface,
+					dect_nrf91_utils_modem_status_to_net_mgmt_status(*status));
+			}
+			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK &&
+			    !(reconfig_on_same_channel)) {
 				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
 
 				LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
@@ -1834,6 +1836,7 @@ send_events:
 
 						LOG_WRN("RSSI scan failed on reconfig - "
 							"keeping cluster running");
+						/* TODO send failure event for reconfig? */
 						break;
 					}
 					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;

@@ -558,10 +558,12 @@ static void dect_shell_net_mgmt_event_handler(struct net_mgmt_event_callback *cb
 			dect_shell_util_mac_error_to_string(resp_data->status, err_str,
 							    sizeof(err_str));
 
-			desh_warn("Cluster start failed: %d (%s)", resp_data->status, err_str);
+			desh_warn("Cluster start/reconfigure failed: %d (%s)",
+				resp_data->status, err_str);
 
 		} else {
-			desh_print("Cluster started at channel %d.", resp_data->cluster_channel);
+			desh_print("Cluster started/reconfigured at channel %d.",
+				resp_data->cluster_channel);
 		}
 		break;
 	}
