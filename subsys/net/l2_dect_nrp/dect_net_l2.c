@@ -22,7 +22,7 @@
 #include "dect_net_l2_internal.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(NET_L2_DECT, CONFIG_NET_L2_DECT_LOG_LEVEL);
+LOG_MODULE_REGISTER(net_l2_dect, CONFIG_NET_L2_DECT_LOG_LEVEL);
 
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 

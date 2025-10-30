@@ -89,7 +89,7 @@ struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr {
  */
 
 int dect_nrf91_ctrl_api_mdm_configure_n_activate(void);
-int dect_nrf91_ctrl_api_mdm_deactivate(void);
+int dect_nrf91_ctrl_api_mdm_deactivate_cmd(void);
 
 int dect_nrf91_ctrl_api_cluster_channel_get(void);
 bool dect_nrf91_ctrl_api_mdm_activated(void);

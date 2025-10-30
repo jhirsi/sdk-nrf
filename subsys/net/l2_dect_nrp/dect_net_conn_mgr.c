@@ -9,7 +9,8 @@
 #include <dect_net_l2_mgmt.h>
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(NET_L2_DECT_CONN_MGR, CONFIG_NET_L2_DECT_CONN_MGR_LOG_LEVEL);
+
+LOG_MODULE_REGISTER(net_l2_dect_conn_mgr, CONFIG_NET_L2_DECT_CONN_MGR_LOG_LEVEL);
 
 static struct net_mgmt_event_callback dect_mgmt_cb;
 static int64_t connection_timeout;

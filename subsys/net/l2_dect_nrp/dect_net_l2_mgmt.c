@@ -13,7 +13,7 @@
 #include "dect_net_l2_internal.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(NET_L2_DECT_MGMT, CONFIG_NET_L2_DECT_MGMT_LOG_LEVEL);
+LOG_MODULE_REGISTER(net_l2_dect_mgmt, CONFIG_NET_L2_DECT_MGMT_LOG_LEVEL);
 
 static const struct dect_nrp_hal_api *const get_dect_nrp_hal_api(struct net_if *iface,
 								 const struct device *dev)

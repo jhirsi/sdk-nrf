@@ -19,7 +19,7 @@
 #include "dect_nrf91.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+LOG_MODULE_REGISTER(dect_nrp_mac, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 struct dect_nrf91_association_data {
 	bool in_use;
@@ -328,7 +328,6 @@ static void dect_nrf91_iface_init(struct net_if *iface)
 	uint8_t *link_addr;
 	int err;
 
-	/* Note: settings init takes for a while */
 	dect_nrf91_settings_init();
 	ctx->parent_long_rd_id = 0;
 	link_addr = dect_nrf91_current_link_addr_create(ctx);
@@ -363,17 +362,17 @@ static int dect_nrf91_init(const struct device *dev)
 
 /**************************************************************************************************/
 
-static int dect_nrf91_ctrl_activate_cmd(const struct device *dev)
+static int dect_nrf91_hal_mdm_activate(const struct device *dev)
 {
 	return dect_nrf91_ctrl_api_mdm_configure_n_activate();
 }
 
-static int dect_nrf91_ctrl_api_mdm_deactivate_cmd(const struct device *dev)
+static int dect_nrf91_hal_mdm_deactivate(const struct device *dev)
 {
-	return dect_nrf91_ctrl_api_mdm_deactivate();
+	return dect_nrf91_ctrl_api_mdm_deactivate_cmd();
 }
 
-static int dect_nrf91_driver_rssi_scan(const struct device *dev,
+static int dect_nrf91_hal_rssi_scan(const struct device *dev,
 				       struct dect_rssi_scan_params *params)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -405,7 +404,7 @@ static int dect_nrf91_driver_rssi_scan(const struct device *dev,
 
 /**************************************************************************************************/
 
-static int dect_nrf91_driver_scan(const struct device *dev, struct dect_scan_params *params,
+static int dect_nrf91_hal_scan(const struct device *dev, struct dect_scan_params *params,
 				  dect_scan_result_cb_t cb)
 {
 	struct nrf_modem_dect_mac_network_scan_params scan_params = {
@@ -449,7 +448,7 @@ static int dect_nrf91_driver_scan(const struct device *dev, struct dect_scan_par
 
 /**************************************************************************************************/
 
-int dect_nrf91_driver_associate_req(const struct device *dev,
+int dect_nrf91_hal_associate_req(const struct device *dev,
 				    struct dect_associate_req_params *params)
 {
 	int ret;
@@ -483,7 +482,7 @@ int dect_nrf91_driver_associate_req(const struct device *dev,
 	return ret;
 }
 
-int dect_nrf91_driver_associate_release(const struct device *dev,
+int dect_nrf91_hal_associate_release(const struct device *dev,
 					struct dect_associate_rel_params *params)
 {
 	int ret;
@@ -500,13 +499,13 @@ int dect_nrf91_driver_associate_release(const struct device *dev,
 
 /**************************************************************************************************/
 
-int dect_nrf91_driver_cluster_start_req(const struct device *dev,
+int dect_nrf91_hal_cluster_start_req(const struct device *dev,
 					struct dect_cluster_start_req_params *params)
 {
 	return dect_nrf91_ctrl_api_cluster_start_req_cmd(params);
 }
 
-int dect_nrf91_driver_cluster_reconfig_req(const struct device *dev,
+int dect_nrf91_hal_cluster_reconfig_req(const struct device *dev,
 					   struct dect_cluster_reconfig_req_params *params)
 {
 	return dect_nrf91_ctrl_api_cluster_reconfig_req_cmd(params);
@@ -514,13 +513,13 @@ int dect_nrf91_driver_cluster_reconfig_req(const struct device *dev,
 
 /**************************************************************************************************/
 
-int dect_nrf91_driver_nw_beacon_start_req(const struct device *dev,
+int dect_nrf91_hal_nw_beacon_start_req(const struct device *dev,
 					  struct dect_nw_beacon_start_req_params *params)
 {
 	return dect_nrf91_ctrl_api_nw_beacon_start_req_cmd(params);
 }
 
-int dect_nrf91_driver_nw_beacon_stop_req(const struct device *dev,
+int dect_nrf91_hal_nw_beacon_stop_req(const struct device *dev,
 					 struct dect_nw_beacon_stop_req_params *params)
 {
 	return dect_nrf91_ctrl_api_nw_beacon_stop_req_cmd(params);
@@ -528,7 +527,7 @@ int dect_nrf91_driver_nw_beacon_stop_req(const struct device *dev,
 
 /**************************************************************************************************/
 
-static int dect_nrf91_driver_status_info_get(const struct device *dev,
+static int dect_nrf91_hal_status_info_get(const struct device *dev,
 					     struct dect_status_info *status_info_out)
 {
 	struct dect_status_info status_info;
@@ -579,7 +578,8 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 	}
 	status_info.nw_beacon_running = dect_nrf91_ctrl_api_nw_beacon_running();
 
-	strcpy(status_info.fw_version_str, "Not available");
+	strncpy(status_info.fw_version_str, "Not available",
+		sizeof(status_info.fw_version_str) - 1);
 #if defined(CONFIG_MODEM_INFO)
 	char info_str[MODEM_INFO_MAX_RESPONSE_SIZE + 1];
 	int ret;
@@ -615,7 +615,7 @@ static int dect_nrf91_driver_status_info_get(const struct device *dev,
 
 /**************************************************************************************************/
 
-static int dect_nrf91_driver_settings_read(const struct device *dev,
+static int dect_nrf91_hal_settings_read(const struct device *dev,
 					   struct dect_settings *settings_out)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
@@ -625,7 +625,7 @@ static int dect_nrf91_driver_settings_read(const struct device *dev,
 	return 0;
 }
 
-static int dect_nrf91_driver_settings_write(const struct device *dev,
+static int dect_nrf91_hal_settings_write(const struct device *dev,
 					    struct dect_settings *settings_in)
 {
 	struct dect_nrf91_settings_write_status ret_status;
@@ -686,7 +686,10 @@ static K_MUTEX_DEFINE(send_buf_lock); /* Only one TX requests at a time */
 BUILD_ASSERT(DECT_MAC_DATA_TX_HANDLE_COUNT == DECT_NRF91_DLC_DATA_INFO_MAX_COUNT,
 	     "Mismatch in DECT MAC data tx handle range and DECT_NRF91_DLC_DATA_INFO_MAX_COUNT");
 #endif
-static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
+#define DECT_NRF91_TX_TRY_MAX_COUNT 20
+#define DECT_NRF91_TX_RETRY_SLEEP_MS 50
+
+static int dect_nrf91_hal_driver_send(const struct device *dev, struct net_pkt *pkt)
 {
 	__ASSERT_NO_MSG(pkt != NULL);
 
@@ -716,7 +719,7 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 		return -EINVAL;
 	}
 
-	LOG_DBG("dect_nrf91_driver_send: target_long_rd_id %u", target_long_rd_id);
+	LOG_DBG("dect_nrf91_hal_driver_send: target_long_rd_id %u", target_long_rd_id);
 
 	k_mutex_lock(&send_buf_lock, K_FOREVER);
 	data_len = net_pkt_get_len(pkt);
@@ -734,18 +737,17 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 	} else {
 		int retry_count = 0;
 		bool data_sent = false;
-		uint32_t sleep_ms = 50;
 
 		tx_params.data_len = data_len;
 		tx_params.long_rd_id = target_long_rd_id;
 		tx_params.flow_id = 1;
 		tx_params.transaction_id = transaction_id++;
 
-		while (retry_count < 20 &&
-		       data_sent == false) { /* TODO: time (with Kconfig) instead of count */
+		while (retry_count < DECT_NRF91_TX_TRY_MAX_COUNT &&
+		       data_sent == false) {
 			ret = dect_nrf91_ctrl_api_tx_cmd(&tx_params);
 			if (ret == -ENOMEM || ret == -EACCES) {
-				k_sleep(K_MSEC(sleep_ms));
+				k_sleep(K_MSEC(DECT_NRF91_TX_RETRY_SLEEP_MS));
 				retry_count++;
 			} else if (ret == -EBUSY) {
 				tx_params.transaction_id = transaction_id++;
@@ -780,12 +782,12 @@ static int dect_nrf91_driver_send(const struct device *dev, struct net_pkt *pkt)
 	return ret;
 }
 
-static int dect_nrf91_driver_neighbor_list_req(const struct device *dev)
+static int dect_nrf91_hal_neighbor_list_req(const struct device *dev)
 {
 	return dect_nrf91_ctrl_api_neighbor_list_req_cmd();
 }
 
-static int dect_nrf91_driver_neighbor_info_req(const struct device *dev,
+static int dect_nrf91_hal_neighbor_info_req(const struct device *dev,
 					       struct dect_neighbor_info_req_params *params)
 {
 	struct nrf_modem_dect_mac_neighbor_info_params mdm_params = {
@@ -795,12 +797,12 @@ static int dect_nrf91_driver_neighbor_info_req(const struct device *dev,
 	return dect_nrf91_ctrl_api_neighbor_info_req_cmd(&mdm_params);
 }
 
-static int dect_nrf91_driver_cluster_info_req(const struct device *dev)
+static int dect_nrf91_hal_cluster_info_req(const struct device *dev)
 {
 	return dect_nrf91_ctrl_api_cluster_info_req_cmd();
 }
 
-static int dect_nrf91_ctrl_network_create_req(const struct device *dev)
+static int dect_nrf91_hal_network_create_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
@@ -811,7 +813,7 @@ static int dect_nrf91_ctrl_network_create_req(const struct device *dev)
 	}
 }
 
-static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
+static int dect_nrf91_hal_network_remove_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
@@ -843,7 +845,7 @@ static int dect_nrf91_ctrl_network_remove_req(const struct device *dev)
 	}
 }
 
-static int dect_nrf91_ctrl_network_join_req(const struct device *dev)
+static int dect_nrf91_hal_network_join_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
@@ -854,7 +856,7 @@ static int dect_nrf91_ctrl_network_join_req(const struct device *dev)
 	}
 }
 
-static int dect_nrf91_ctrl_network_unjoin_req(const struct device *dev)
+static int dect_nrf91_hal_network_unjoin_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
@@ -869,27 +871,27 @@ static int dect_nrf91_ctrl_network_unjoin_req(const struct device *dev)
 
 static const struct dect_nrp_hal_api dect_nrf91_api = {
 	.iface_api.init = dect_nrf91_iface_init,
-	.activate_req = dect_nrf91_ctrl_activate_cmd,
-	.deactivate_req = dect_nrf91_ctrl_api_mdm_deactivate_cmd,
-	.send = dect_nrf91_driver_send,
-	.rssi_scan = dect_nrf91_driver_rssi_scan,
-	.scan = dect_nrf91_driver_scan,
-	.associate_req = dect_nrf91_driver_associate_req,
-	.associate_release = dect_nrf91_driver_associate_release,
-	.cluster_start_req = dect_nrf91_driver_cluster_start_req,
-	.cluster_reconfig_req = dect_nrf91_driver_cluster_reconfig_req,
-	.nw_beacon_start_req = dect_nrf91_driver_nw_beacon_start_req,
-	.nw_beacon_stop_req = dect_nrf91_driver_nw_beacon_stop_req,
-	.settings_read = dect_nrf91_driver_settings_read,
-	.settings_write = dect_nrf91_driver_settings_write,
-	.status_info_get = dect_nrf91_driver_status_info_get,
-	.neighbor_list_req = dect_nrf91_driver_neighbor_list_req,
-	.neighbor_info_req = dect_nrf91_driver_neighbor_info_req,
-	.cluster_info_req = dect_nrf91_driver_cluster_info_req,
-	.network_create_req = dect_nrf91_ctrl_network_create_req,
-	.network_remove_req = dect_nrf91_ctrl_network_remove_req,
-	.network_join_req = dect_nrf91_ctrl_network_join_req,
-	.network_unjoin_req = dect_nrf91_ctrl_network_unjoin_req,
+	.activate_req = dect_nrf91_hal_mdm_activate,
+	.deactivate_req = dect_nrf91_hal_mdm_deactivate,
+	.send = dect_nrf91_hal_driver_send,
+	.rssi_scan = dect_nrf91_hal_rssi_scan,
+	.scan = dect_nrf91_hal_scan,
+	.associate_req = dect_nrf91_hal_associate_req,
+	.associate_release = dect_nrf91_hal_associate_release,
+	.cluster_start_req = dect_nrf91_hal_cluster_start_req,
+	.cluster_reconfig_req = dect_nrf91_hal_cluster_reconfig_req,
+	.nw_beacon_start_req = dect_nrf91_hal_nw_beacon_start_req,
+	.nw_beacon_stop_req = dect_nrf91_hal_nw_beacon_stop_req,
+	.settings_read = dect_nrf91_hal_settings_read,
+	.settings_write = dect_nrf91_hal_settings_write,
+	.status_info_get = dect_nrf91_hal_status_info_get,
+	.neighbor_list_req = dect_nrf91_hal_neighbor_list_req,
+	.neighbor_info_req = dect_nrf91_hal_neighbor_info_req,
+	.cluster_info_req = dect_nrf91_hal_cluster_info_req,
+	.network_create_req = dect_nrf91_hal_network_create_req,
+	.network_remove_req = dect_nrf91_hal_network_remove_req,
+	.network_join_req = dect_nrf91_hal_network_join_req,
+	.network_unjoin_req = dect_nrf91_hal_network_unjoin_req,
 };
 
 NET_DEVICE_INIT(nrf91_dect_mac_driver, CONFIG_DECT_NRP_MAC_DEVICE_NAME, dect_nrf91_init, NULL,

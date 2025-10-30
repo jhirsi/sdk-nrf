@@ -18,7 +18,7 @@
 #include "dect_nrf91_sink.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+LOG_MODULE_DECLARE(dect_nrp_mac, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 

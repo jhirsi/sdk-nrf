@@ -23,7 +23,7 @@
 #include "dect_net_l2_sink.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_REGISTER(NET_L2_DECT_BR, CONFIG_NET_L2_DECT_BR_LOG_LEVEL);
+LOG_MODULE_REGISTER(net_l2_dect_br, CONFIG_NET_L2_DECT_BR_LOG_LEVEL);
 
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 

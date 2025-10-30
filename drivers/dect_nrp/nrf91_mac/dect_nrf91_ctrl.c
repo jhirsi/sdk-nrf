@@ -32,7 +32,7 @@
 #include "dect_nrf91_ctrl.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+LOG_MODULE_DECLARE(dect_nrp_mac, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 
@@ -602,7 +602,7 @@ static int dect_nrf91_ctrl_mdm_deactivate_req(void)
 	return err;
 }
 
-int dect_nrf91_ctrl_api_mdm_deactivate(void)
+int dect_nrf91_ctrl_api_mdm_deactivate_cmd(void)
 {
 	int ret;
 

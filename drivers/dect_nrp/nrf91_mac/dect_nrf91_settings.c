@@ -84,7 +84,7 @@ static const struct dect_nrf91_settings settings_data_defaults = {
 };
 static struct dect_nrf91_settings settings_data = settings_data_defaults;
 
-LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+LOG_MODULE_DECLARE(dect_nrp_mac, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 BUILD_ASSERT(CONFIG_DECT_NRP_MAC_RANDOM_RANGE_END > CONFIG_DECT_NRP_MAC_RANDOM_RANGE_START);
 

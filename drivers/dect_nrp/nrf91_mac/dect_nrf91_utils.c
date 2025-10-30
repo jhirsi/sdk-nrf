@@ -16,7 +16,7 @@
 #include "dect_nrf91_utils.h"
 
 #include <zephyr/logging/log.h>
-LOG_MODULE_DECLARE(DECT_NRP_MAC, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
+LOG_MODULE_DECLARE(dect_nrp_mac, CONFIG_DECT_NRP_MAC_LOG_LEVEL);
 
 static const char *
 dect_nrf91_utils_map_to_string(struct dect_nrf91_utils_mapping_tbl_item const *mapping_table,
