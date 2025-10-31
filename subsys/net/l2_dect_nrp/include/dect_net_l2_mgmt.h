@@ -14,8 +14,6 @@
 #define ZEPHYR_INCLUDE_NET_DECT_MGMT_H_
 
 #include <zephyr/net/net_mgmt.h>
-#include <nrf_modem_dect_mac.h>
-#include <zephyr/net/offloaded_netdev.h>
 
 #ifdef __cplusplus
 extern "C" {

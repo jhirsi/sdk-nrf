@@ -8,7 +8,7 @@
 #define DECT_NRF91_COMMON_H
 
 #include <zephyr/kernel.h>
-
+#include <nrf_modem_dect_mac.h>
 struct dect_nrf91_common_op_event_msgq_item {
 	uint8_t id;
 	void *data;
