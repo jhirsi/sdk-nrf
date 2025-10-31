@@ -3214,27 +3214,44 @@ static void
 dect_nrf91_ctrl_mdm_dlc_data_rx_ntf_cb(struct nrf_modem_dect_dlc_data_rx_ntf_cb_params *params)
 {
 	struct net_pkt *rcv_pkt;
+	int ret;
 
+	/* Allocate net_pkt using Zephyr's internal memory pools - ISR safe with K_NO_WAIT */
 	rcv_pkt = net_pkt_rx_alloc_with_buffer(ctrl_data.iface, params->data_len, AF_UNSPEC, 0,
 					       K_NO_WAIT);
 	if (!rcv_pkt) {
-		printk("%s: cannot allocate rcv packet of len %d\n", (__func__), params->data_len);
+		printk("%s: RX packet allocation failed in ISR (len=%d), dropping\n",
+		       __func__, params->data_len);
 		return;
 	}
-	if (net_pkt_write(rcv_pkt, params->data, params->data_len) < 0) {
-		printk("%s: cannot write rcv packet of len %d\n", (__func__), params->data_len);
+
+	/* Write data to packet */
+	ret = net_pkt_write(rcv_pkt, params->data, params->data_len);
+	if (ret < 0) {
+		printk("%s: Failed to write RX data to packet (len=%d), err=%d\n",
+		       __func__, params->data_len, ret);
 		net_pkt_unref(rcv_pkt);
 		return;
 	}
+
+	/* Prepare data for RX thread processing */
 	struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr mdm_dlc_data_with_pkt_ptr_params;
 
 	mdm_dlc_data_with_pkt_ptr_params.mdm_params = *params;
 	mdm_dlc_data_with_pkt_ptr_params.data_len = params->data_len;
 	mdm_dlc_data_with_pkt_ptr_params.iface = ctrl_data.iface;
 	mdm_dlc_data_with_pkt_ptr_params.pkt = rcv_pkt;
-	dect_nrf91_rx_msgq_data_op_add(DECT_NRF91_RX_OP_RX_DATA_WITH_PKT_PTR,
-				       (void *)&mdm_dlc_data_with_pkt_ptr_params,
-				       sizeof(struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr));
+
+	/* Queue for processing in RX thread */
+	ret = dect_nrf91_rx_msgq_data_op_add(DECT_NRF91_RX_OP_RX_DATA_WITH_PKT_PTR,
+					     (void *)&mdm_dlc_data_with_pkt_ptr_params,
+					     sizeof(
+						struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr));
+	if (ret) {
+		printk("%s: Failed to queue RX data for processing, err=%d\n", __func__, ret);
+		net_pkt_unref(rcv_pkt);  /* Clean up packet if queueing fails */
+		return;
+	}
 }
 
 static void dect_nrf91_ctrl_mdm_dlc_data_tx_cb(struct nrf_modem_dect_dlc_data_tx_cb_params *params)
