@@ -38,11 +38,7 @@ config DECT_NRP_MAC_NRF_CTRL_THREAD_STACK_SIZE
 	  This option sets the driver's stack size for its internal ctrl thread.
 	  Note: most probably this could be deacreased if size of net mgmt events are decreased.
 
-config DECT_NRP_MAC_NRF_RX_THREAD_STACK_SIZE
-	int "Driver's internal RX thread stack size"
-	default 3072
-	help
-	  This option sets the driver's stack size for its internal RX thread.
+rsource "Kconfig.rx"
 
 endif # DECT_NRP_MAC_NRF
 

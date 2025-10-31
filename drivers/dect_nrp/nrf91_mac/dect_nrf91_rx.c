@@ -85,6 +85,46 @@ K_MSGQ_DEFINE(dect_nrf91_rx_th_op_event_msgq, sizeof(struct dect_nrf91_common_op
 
 /**************************************************************************************************/
 
+/* Memory Pool for RX Event Data */
+
+/* Simple memory pool for RX event data - sized for the main structure we need */
+#define DECT_RX_EVENT_POOL_BLOCK_SIZE sizeof(struct dect_nrf91_ctrl_dlc_rx_data_with_pkt_ptr)
+
+#ifndef CONFIG_DECT_NRP_MAC_NRF_RX_EVENT_POOL_COUNT
+#define CONFIG_DECT_NRP_MAC_NRF_RX_EVENT_POOL_COUNT 10
+#endif
+
+K_MEM_SLAB_DEFINE_STATIC(dect_rx_event_slab, DECT_RX_EVENT_POOL_BLOCK_SIZE,
+			 CONFIG_DECT_NRP_MAC_NRF_RX_EVENT_POOL_COUNT, 4);
+
+/* Memory pool allocation helper */
+static void *dect_nrf91_rx_event_alloc(size_t size)
+{
+	void *ptr = NULL;
+
+	if (size > DECT_RX_EVENT_POOL_BLOCK_SIZE) {
+		printk("%s: Event size %zu exceeds pool block size %d\n", __func__,
+			size, DECT_RX_EVENT_POOL_BLOCK_SIZE);
+		return NULL;
+	}
+	if (k_mem_slab_alloc(&dect_rx_event_slab, &ptr, K_NO_WAIT) != 0) {
+		printk("Failed to allocate memory from RX event pool\n");
+		return NULL;
+	}
+	return ptr;
+}
+
+/* Memory pool free helper */
+static void dect_nrf91_rx_event_free(void *ptr)
+{
+	if (ptr == NULL) {
+		return;
+	}
+	k_mem_slab_free(&dect_rx_event_slab, ptr);
+}
+
+/**************************************************************************************************/
+
 static void dect_nrf91_rx_th_op_handler_thread_fn(void)
 {
 	struct dect_nrf91_common_op_event_msgq_item event;
@@ -116,15 +156,17 @@ static void dect_nrf91_rx_th_op_handler_thread_fn(void)
 			LOG_ERR("DECT RX: Unknown event %d received", event.id);
 			break;
 		}
-		k_free(event.data);
+		/* Free memory back to pool */
+		dect_nrf91_rx_event_free(event.data);
 	}
 }
-#define DECT_PHY_RX_THREAD_STACK_SIZE CONFIG_DECT_NRP_MAC_NRF_RX_THREAD_STACK_SIZE
-#define DECT_PHY_RX_THREAD_PRIORITY   5
 
-K_THREAD_DEFINE(dect_nrf91_rx_th, DECT_PHY_RX_THREAD_STACK_SIZE,
+#define DECT_NRF91_RX_THREAD_STACK_SIZE CONFIG_DECT_NRP_MAC_NRF_RX_THREAD_STACK_SIZE
+#define DECT_NRF91_RX_THREAD_PRIORITY   5
+
+K_THREAD_DEFINE(dect_nrf91_rx_th, DECT_NRF91_RX_THREAD_STACK_SIZE,
 		dect_nrf91_rx_th_op_handler_thread_fn, NULL, NULL, NULL,
-		K_PRIO_PREEMPT(DECT_PHY_RX_THREAD_PRIORITY), 0, 0);
+		K_PRIO_PREEMPT(DECT_NRF91_RX_THREAD_PRIORITY), 0, 0);
 
 /**************************************************************************************************/
 
@@ -133,17 +175,33 @@ int dect_nrf91_rx_msgq_data_op_add(uint16_t event_id, void *data, size_t data_si
 	int ret = 0;
 	struct dect_nrf91_common_op_event_msgq_item event;
 
-	event.data = k_malloc(data_size);
+	/* Input validation */
+	if (data == NULL || data_size == 0) {
+		return -EINVAL;
+	}
+
+	/* Allocate from memory pool */
+	event.data = dect_nrf91_rx_event_alloc(data_size);
 	if (event.data == NULL) {
 		return -ENOMEM;
 	}
-	memcpy(event.data, data, data_size);
 
+	/* Copy data and set up event */
+	memcpy(event.data, data, data_size);
 	event.id = event_id;
+
+	/* Try to put in message queue */
 	ret = k_msgq_put(&dect_nrf91_rx_th_op_event_msgq, &event, K_NO_WAIT);
 	if (ret) {
-		k_free(event.data);
+		if (ret == -ENOMSG) {
+			printk("RX message queue full, dropping event %u\n", event_id);
+		} else {
+			printk("Failed to put event %d to RX message queue, err: %d\n",
+				event_id, ret);
+		}
+		dect_nrf91_rx_event_free(event.data);
 		return -ENOBUFS;
 	}
 	return 0;
 }
+
