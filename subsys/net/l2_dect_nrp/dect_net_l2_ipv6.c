@@ -21,6 +21,10 @@ LOG_MODULE_DECLARE(net_l2_dect, CONFIG_NET_L2_DECT_LOG_LEVEL);
 
 #include "net_private.h" /* For net_sprint_ipv6_addr */
 
+#define IPV6_LINK_LOCAL_PREFIX_BE32  0xfe800000
+#define DECT_IPV6_PREFIX_LEN_BYTES   8
+#define IPV6_PREFIX_COMPARISON_BITS  64
+
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
 static void dect_net_l2_ipv6_util_global_nbr_add(
 	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_cfg,
@@ -69,7 +73,7 @@ static void dect_net_l2_ipv6_util_nbr_add(
 	__ASSERT_NO_MSG(nbr_local_addr_was_set != NULL && nbr_global_addr_was_set != NULL);
 	__ASSERT_NO_MSG(nbr_local_ipv6_addr_out != NULL && nbr_global_ipv6_addr_out != NULL);
 
-	UNALIGNED_PUT(htonl(0xfe800000), &prefix.s6_addr32[0]);
+	UNALIGNED_PUT(htonl(IPV6_LINK_LOCAL_PREFIX_BE32), &prefix.s6_addr32[0]);
 
 	/* Add local addr as a neighbor */
 	nbr_addr_generated = dect_nrp_utils_net_ipv6_addr_create_from_sink_and_long_rd_id(
@@ -221,7 +225,7 @@ void dect_net_l2_ipv6_addressing_parent_changed_handle(
 		   ipv6_prefix_config->prefix_len > 0 &&
 		   !net_ipv6_is_prefix(ctx->ipv6_prefix_cfg.prefix.s6_addr,
 				       ipv6_prefix_config->prefix.s6_addr,
-				       64)) {
+				       IPV6_PREFIX_COMPARISON_BITS)) {
 		/* Prefix changed */
 		LOG_WRN("Parent IPv6 prefix changed from %s/%d to %s/%d",
 			net_sprint_ipv6_addr(&ctx->ipv6_prefix_cfg.prefix),
@@ -515,7 +519,7 @@ bool dect_net_l2_ipv6_addressing_sink_changed_handle(
 		   ipv6_prefix_config->prefix_len > 0 &&
 		   !net_ipv6_is_prefix(ctx->ipv6_prefix_cfg.prefix.s6_addr,
 				       ipv6_prefix_config->prefix.s6_addr,
-				       64)) {
+				       IPV6_PREFIX_COMPARISON_BITS)) {
 
 		/* Prefix changed */
 		LOG_WRN("Sink IPv6 prefix changed from %s/%d to %s/%d",

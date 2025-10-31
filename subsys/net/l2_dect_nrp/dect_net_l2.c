@@ -3,6 +3,29 @@
  *
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
+
+/**
+ * @file dect_net_l2.c
+ * @brief DECT NR+ L2 Networking Layer
+ *
+ * Implements DECT NR+-aware IPv6 networking layer that integrates with Zephyr networking stack.
+ * Provides intelligent packet routing based on DECT cluster topology and RD ID addressing.
+ *
+ * Key Features:
+ * - IPv6 link-local routing using DECT RD IDs embedded in addresses
+ * - Association management for parent/child device relationships
+ * - Multicast forwarding to all associated children
+ * - Integration with Zephyr L2 networking API
+ * - Thread-safe operation in RX thread context
+ *
+ * Call Chain:
+ * Application → Zephyr Socket → IPv6 Stack → DECT L2 → DECT MAC → nRF Modem
+ *
+ * Thread Context:
+ * - dect_net_l2_recv(): Called in RX thread (dect_nrf91_rx_th)
+ * - dect_net_l2_send(): Called in application thread context
+ * - Association callbacks: Called from MAC layer (various contexts)
+ */
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_if.h>
 
@@ -32,6 +55,15 @@ static struct dect_net_l2_association_data
 	child_associations[CONFIG_DECT_NRP_MAC_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT];
 static struct dect_net_l2_association_data parent_associations[1]; /* TODO: magic */
 
+/**
+ * @brief Check if association exists with target device
+ *
+ * Searches both child and parent association tables for existing connection
+ * to specified DECT device by its long RD ID.
+ *
+ * @param target_long_rd_id DECT device long RD identifier
+ * @return true if association exists, false otherwise
+ */
 static bool dect_net_l2_association_exists(uint32_t target_long_rd_id)
 {
 	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
@@ -49,6 +81,17 @@ static bool dect_net_l2_association_exists(uint32_t target_long_rd_id)
 	return false;
 }
 
+/**
+ * @brief Get parent device long RD ID for routing
+ *
+ * Returns the long RD ID of parent device in DECT cluster topology.
+ * Used for upstream packet routing in multi-hop networks.
+ * FT devices have no parent (they are cluster coordinators).
+ *
+ * @param parent_long_rd_id_out Output parameter for parent ID
+ * @param device_type Current device type (FT, PP, etc.)
+ * @return true if parent exists, false if no parent (FT device)
+ */
 static bool dect_net_l2_association_parent_id_get(uint32_t *parent_long_rd_id_out,
 						  enum dect_device_type device_type)
 {
@@ -103,6 +146,16 @@ static uint16_t dect_net_l2_association_count_get(void)
 
 /**************************************************************************************************/
 
+/**
+ * @brief Fill association data for status reporting
+ *
+ * Populates status information structure with current association details
+ * including IPv6 addresses for both parent and child associations.
+ * Used by management layer to report network topology status.
+ *
+ * @param iface Network interface
+ * @param status_info_out Output structure to fill with association data
+ */
 void dect_net_l2_status_info_fill_association_data(
 	struct net_if *iface, struct dect_status_info *status_info_out)
 {
@@ -143,6 +196,22 @@ void dect_net_l2_status_info_fill_association_data(
 	}
 }
 
+/**
+ * @brief Fill sink IPv6 prefix data for status reporting
+ *
+ * Populates status information structure with current sink IPv6 prefix configuration.
+ * Used by management layer to report FT device's global prefix delegation status.
+ * Compares L2 sink prefix with driver prefix and reports any mismatches.
+ *
+ * Key functions:
+ * - Retrieves current L2 sink IPv6 prefix configuration
+ * - Validates consistency between L2 and driver prefix settings
+ * - Reports network interface and prefix length information
+ * - Logs warnings if L2 and driver prefixes don't match
+ *
+ * @param iface Network interface
+ * @param status_info_out Output structure to fill with sink prefix data
+ */
 void dect_net_l2_status_info_fill_sink_data(
 	struct net_if *iface, struct dect_status_info *status_info_out)
 {
@@ -175,6 +244,21 @@ void dect_net_l2_status_info_fill_sink_data(
 
 /**************************************************************************************************/
 
+/**
+ * @brief DECT L2 receive handler - processes incoming packets from network stack
+ *
+ * Called by Zephyr networking core when packets are received on DECT interface.
+ * Runs in RX thread context (e.g. dect_nrf91_rx_th), not ISR context.
+ *
+ * Functions:
+ * - IPv6 link-local routing: Routes packets directly to associated DECT devices
+ * - Multicast forwarding: Forwards link-local multicast to all children
+ * - DECT topology awareness: Uses RD IDs embedded in IPv6 addresses for routing
+ *
+ * @param iface Network interface (DECT interface)
+ * @param pkt Received network packet (already parsed by network stack)
+ * @return NET_OK if packet handled/forwarded, NET_CONTINUE to pass up stack
+ */
 static enum net_verdict dect_net_l2_recv(struct net_if *iface, struct net_pkt *pkt)
 {
 	LOG_DBG("iface %p recv %d bytes from ipv6 addr %s", iface, net_pkt_get_len(pkt),
@@ -295,6 +379,22 @@ exit:
 	return NET_CONTINUE;
 }
 
+/**
+ * @brief DECT L2 send handler - transmits packets through DECT driver
+ *
+ * Called by Zephyr networking core when applications send packets on DECT interface.
+ * Extracts target RD ID from IPv6 destination address and forwards to MAC layer.
+ *
+ * Process:
+ * 1. Extract target long RD ID from IPv6 destination address
+ * 2. Look up association information for routing
+ * 3. Call DECT MAC driver send function with target ID
+ * 4. Handle transmission errors and cleanup
+ *
+ * @param iface Network interface (DECT interface)
+ * @param pkt Network packet to transmit
+ * @return 0 on success, negative error code on failure
+ */
 static int dect_net_l2_send(struct net_if *iface, struct net_pkt *pkt)
 {
 	const struct dect_nrp_hal_api *api = net_if_get_device(iface)->api;
@@ -494,6 +594,15 @@ static int dect_net_l2_enable(struct net_if *iface, bool state)
 	return 0;
 }
 
+/**
+ * @brief Get DECT L2 interface flags
+ *
+ * Returns current interface state flags (UP/DOWN) for Zephyr networking core.
+ * Used by network stack to determine interface capabilities and status.
+ *
+ * @param iface Network interface
+ * @return Current interface flags (NET_L2_MULTICAST typically)
+ */
 static enum net_l2_flags dect_net_l2_flags(struct net_if *iface)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
@@ -501,8 +610,28 @@ static enum net_l2_flags dect_net_l2_flags(struct net_if *iface)
 	return ctx->flags;
 }
 
+/**
+ * @brief DECT L2 layer registration with Zephyr networking stack
+ *
+ * Registers DECT as a custom L2 protocol with Zephyr networking core.
+ */
 NET_L2_INIT(DECT_L2, dect_net_l2_recv, dect_net_l2_send, dect_net_l2_enable, dect_net_l2_flags);
 
+/**
+ * @brief Initialize DECT L2 interface with initial configuration
+ *
+ * Called by DECT NR+ device driver during interface setup to configure L2 networking layer.
+ * Sets up IPv6 addressing, device identity, and initial network parameters.
+ *
+ * Key initialization:
+ * - IPv6-only operation with no neighbor discovery (direct DECT routing)
+ * - Link-local address generation from MAC address
+ * - Network ID and transmitter ID from initial settings
+ * - Interface marked dormant until association established
+ *
+ * @param iface Network interface to initialize
+ * @param initial_settings DECT configuration (network ID, device type, etc.)
+ */
 void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settings)
 {
 	struct dect_net_l2_context *ctx = net_if_l2_data(iface);
@@ -531,7 +660,6 @@ void dect_net_l2_init(struct net_if *iface, struct dect_settings *initial_settin
 		 */
 		ifaddr->addr_state = NET_ADDR_PREFERRED;
 		ctx->local_ipv6_addr = iid;
-		/* TODO: set initial_local_ipv6_addr */
 	}
 }
 
@@ -554,9 +682,22 @@ static void dect_net_l2_join_ipv6_mdns_group(struct net_if *iface)
 
 /**************************************************************************************************/
 
-
-/**************************************************************************************************/
-
+/**
+ * @brief Handle parent association creation in DECT NR+ cluster
+ *
+ * Called by DECT MAC/driver when association with parent device is established.
+ * Sets up routing, IPv6 addressing, and activates network interface.
+ *
+ * Key actions:
+ * - Add parent to association table
+ * - Configure IPv6 addressing with parent-provided prefix
+ * - Bring interface up (exit dormant state)
+ * - Generate management event for application layer
+ *
+ * @param iface Network interface
+ * @param target_long_rd_id Parent device long RD identifier
+ * @param ipv6_prefix_config IPv6 prefix configuration from parent
+ */
 void dect_net_l2_parent_association_created(
 	struct net_if *iface, uint32_t target_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
@@ -589,6 +730,21 @@ void dect_net_l2_parent_association_created(
 	__ASSERT_NO_MSG(found);
 }
 
+/**
+ * @brief Handle child association creation in DECT NR+ cluster
+ *
+ * Called by DECT MAC/driver when child device associates with this device.
+ * Adds child to routing table and manages network interface state.
+ *
+ * Key actions:
+ * - Add child to association table
+ * - Configure IPv6 addressing for child device
+ * - Activate interface if this is first child (for FT devices)
+ * - Generate management event for application layer
+ *
+ * @param iface Network interface
+ * @param child_long_rd_id Child device long RD identifier
+ */
 void dect_net_l2_child_association_created(struct net_if *iface, uint32_t child_long_rd_id)
 {
 	bool first_child = false;
@@ -631,6 +787,23 @@ static bool dect_net_l2_no_associations(void)
 	return true;
 }
 
+/**
+ * @brief Handle association removal from DECT NR+ cluster
+ *
+ * Called by DECT MAC/driver when DECT association is terminated.
+ * Cleans up routing tables, removes IPv6 addresses, and handles topology changes.
+ *
+ * Actions:
+ * - Remove association from child/parent tables
+ * - Clean up IPv6 addressing for removed device
+ * - Update routing table entries
+ * - Handle interface state changes if last association
+ *
+ * @param iface Network interface
+ * @param long_rd_id DECT device long RD identifier being removed
+ * @param cause Reason for association release
+ * @param neighbor_initiated true if remote device initiated release
+ */
 void dect_net_l2_association_removed(
 	struct net_if *iface, uint32_t long_rd_id,
 	enum dect_association_release_cause cause, bool neighbor_initiated)
@@ -675,6 +848,21 @@ void dect_net_l2_association_removed(
 	}
 }
 
+/**
+ * @brief Handle DECT NR+ settings changes from device driver / MAC layer
+ *
+ * Called by DECT MAC/driver when device settings are updated (network ID, device type, etc.).
+ * Updates L2 context with new settings that affect routing and addressing behavior.
+ * IPv6 addressing updates are deferred until next association creation.
+ *
+ * Typically called when:
+ * - Device type changes (FT ↔ PP transitions)
+ * - Network ID reconfiguration
+ * - Transmitter ID changes
+ *
+ * @param iface Network interface
+ * @param driver_current_settings Updated DECT settings from MAC layer
+ */
 void dect_net_l2_settings_changed(
 	struct net_if *iface, struct dect_settings *driver_current_settings)
 {
@@ -688,6 +876,22 @@ void dect_net_l2_settings_changed(
 	ctx->device_type = driver_current_settings->device_type;
 }
 
+/**
+ * @brief Handle parent IPv6 configuration changes
+ *
+ * Called by DECT MAC/driver when parent device updates IPv6 prefix configuration.
+ * Triggers IPv6 address reconfiguration for this device and propagates
+ * changes to child devices in the DECT cluster topology.
+ *
+ * Common triggers:
+ * - Parent device receives new global prefix from upstream
+ * - Parent changes its prefix delegation policy
+ * - Network topology changes affecting addressing
+ *
+ * @param iface Network interface
+ * @param parent_long_rd_id Parent device long RD identifier
+ * @param ipv6_prefix_config New IPv6 prefix configuration from parent
+ */
 void dect_net_l2_parent_ipv6_config_changed(
 	struct net_if *iface, uint32_t parent_long_rd_id,
 	struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
@@ -702,6 +906,27 @@ void dect_net_l2_parent_ipv6_config_changed(
 	}
 }
 
+/**
+ * @brief Handle sink IPv6 configuration changes
+ *
+ * Called by L2 sink module when this device (acting as FT/sink) receives new IPv6 prefix
+ * configuration from external network. Updates own addressing and propagates
+ * changes to all child devices in the DECT cluster.
+ *
+ * Process:
+ * 1. Update own IPv6 addressing with new prefix
+ * 2. Remove old global addresses from all children
+ * 3. Add new global addresses to all associated children
+ * 4. Ensure proper neighbor discovery for updated addresses
+ *
+ * Typically occurs when:
+ * - FT device receives new prefix from network infrastructure
+ * - Global prefix delegation changes
+ * - Network reconnection with different addressing
+ *
+ * @param iface Network interface
+ * @param ipv6_prefix_config New IPv6 prefix configuration for sink
+ */
 void dect_net_l2_sink_ipv6_config_changed(
 	struct net_if *iface, struct dect_net_ipv6_prefix_config *ipv6_prefix_config)
 {
