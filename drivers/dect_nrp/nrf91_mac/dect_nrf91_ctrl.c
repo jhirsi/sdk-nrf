@@ -1068,1967 +1068,2176 @@ static void dect_mac_ctrl_trigger_association(void)
 
 /**************************************************************************************************/
 
+/* Forward declarations for handler functions */
+static void handle_mdm_capabilities(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_configure_resp(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_cfun_resp(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_activated(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_deactivated(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_reconfig_req(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_ipv6_prefix_change_reconfig_req(
+	struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_start_req(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_config_resp(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_ipv6_config_changed(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_ch_load_changed(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_neighbor_inactivity(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_cluster_beacon_rx_failure(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_neighbor_paging_failure(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_flow_control(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_association_ind(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_association_resp(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_association_release_resp(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_association_release_ind(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_auto_start(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_rssi_start_req_cmd(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_rssi_start_req_ch_selection(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_rssi_result(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_rssi_complete(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_rssi_stopped(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_beacon_start(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_beacon_start_or_stop_done(
+	struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_beacon_stop(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_cluster_beacon_rcvd(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_beacon_rcvd(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_scan_complete(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_nw_scan_stopped(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_cluster_rcv_complete(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_cluster_info(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_neighbor_info(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_neighbor_list(struct dect_mac_common_op_event_msgq_item *event);
+static void handle_mdm_dlc_data_resp(struct dect_mac_common_op_event_msgq_item *event);
+
+/**************************************************************************************************/
+
+static void handle_mdm_capabilities(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_capability_ntf_cb_params *evt_data =
+		(struct nrf_modem_dect_mac_capability_ntf_cb_params *)event->data;
+
+	LOG_INF("Modem Capabilities:");
+	LOG_INF("  max_mcs: %hhu", evt_data->max_mcs);
+	for (int i = 0; i < evt_data->num_band_info_elems; i++) {
+		LOG_INF("    band[%hhu]:                   %hhu", i,
+			evt_data->band_info_elems[i].band);
+		LOG_DBG("    band_group_index[%hhu]:       %hhu", i,
+			evt_data->band_info_elems[i].band_group_index);
+		LOG_INF("    power_class[%hhu]:            %hhu", i,
+			evt_data->band_info_elems[i].power_class);
+		LOG_INF("    min_carrier[%hhu]:            %hu", i,
+			evt_data->band_info_elems[i].min_carrier);
+		LOG_INF("    max_carrier[%hhu]:            %hu", i,
+			evt_data->band_info_elems[i].max_carrier);
+	}
+	/* Store capabilities */
+	ctrl_data.mdm_capas = *evt_data;
+}
+
+static void handle_mdm_configure_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+
+		LOG_ERR("Error in configure: err %s (%d)", tmp_str, *status);
+		return;
+	}
+	k_sem_give(&dect_mac_libmodem_api_sema);
+
+	if (ctrl_data.configure_params.auto_activate ||
+	    ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ ||
+	    ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_CONFIGURE) {
+		LOG_DBG("Modem configured: "
+			"activating to full functional mode");
+
+		if (dect_nrf91_ctrl_mdm_activate_req()) {
+			ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
+			LOG_ERR("Error in initiating modem activation");
+		}
+	} else {
+		LOG_INF("Modem configured without auto start - deactivated");
+		ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
+	}
+}
+
+static void handle_mdm_cfun_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		/* Operation wasn't successful -> no change to activation state */
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+		if (ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ) {
+			dect_mgmt_activate_done_evt(
+				ctrl_data.iface,
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					*status));
+
+		} else {
+			__ASSERT_NO_MSG(ctrl_data.mdm_activation_state ==
+						CTRL_MDM_DEACTIVATE_REQ ||
+					ctrl_data.mdm_activation_state ==
+						CTRL_MDM_DEACTIVATED);
+			dect_mgmt_deactivate_done_evt(
+				ctrl_data.iface,
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					*status));
+		}
+		LOG_ERR("Error in activate/CFUN req: err %s (%d)", tmp_str,
+			*status);
+		return;
+	}
+
+	if ((ctrl_data.configure_params.auto_activate &&
+	     (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATE_REQ &&
+	      ctrl_data.mdm_activation_state !=
+		      CTRL_MDM_REACTIVATING_DEACTIVATE)) ||
+	    ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ ||
+	    ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_CONFIGURE) {
+		dect_nrf91_ctrl_msgq_non_data_op_add(
+			DECT_NRF91_CTRL_OP_MDM_ACTIVATED);
+	} else {
+		__ASSERT_NO_MSG(
+			ctrl_data.mdm_activation_state == CTRL_MDM_DEACTIVATE_REQ ||
+			ctrl_data.mdm_activation_state == CTRL_MDM_DEACTIVATED ||
+			ctrl_data.mdm_activation_state ==
+				CTRL_MDM_REACTIVATING_DEACTIVATE);
+		dect_nrf91_ctrl_msgq_non_data_op_add(
+			DECT_NRF91_CTRL_OP_MDM_DEACTIVATED);
+	}
+}
+
+static void handle_mdm_activated(struct dect_mac_common_op_event_msgq_item *event)
+{
+	ARG_UNUSED(event);
+
+	if (ctrl_data.mdm_activation_state != CTRL_MDM_REACTIVATING_CONFIGURE) {
+		net_if_carrier_on(ctrl_data.iface);
+		dect_mgmt_activate_done_evt(ctrl_data.iface, DECT_MAC_STATUS_OK);
+	}
+	ctrl_data.mdm_activation_state = CTRL_MDM_ACTIVATED;
+	ctrl_data.tx_mdm_flow_ctrl_on = false;
+#if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
+	ctrl_data.total_unacked_tx_data_amount = 0;
+	memset(ctrl_data.dlc_data_tx_infos, 0, sizeof(ctrl_data.dlc_data_tx_infos));
+#endif
+	k_sem_give(&dect_mac_ctrl_reactivate_sema);
+	LOG_INF("Modem activated - ready for commands");
+}
+
+static void handle_mdm_deactivated(struct dect_mac_common_op_event_msgq_item *event)
+{
+	ARG_UNUSED(event);
+	bool reactivate =
+		(ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_DEACTIVATE)
+			? true
+			: false;
+
+	ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
+	ctrl_data.configure_params.channel = 0;
+	if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE ||
+	    ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_NONE) {
+		struct dect_network_status_evt network_status_data = {
+			.network_status = DECT_NETWORK_STATUS_REMOVED,
+		};
+
+		if (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATE_REQ) {
+			/* If not deactivated by user, then we need to
+			 * reactivate the modem to be able to remove network,
+			 */
+			reactivate = true;
+		}
+		dect_nrf91_child_association_all_removed(
+			NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON);
+		dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
+	} else if (ctrl_data.ass_config.pt_association_state ==
+		CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+		dect_nrf91_parent_association_removed(
+			ctrl_data.ass_config.parent_long_rd_id,
+			NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON, false);
+	}
+	ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
+	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+	ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+	ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+	ctrl_data.ft_cluster_reconfig_params.channel = DECT_CLUSTER_CHANNEL_ANY;
+	ctrl_data.ft_cluster_reconfig_ongoing = false;
+	ctrl_data.configure_params.auto_start = false;
+	ctrl_data.ass_config.pt_association_state = CTRL_PT_ASSOCIATION_STATE_NONE;
+
+	if (reactivate) {
+		LOG_DBG("Deactivated. Next configure before reactivate");
+		/* Reactivate modem to be able to give commands still */
+		if (dect_nrf91_ctrl_api_mdm_configure_n_activate()) {
+			LOG_ERR("Error in initiating modem configure and activate");
+		} else {
+			ctrl_data.mdm_activation_state =
+				CTRL_MDM_REACTIVATING_CONFIGURE;
+			/* we do not want to send deactivate evt when reactivating */
+			return;
+		}
+	}
+	LOG_INF("Modem state: deactivated");
+	net_if_carrier_off(ctrl_data.iface);
+	dect_mgmt_deactivate_done_evt(ctrl_data.iface, DECT_MAC_STATUS_OK);
+}
+
+static void handle_cluster_reconfig_req(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct dect_cluster_reconfig_req_params *params =
+		(struct dect_cluster_reconfig_req_params *)event->data;
+
+	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+
+	ctrl_data.ft_requested_cluster_channel = params->channel;
+	ctrl_data.ft_cluster_reconfig_params = *params;
+
+	ctrl_data.ft_cluster_reconfig_ongoing = true;
+
+	/* Store current channel in case of cluster_reconfig failure */
+	ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
+		ctrl_data.configure_params.channel;
+
+	ctrl_data.configure_params.channel = 0;
+
+	dect_nrf91_ctrl_msgq_non_data_op_add(
+		DECT_NRF91_CTRL_OP_AUTO_START);
+}
+
+static void handle_cluster_ipv6_prefix_change_reconfig_req(
+	struct dect_mac_common_op_event_msgq_item *event)
+{
+	ARG_UNUSED(event);
+
+	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+
+	/* Keep current channel, just reconfig ipv6 cfg  */
+	ctrl_data.ft_requested_cluster_channel =
+		ctrl_data.configure_params.channel;
+	ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
+		ctrl_data.configure_params.channel;
+
+	ctrl_data.ft_cluster_reconfig_ongoing = true;
+
+	dect_nrf91_ctrl_msgq_non_data_op_add(
+		DECT_NRF91_CTRL_OP_AUTO_START);
+}
+
+static void handle_cluster_start_req(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct dect_cluster_start_req_params *params =
+		(struct dect_cluster_start_req_params *)event->data;
+
+	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
+	ctrl_data.ft_requested_cluster_channel = params->channel;
+
+	dect_nrf91_ctrl_msgq_non_data_op_add(
+		DECT_NRF91_CTRL_OP_AUTO_START);
+}
+
+static void handle_cluster_config_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_cluster_configure_cb_params *params = event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	struct dect_cluster_start_resp_evt resp_evt = {
+		.status = params->status,
+		.cluster_channel = 0,
+	};
+	struct dect_network_status_evt network_status_data;
+
+	ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+
+	if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		if (ctrl_data.ft_cluster_reconfig_ongoing &&
+		    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+			/* Reconfig failure, existing cluster config
+			 * still running
+			 */
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
+			ctrl_data.ft_cluster_reconfig_ongoing = false;
+			ctrl_data.ft_requested_cluster_channel =
+				DECT_CLUSTER_CHANNEL_ANY;
+			ctrl_data.configure_params.channel =
+				ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
+			return;
+		}
+
+		network_status_data.network_status = DECT_NETWORK_STATUS_FAILURE;
+		network_status_data.dect_err_cause =
+			dect_nrf91_utils_modem_status_to_net_mgmt_status(
+				params->status);
+
+		dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
+		LOG_ERR("Error in Cluster config: err %s (%d)", tmp_str,
+			params->status);
+
+		ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+		ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+		dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
+		goto send_events;
+	}
+	LOG_INF("Cluster configured");
+
+	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
+			DECT_DEVICE_TYPE_FT);
+
+	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
+	resp_evt.cluster_channel = ctrl_data.configure_params.channel;
+	ctrl_data.ft_cluster_reconfig_ongoing = false;
+send_events:
+	dect_mgmt_cluster_created_evt(ctrl_data.iface, resp_evt);
+	ctrl_data.configure_params.auto_start = false;
+	if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_STARTING) {
+		if (set_ptr->net_mgmt_common.nw_beacon.channel !=
+		    DECT_MAC_NW_BEACON_CHANNEL_NOT_USED) {
+			/* Network beacon start if configured */
+			struct dect_nw_beacon_start_req_params beacon_params = {
+				.channel =
+					set_ptr->net_mgmt_common.nw_beacon.channel,
+				.additional_ch_count =
+					0, /* TODO: settings support to be added? */
+			};
+
+			dect_nrf91_ctrl_msgq_data_op_add(
+				DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START, &beacon_params,
+				sizeof(struct dect_nw_beacon_start_req_params));
+		} else {
+			LOG_INF("Network created - network beacon not configured");
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
+			network_status_data.network_status =
+				DECT_NETWORK_STATUS_CREATED;
+			dect_mgmt_network_status_evt(ctrl_data.iface,
+						     network_status_data);
+		}
+	}
+}
+
+static void handle_mdm_ipv6_config_changed(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params *params =
+		event->data;
+
+	LOG_WRN("IPv6 config changed, type: %d", params->ipv6_config.type);
+	if (ctrl_data.ass_config.pt_association_state ==
+	    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+		dect_nrf91_parent_association_ipv6_config_changed(
+			params->ipv6_config);
+	} else {
+		LOG_WRN("IPv6 config changed. Not associated - ignored ");
+	}
+}
+
+static void handle_cluster_ch_load_changed(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *evt_data =
+		(struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *)
+			event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
+		&evt_data->rssi_result;
+	struct dect_rssi_scan_result_data rssi_data;
+
+	LOG_INF("Cluster channel load changed: channel %u, busy_percentage %d",
+		evt_data->rssi_result.channel,
+		evt_data->rssi_result.busy_percentage);
+
+	if (set_ptr->net_mgmt_common.cluster.channel_loaded_percent == 0) {
+		/* Channel reselection/reconfigure disabled, no worth to continue */
+		return;
+	}
+	if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
+		/* Cluster not started - cannot reconfigure */
+		return;
+	}
+	int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(mdm_rssi_res,
+								    &rssi_data);
+
+	if (err) {
+		LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
+		return;
+	}
+	uint8_t channel_loaded_percent = 100 - rssi_data.scan_suitable_percent;
+
+	if (channel_loaded_percent > set_ptr->net_mgmt_common
+		.cluster.channel_loaded_percent) {
+		LOG_WRN("Cluster channel load (%u%%) exceeded threshold (%d%%): "
+			"channel %u",
+			channel_loaded_percent,
+			set_ptr->net_mgmt_common
+				.cluster.channel_loaded_percent,
+			evt_data->rssi_result.channel);
+		if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+			struct dect_cluster_reconfig_req_params reconfig_params = {
+				.channel = DECT_CLUSTER_CHANNEL_ANY,
+				.max_beacon_tx_power_dbm =
+					set_ptr->net_mgmt_common.cluster
+						.max_beacon_tx_power_dbm,
+				.max_cluster_power_dbm = set_ptr->net_mgmt_common
+					.cluster.max_cluster_power_dbm,
+				.period = set_ptr->net_mgmt_common
+					.cluster.beacon_period,
+			};
+
+			LOG_INF("FT: starting channel reselection procedure");
+
+			/* Trigger a channel reselection procedure */
+			dect_nrf91_ctrl_msgq_data_op_add(
+				DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, &reconfig_params,
+				sizeof(struct dect_cluster_reconfig_req_params));
+		}
+	}
+}
+
+static void handle_neighbor_inactivity(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *evt_data =
+		(struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *)
+			event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_INF("Neighbor inactivity: long_rd_id %u (0x%X)", evt_data->long_rd_id,
+		evt_data->long_rd_id);
+
+	/* If inactivity timer is supported and child has been too long as inactive
+	 * -> drop it
+	 */
+	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
+	    set_ptr->net_mgmt_common.cluster
+		.neighbor_inactivity_disconnect_timer_ms) {
+		LOG_WRN("Neighbor inactive for too long - "
+			"releasing association: long_rd_id %u (0x%X)",
+			evt_data->long_rd_id, evt_data->long_rd_id);
+
+		/* Release association for this child neighbor */
+		dect_nrf91_ctrl_api_associate_release_cmd(
+			evt_data->long_rd_id,
+			NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
+	}
+}
+
+static void handle_cluster_beacon_rx_failure(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_cluster_beacon_rx_failure_ntf_cb_params
+		*evt_data =
+			(struct
+			 nrf_modem_dect_mac_cluster_beacon_rx_failure_ntf_cb_params
+				 *)event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_INF("Max nbr of cluster beacon RX failures (%d): long_rd_id %u (0x%X)",
+		set_ptr->net_mgmt_common.association.max_beacon_rx_failures,
+		evt_data->long_rd_id, evt_data->long_rd_id);
+
+	/* OK, configured max amount of cluster beacon RX failures, so we can
+	 * start a dissociation process.
+	 */
+	if (ctrl_data.ass_config.pt_association_state ==
+	    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+		__ASSERT_NO_MSG(
+			ctrl_data.ass_config.parent_long_rd_id ==
+				evt_data->long_rd_id);
+		LOG_INF("Starting releasing the association");
+		dect_nrf91_ctrl_api_associate_release_cmd(
+			ctrl_data.ass_config.parent_long_rd_id,
+			NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
+	}
+}
+
+static void handle_neighbor_paging_failure(struct dect_mac_common_op_event_msgq_item *event)
+{
+	/* Message is an indication that a neighbor is tried to be paged for
+	 * incoming data but there was no answer. We release the association.
+	 */
+	struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *params =
+		(struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *)
+			event->data;
+
+	LOG_WRN("Neighbor paging failure: long_rd_id %u (0x%X) - "
+		"releasing association",
+		params->long_rd_id, params->long_rd_id);
+
+	dect_nrf91_ctrl_api_associate_release_cmd(
+		params->long_rd_id,
+		NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY);
+}
+
+static void handle_mdm_flow_control(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_dlc_flow_control_ntf_cb_params *evt_data = event->data;
+
+	k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER);
+	ctrl_data.tx_mdm_flow_ctrl_on =
+		evt_data->status == NRF_MODEM_DECT_DLC_FLOW_CTRL_STATUS_ON ? true
+									   : false;
+	k_mutex_unlock(&dect_mac_ctrl_data_mtx);
+
+	LOG_DBG("Flow control %s:",
+		evt_data->status == NRF_MODEM_DECT_DLC_FLOW_CTRL_STATUS_ON ? "ON"
+									   : "OFF");
+}
+
+static void handle_mdm_association_ind(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_association_ntf_cb_params *params = event->data;
+
+	if (params->status !=
+	    NRF_MODEM_DECT_MAC_ASSOCIATION_INDICATION_STATUS_SUCCESS) {
+		dect_nrf91_utils_modem_association_ind_err_to_string(params->status,
+								     tmp_str);
+		LOG_ERR("Association indication with err %s (%d) with long RD ID: "
+			"0x%X",
+			tmp_str, params->status, params->long_rd_id);
+		return;
+	}
+	LOG_INF("New child: association with long RD ID: %u (0x%X)",
+		params->long_rd_id, params->long_rd_id);
+
+	dect_nrf91_child_association_created(params->long_rd_id);
+}
+
+static void handle_mdm_association_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_association_cb_params *params = event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	struct dect_network_status_evt network_status_data = {
+		.network_status = DECT_NETWORK_STATUS_FAILURE,
+		.dect_err_cause = dect_nrf91_utils_modem_status_to_net_mgmt_status(
+			params->status),
+	};
+
+	/* Association response only with PT devices */
+	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
+			DECT_DEVICE_TYPE_PT);
+	if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		/* Modem operation failed */
+		dect_mgmt_association_req_failed_mdm_result_evt(
+			ctrl_data.iface,
+			params->long_rd_id,
+			network_status_data.dect_err_cause);
+		dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
+
+		ctrl_data.configure_params.auto_start = false;
+		if (ctrl_data.ass_config.pt_association_state !=
+			CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+			ctrl_data.ass_config.pt_association_state =
+				CTRL_PT_ASSOCIATION_STATE_NONE;
+		}
+
+		dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
+		LOG_ERR("Modem operation failed for Association Response with "
+			"err %s (%d) with long RD ID: 0x%X",
+			tmp_str, params->status, params->long_rd_id);
+		return;
+	}
+
+	if (!params->flags.has_association_response) {
+		dect_mgmt_association_req_rejected_result_evt(
+			ctrl_data.iface,
+			params->long_rd_id,
+			DECT_MAC_ASSOCIATION_NO_RESPONSE,
+			DECT_MAC_ASSOCIATION_REJECT_TIME_60S);
+
+		dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
+		LOG_ERR("Association response with no actual response with long RD "
+			"ID: 0x%X",
+			params->long_rd_id);
+	} else if (!params->association_response.ack_status) {
+		/* Association rejected */
+		LOG_INF("Association rejected with long RD ID: %u (0x%X), cause %d",
+			params->long_rd_id, params->long_rd_id,
+			params->association_response.reject_cause);
+
+		dect_mgmt_association_req_rejected_result_evt(
+			ctrl_data.iface,
+			params->long_rd_id,
+			params->association_response.reject_cause,
+			params->association_response.reject_time);
+	} else {
+		LOG_INF("New parent: association with long RD ID: %u (0x%X)",
+			params->long_rd_id, params->long_rd_id);
+
+		ctrl_data.configure_params.auto_start = false;
+		ctrl_data.ass_config.pt_association_state =
+			CTRL_PT_ASSOCIATION_STATE_ASSOCIATED;
+		dect_nrf91_parent_association_created(params->long_rd_id,
+						      params->ipv6_config);
+	}
+}
+
+static void handle_mdm_association_release_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_association_release_cb_params *params =
+		event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_INF("Association released with long RD ID: %u (0x%08x)",
+		params->long_rd_id, params->long_rd_id);
+
+	if (ctrl_data.ass_config.pt_association_state ==
+	    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+		ctrl_data.ass_config.pt_association_state =
+			CTRL_PT_ASSOCIATION_STATE_NONE;
+		dect_nrf91_parent_association_removed(
+			params->long_rd_id, ctrl_data.last_rel_cause, false);
+	} else if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+		dect_nrf91_child_association_removed(
+			params->long_rd_id, ctrl_data.last_rel_cause, false);
+	}
+}
+
+static void handle_mdm_association_release_ind(struct dect_mac_common_op_event_msgq_item *event)
+{
+	struct nrf_modem_dect_mac_association_release_ntf_cb_params *params =
+		event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_INF("Release req received and association released with long RD ID: "
+		"%u (0x%X)",
+		params->long_rd_id, params->long_rd_id);
+
+	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+		dect_nrf91_child_association_removed(
+			params->long_rd_id, params->release_cause, true);
+	} else {
+		/* Network kicked us out? */
+		ctrl_data.ass_config.pt_association_state =
+			CTRL_PT_ASSOCIATION_STATE_NONE;
+	dect_nrf91_parent_association_removed(
+		params->long_rd_id, params->release_cause, true);
+	}
+}
+
+static void handle_auto_start(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	int err;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	ARG_UNUSED(event);
+	ctrl_data.configure_params.auto_start = true;
+
+	/* Clear seen cluster channels */
+	memset(ctrl_data.scan_data.cluster_channels, 0,
+	sizeof(ctrl_data.scan_data.cluster_channels));
+	ctrl_data.scan_data.current_cluster_channel_index = 0;
+
+	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+		struct nrf_modem_dect_mac_network_scan_params params = {
+			.network_id_filter_mode =
+				NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_NONE,
+			.band = set_ptr->net_mgmt_common.band_nbr,
+			.scan_time = 2100, /* TODO: a config setting for this one?*/
+			.num_channels = 0,
+		};
+
+		if (ctrl_data.ft_requested_cluster_channel !=
+		    DECT_CLUSTER_CHANNEL_ANY) {
+			params.num_channels = 1;
+			params.channel_list[0] =
+				ctrl_data.ft_requested_cluster_channel;
+		} else {
+			uint8_t num_channels =
+				NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ;
+			uint16_t channel_list
+			[NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ];
+
+			if (dect_common_utils_use_harmonized_std(
+				    set_ptr->net_mgmt_common.band_nbr) &&
+			    dect_common_utils_harmonized_band_channel_array_get(
+				    set_ptr->net_mgmt_common.band_nbr, channel_list,
+				    &num_channels)) {
+				/* Per harmonized std: only odd number channels at band #1:
+				 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
+				 */
+				params.num_channels = num_channels;
+				memcpy(params.channel_list, channel_list,
+				       num_channels * sizeof(uint16_t));
+			}
+		}
+
+		if (ctrl_data.ft_cluster_reconfig_ongoing) {
+			/* Do not initiate nw scan if cluster is already running and
+			 * doing reconfig
+			 */
+			err = -EALREADY;
+		} else {
+			LOG_INF("FT device auto start for cluster start: "
+				"starting NW scanning to see where other "
+				"clusters are: band %hhu, num_channels %hhu",
+				params.band, params.num_channels);
+			err = nrf_modem_dect_mac_network_scan(&params);
+		}
+		if (!err) {
+			ctrl_data.scan_data.on_going = true;
+			ctrl_data.scan_data.scan_result_cb = NULL;
+			ctrl_data.scan_data.scan_params = params;
+		} else {
+			/* As a default RSSI params from settings  */
+			struct nrf_modem_dect_mac_rssi_scan_params params = {
+				.channel_scan_length =
+					set_ptr->net_mgmt_common.rssi_scan
+						.time_per_channel_ms /
+					10,
+				.threshold_min = set_ptr->net_mgmt_common.rssi_scan
+								 .free_threshold_dbm,
+				.threshold_max = set_ptr->net_mgmt_common.rssi_scan
+								 .busy_threshold_dbm,
+				.num_channels = 0,
+				.band = set_ptr->net_mgmt_common.band_nbr,
+			};
+
+			__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
+					DECT_DEVICE_TYPE_FT);
+			if (ctrl_data.ft_requested_cluster_channel !=
+			    DECT_CLUSTER_CHANNEL_ANY) {
+				params.num_channels = 1;
+				params.channel_list[0] =
+					ctrl_data.ft_requested_cluster_channel;
+			}
+			if (ctrl_data.ft_cluster_reconfig_ongoing) {
+				/* Only one frame RSSI measurement if reconfiguring
+				 */
+				params.channel_scan_length = 1;
+		} else {
+			LOG_WRN("Error initiating NW scan: err %d -"
+				"starting directly RSSI scan",
+				err);
+			}
+
+			dect_nrf91_ctrl_msgq_data_op_add(
+				DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
+				&params,
+				sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
+		}
+	} else {
+		LOG_INF("PT device auto start: starting network scan");
+
+		struct nrf_modem_dect_mac_network_scan_params params = {
+			.network_id_filter_mode =
+				NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_32BIT,
+			.network_id_filter =
+				set_ptr->net_mgmt_common.identities.network_id,
+			.scan_time = 2200,
+			.num_channels = 0,
+			.band = set_ptr->net_mgmt_common.band_nbr,
+		};
+
+		err = nrf_modem_dect_mac_network_scan(&params);
+		if (err) {
+			dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
+			LOG_ERR("Error in Network scan: err %s (%d)", tmp_str, err);
+			ctrl_data.configure_params.auto_start = false;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+					.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
+					.os_err_cause = err,
+				});
+		} else {
+			ctrl_data.scan_data.on_going = true;
+			ctrl_data.scan_data.scan_result_cb = NULL;
+			ctrl_data.scan_data.scan_params = params;
+		}
+	}
+}
+
+static void handle_rssi_start_req_cmd(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_rssi_scan_params *params =
+		(struct nrf_modem_dect_mac_rssi_scan_params *)event->data;
+	int err;
+
+	LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD: "
+		"channel_scan_length %hu, num_channels %hu, band %hhu, "
+		"min_threshold %hhd, max_threshold %hhd",
+		params->channel_scan_length, params->num_channels, params->band,
+		params->threshold_min, params->threshold_max);
+
+	/* Log channels */
+	for (uint32_t i = 0; i < params->num_channels; i++) {
+		LOG_INF("  channel[%hhu]: %d", i, params->channel_list[i]);
+	}
+	err = nrf_modem_dect_mac_rssi_scan(params);
+	if (err) {
+		dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
+		LOG_ERR("Error initiating RSSI scan by params: err %s (%d)",
+			tmp_str, err);
+		dect_mgmt_rssi_scan_done_evt(
+			ctrl_data.iface,
+			dect_nrf91_utils_modem_status_to_net_mgmt_status(err));
+		if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+					.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
+					.os_err_cause = err,
+				});
+		}
+	} else {
+		LOG_INF("RSSI scan started");
+		dect_nrf91_ctrl_rssi_scan_data_init(true);
+	}
+}
+
+static void handle_rssi_start_req_ch_selection(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_rssi_scan_params *params =
+		(struct nrf_modem_dect_mac_rssi_scan_params *)event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: "
+		"channel_scan_length %hu, num_channels %hu, band %hhu, "
+		"min_threshold %hhd, max_threshold %hhd",
+		params->channel_scan_length, params->num_channels, params->band,
+		params->threshold_min, params->threshold_max);
+
+	if (params->num_channels == 0 &&
+	    dect_common_utils_use_harmonized_std(
+		set_ptr->net_mgmt_common.band_nbr) == true) {
+		/* Per harmonized std: only odd number channels at band #1:
+		 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
+		 */
+		bool array_filled = false;
+
+		params->num_channels = DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN;
+		array_filled = dect_common_utils_harmonized_band_channel_array_get(
+			set_ptr->net_mgmt_common.band_nbr, params->channel_list,
+			&params->num_channels);
+		if (!array_filled) {
+			LOG_ERR("RSSI scanning start: "
+				"error in channel array filling");
+			return;
+		}
+	}
+	int err = nrf_modem_dect_mac_rssi_scan(params);
+
+	if (err) {
+		dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
+		LOG_ERR("nrf_modem_dect_mac_rssi_scan failed: %s (%d)", tmp_str,
+			err);
+		if (ctrl_data.ft_cluster_reconfig_ongoing &&
+		    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+			/* Reconfig failure, existing cluster config
+			 * still running
+			 */
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
+			ctrl_data.configure_params.channel =
+				ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
+			/* TODO send failure event?*/
+		} else {
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+		}
+		ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
+		ctrl_data.ft_cluster_reconfig_ongoing = false;
+		dect_mgmt_rssi_scan_done_evt(ctrl_data.iface,
+					     DECT_MAC_STATUS_OS_ERROR);
+	} else {
+		dect_nrf91_ctrl_rssi_scan_data_init(false);
+		LOG_INF("RSSI scan started with params: "
+			"channel_scan_length %hu, num_channels %hu, band %hhu, "
+			"min_threshold %hhd, max_threshold %hhd",
+			params->channel_scan_length, params->num_channels,
+			params->band, params->threshold_min, params->threshold_max);
+	}
+}
+
+static void handle_mdm_rssi_result(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct dect_nrf91_ctrl_rssi_measurement_data_evt *evt_data =
+		(struct dect_nrf91_ctrl_rssi_measurement_data_evt *)event->data;
+	struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
+		&evt_data->rssi_result;
+	bool channel_has_another_cluster = false;
+
+	LOG_DBG("RSSI scan results received");
+
+	bool scan_suitable_percent_ok = false;
+	bool all_subslots_free = false;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	struct dect_rssi_scan_result_evt l2_results_evt;
+	struct dect_rssi_scan_result_data *rssi_data =
+		&l2_results_evt.rssi_scan_result;
+	int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(mdm_rssi_res,
+								    rssi_data);
+
+	if (err) {
+		LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
+	}
+
+	/* Check if we have seen another cluster in this channel */
+	if (dect_nrf91_ctrl_cluster_channels_list_channel_exists(
+		rssi_data->channel)) {
+		LOG_DBG("RSSI results: another cluster seen in this"
+			" channel %d was seen in nw scanning phase",
+			rssi_data->channel);
+		channel_has_another_cluster = true;
+		rssi_data->another_cluster_detected_in_channel = true;
+	}
+	all_subslots_free = rssi_data->all_subslots_free;
+	if (rssi_data->scan_suitable_percent >=
+		    set_ptr->net_mgmt_common.rssi_scan.scan_suitable_percent) {
+		scan_suitable_percent_ok = true;
+	}
+
+	LOG_INF("RSSI scan results: channel %d, all_subslots_free: %s, "
+		"scan_suitable_percent: %d%%, "
+		"busy_percentage: %d%%, "
+		"another_cluster_detected_in_channel: %s",
+		rssi_data->channel,
+		(rssi_data->all_subslots_free) ? "yes" : "no",
+		rssi_data->scan_suitable_percent,
+		rssi_data->busy_percentage,
+		(rssi_data->another_cluster_detected_in_channel) ? "yes" : "no");
+
+	dect_mgmt_rssi_scan_result_evt(ctrl_data.iface, l2_results_evt);
+
+	/* Store results for internal usage in cluster channel selection */
+	if (ctrl_data.rssi_scan_data.current_results_index <
+	    DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS) {
+		struct dect_nrf91_ctrl_rssi_scan_result_data results_item = {
+			.channel = rssi_data->channel,
+			.all_subslots_free = all_subslots_free,
+			.scan_suitable_percent_ok = scan_suitable_percent_ok,
+			.busy_percentage = rssi_data->busy_percentage,
+			.busy_percentage_ok =
+				(rssi_data->busy_percentage <
+				(100 - set_ptr->net_mgmt_common
+					.rssi_scan.scan_suitable_percent)),
+			.another_cluster_detected_in_channel =
+				channel_has_another_cluster,
+			.possible_subslot_cnt = rssi_data->possible_subslot_cnt,
+			.busy_subslot_cnt = rssi_data->busy_subslot_cnt,
+		};
+
+		ctrl_data.rssi_scan_data.results
+			[ctrl_data.rssi_scan_data.current_results_index++] =
+			results_item;
+	}
+	if (ctrl_data.rssi_scan_data.cmd_on_going) {
+		/* Actual RSSI scanning command was running, let it run */
+		return;
+	}
+	if ((channel_has_another_cluster == false &&
+	     all_subslots_free && scan_suitable_percent_ok &&
+	     rssi_data->busy_percentage == 0) &&
+	    (ctrl_data.configure_params.auto_start ||
+	     ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) &&
+	    (ctrl_data.configure_params.channel == 0)) {
+		/* MAC spec, ch. 5.1.2:
+		 * if any channel where all subslots are "free", is found,
+		 * then select channel for the cluster & stop the scan.
+		 * Additionally, we made this rule stricter, we checked
+		 * that no other cluster is present in the channel and
+		 * calculated busy percentage is also zero.
+		 */
+		ctrl_data.configure_params.channel = mdm_rssi_res->channel;
+
+		err = nrf_modem_dect_mac_rssi_scan_stop();
+		if (err) {
+			dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
+			LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str,
+				err);
+		}
+	}
+}
+
+static void handle_mdm_rssi_stopped(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+
+		LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str, *status);
+	} else {
+		LOG_INF("RSSI scan stopped");
+	}
+}
+
+static void handle_mdm_rssi_complete(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	int err;
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	bool reconfig_on_same_channel = (ctrl_data.ft_cluster_reconfig_ongoing &&
+		ctrl_data.configure_params.channel ==
+		ctrl_data.ft_cluster_reconfig_prev_cluster_channel);
+
+	if (!reconfig_on_same_channel) {
+		/* Reconfig for prefix on going, RSSI scan result is bypassed */
+		dect_mgmt_rssi_scan_done_evt(
+			ctrl_data.iface,
+			dect_nrf91_utils_modem_status_to_net_mgmt_status(*status));
+	}
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK &&
+	    !(reconfig_on_same_channel)) {
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+
+		LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
+			*status);
+
+		if (ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
+			if (ctrl_data.ft_cluster_reconfig_ongoing) {
+				/* RSSI failure during reconfig, prev cluster conf
+				 * still running
+				 */
+				ctrl_data.ft_cluster_state =
+					CTRL_FT_CLUSTER_STATE_STARTED;
+				ctrl_data.ft_cluster_reconfig_ongoing = false;
+				ctrl_data.ft_requested_cluster_channel =
+					DECT_CLUSTER_CHANNEL_ANY;
+				ctrl_data.configure_params.channel =
+					ctrl_data
+					.ft_cluster_reconfig_prev_cluster_channel;
+
+				LOG_WRN("RSSI scan failed on reconfig - "
+					"keeping cluster running");
+				/* TODO send failure event for reconfig? */
+				return;
+			}
+			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
+			ctrl_data.configure_params.channel = 0;
+			ctrl_data.ft_requested_cluster_channel =
+				DECT_CLUSTER_CHANNEL_ANY;
+			dect_mgmt_cluster_created_evt(
+				ctrl_data.iface,
+				(struct dect_cluster_start_resp_evt){
+					.status =
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					*status),
+					.cluster_channel = 0,
+				});
+		}
+		if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
+			struct dect_network_status_evt network_status_data = {
+				.network_status = DECT_NETWORK_STATUS_FAILURE,
+				.dect_err_cause =
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					*status),
+			};
+
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+			dect_mgmt_network_status_evt(ctrl_data.iface,
+						     network_status_data);
+		}
+		return;
+	}
+	LOG_INF("RSSI scan completed");
+	if (ctrl_data.rssi_scan_data.cmd_on_going) {
+		ctrl_data.rssi_scan_data.cmd_on_going = false;
+		return;
+	}
+	if (!(ctrl_data.configure_params.auto_start ||
+	    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING)) {
+		/* Not auto start or cluster start req - nothing to do here more */
+		return;
+	}
+
+	if (ctrl_data.configure_params.channel == 0) {
+		struct dect_nrf91_ctrl_rssi_scan_result_data best_rssi_meas;
+
+		if (dect_nrf91_ctrl_rssi_scan_data_results_best_get(
+			&best_rssi_meas)) {
+			ctrl_data.configure_params.channel = best_rssi_meas.channel;
+		} else {
+			if (ctrl_data.ft_cluster_reconfig_ongoing) {
+				/* Reconfig failure, existing cluster config
+				 * still running
+				 */
+				LOG_WRN("No free enough channel found in "
+					"RSSI scan,"
+					" cannot reconfigure cluster");
+				ctrl_data.ft_cluster_reconfig_ongoing =
+					false;
+				ctrl_data.ft_cluster_state =
+					CTRL_FT_CLUSTER_STATE_STARTED;
+				ctrl_data.configure_params.channel =
+				ctrl_data
+				.ft_cluster_reconfig_prev_cluster_channel;
+				return;
+			}
+			LOG_ERR("No free enough channel found in RSSI scan,"
+				" cannot start cluster");
+			ctrl_data.ft_cluster_state =
+				CTRL_FT_CLUSTER_STATE_NONE;
+			dect_mgmt_cluster_created_evt(
+				ctrl_data.iface,
+				(struct dect_cluster_start_resp_evt){
+					.status =
+					DECT_MAC_STATUS_NO_RESOURCES,
+					.cluster_channel = 0,
+				});
+			ctrl_data.ft_network_state =
+				CTRL_FT_NETWORK_STATE_NONE;
+			ctrl_data.ft_requested_cluster_channel =
+				DECT_CLUSTER_CHANNEL_ANY;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+					.dect_err_cause =
+						DECT_MAC_STATUS_NO_RESOURCES,
+				});
+			return;
+		}
+	}
+	/* TODO: own op evt for this: */
+	LOG_INF("%s: starting a cluster on a channel %d.",
+		ctrl_data.configure_params.auto_start ? "auto start"
+						      : "cluster_start_req",
+		ctrl_data.configure_params.channel);
+	/* Start a cluster in a chosen channel */
+	struct nrf_modem_dect_mac_cluster_config cluster_config = {
+		.flags = {
+				.has_max_tx_power = true,
+				.has_rach_config = true,
+			},
+			.count_to_trigger = NRF_MODEM_DECT_MAC_COUNT_TO_TRIGGER_2,
+			.relative_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
+			.min_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
+			.beacon_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
+				set_ptr->net_mgmt_common.cluster.max_beacon_tx_power_dbm),
+			.cluster_max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
+				set_ptr->net_mgmt_common.cluster.max_cluster_power_dbm),
+			.cluster_beacon_period =
+				set_ptr->net_mgmt_common.cluster.beacon_period,
+			.cluster_channel = ctrl_data.configure_params.channel,
+			.network_id = ctrl_data.configure_params.network_id,
+			.rach_configuration = {
+				 .policy =
+					 NRF_MODEM_DECT_MAC_RACH_CONFIG_POLICY_FILL,
+				 .common = {
+						 .response_window_length = 8,
+						 .max_transmission_length = 8,
+						 .cw_min_sig = 2,
+						 .cw_max_sig = 7,
+					 },
+				 .config = { .fill = {
+								.percentage = 100,
+							}}},
+			.triggers = {
+					.busy_threshold = 20,
+				}
+	};
+	struct nrf_modem_dect_mac_association_config ass_config = {
+		.max_num_neighbours =
+			set_ptr->net_mgmt_common.cluster.max_num_neighbors,
+		.max_num_ft_neighbours = 2,
+		.neighbor_info_triggers = {
+				.inactivity_timer = set_ptr->net_mgmt_common
+					.cluster
+					.neighbor_inactivity_disconnect_timer_ms,
+			},
+			.default_tx_flow_config = {
+			{
+				.dlc_service_type =
+				NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+				NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
+			},
+			{
+				.dlc_service_type =
+					NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+					NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+			},
+			{
+				.priority = 3,
+				.dlc_service_type =
+					NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+					NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+			},
+			{
+				.priority = 4,
+				.dlc_service_type =
+					NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+					NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+			},
+			{
+				.priority = 5,
+				.dlc_service_type =
+					NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+					NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+			},
+			{
+				.priority = 6,
+				.dlc_service_type =
+					NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
+				.dlc_sdu_lifetime =
+					NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
+			}},
+	};
+	struct nrf_modem_dect_mac_cluster_configure_params params = {
+		.cluster_period_start_offset = 0,
+		.association_config = &ass_config,
+		.cluster_config = &cluster_config,
+	};
+	/* Set our IPv6 address prefix to modem to be passed to children */
+	struct dect_nrf91_ipv6_prefix global_prefix;
+
+	if (dect_nrf91_sink_ipv6_prefix_get(&global_prefix)) {
+		/* Pass prefix to children */
+		__ASSERT_NO_MSG(global_prefix.len == 8);
+		memcpy(&cluster_config.ipv6_config.address,
+		       global_prefix.prefix.s6_addr, global_prefix.len);
+		cluster_config.ipv6_config.type =
+			NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
+	} else {
+		/* Using link local (already set to us)*/
+		cluster_config.ipv6_config.type =
+			NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
+		LOG_WRN("%s: no IPv6 prefix to set - using link local only",
+			__func__);
+	}
+	if (ctrl_data.ft_cluster_reconfig_ongoing) {
+		/* Use reconfigure params for certain cluster configs */
+		cluster_config.beacon_tx_power =
+			dect_nrp_utils_dbm_to_phy_tx_power(
+				ctrl_data.ft_cluster_reconfig_params
+					.max_beacon_tx_power_dbm);
+		cluster_config.cluster_max_tx_power =
+			dect_nrp_utils_dbm_to_phy_tx_power(
+				ctrl_data.ft_cluster_reconfig_params
+					.max_cluster_power_dbm);
+		cluster_config.cluster_beacon_period =
+			ctrl_data.ft_cluster_reconfig_params.period;
+	}
+	err = nrf_modem_dect_mac_cluster_configure(&params);
+	if (err) {
+		LOG_ERR("nrf_modem_dect_mac_cluster_configure returned err "
+			"%d",
+			err);
+		if (ctrl_data.ft_cluster_reconfig_ongoing &&
+		    ctrl_data.ft_cluster_state ==
+			CTRL_FT_CLUSTER_STATE_STARTING) {
+			/* Reconfig failure, existing cluster config
+			 * still running
+			 */
+			ctrl_data.ft_cluster_state =
+				CTRL_FT_CLUSTER_STATE_STARTED;
+			ctrl_data.configure_params.channel =
+				ctrl_data
+				.ft_cluster_reconfig_prev_cluster_channel;
+		} else if (ctrl_data.ft_network_state !=
+		    CTRL_FT_NETWORK_STATE_NONE) {
+			ctrl_data.ft_network_state =
+				CTRL_FT_NETWORK_STATE_NONE;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+					.dect_err_cause =
+						DECT_MAC_STATUS_OS_ERROR,
+					.os_err_cause = err,
+				});
+		}
+		ctrl_data.ft_cluster_reconfig_ongoing = false;
+		ctrl_data.ft_requested_cluster_channel =
+			DECT_CLUSTER_CHANNEL_ANY;
+	}
+}
+
+static void handle_mdm_nw_beacon_start(struct dect_mac_common_op_event_msgq_item *event)
+{
+	int err;
+	struct dect_nw_beacon_start_req_params *params =
+		(struct dect_nw_beacon_start_req_params *)event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	struct nrf_modem_dect_mac_network_beacon_configure_params beacon_params = {
+		.channel = params->channel,
+		.num_additional_channels = 0,
+		.nw_beacon_period = set_ptr->net_mgmt_common
+					.nw_beacon.beacon_period,
+	};
+
+	beacon_params.num_additional_channels = params->additional_ch_count;
+	beacon_params.additional_channels = params->additional_ch_list;
+
+	LOG_INF("starting network beacon on a channel %d.", params->channel);
+
+	err = nrf_modem_dect_mac_network_beacon_configure(&beacon_params);
+	if (err) {
+		LOG_ERR("nrf_modem_dect_mac_network_beacon_configure failed: %d",
+			err);
+		ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
+		dect_mgmt_nw_beacon_start_evt(
+			ctrl_data.iface,
+			dect_nrf91_utils_modem_status_to_net_mgmt_status(err));
+
+		if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+					.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
+					.os_err_cause = err,
+				});
+		}
+	} else {
+		ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_STARTING;
+	}
+}
+
+static void handle_mdm_nw_beacon_start_or_stop_done(
+	struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_network_beacon_configure_cb_params *evt_data =
+		(struct nrf_modem_dect_mac_network_beacon_configure_cb_params *)
+			event->data;
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(
+			evt_data->status, tmp_str);
+
+		LOG_ERR("Error in network beacon start/stop: err %s (%d)", tmp_str,
+			evt_data->status);
+		if (ctrl_data.ft_nw_beacon_state ==
+		    CTRL_FT_NW_BEACON_STATE_STOPPING) {
+			dect_mgmt_nw_beacon_stop_evt(
+				ctrl_data.iface,
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					evt_data->status));
+		} else if (ctrl_data.ft_nw_beacon_state ==
+			   CTRL_FT_NW_BEACON_STATE_STARTING) {
+			dect_mgmt_nw_beacon_start_evt(
+				ctrl_data.iface,
+				dect_nrf91_utils_modem_status_to_net_mgmt_status(
+					evt_data->status));
+
+			/* Eventhough nw beacon failed, cluster is still running*/
+			if (ctrl_data.ft_network_state ==
+			    CTRL_FT_NETWORK_STATE_STARTING) {
+				dect_mgmt_network_status_evt(
+					ctrl_data.iface,
+					(struct dect_network_status_evt){
+						.network_status =
+							DECT_NETWORK_STATUS_CREATED,
+					});
+				LOG_WRN("Network beacon start failed, "
+					"but cluster is still running");
+			}
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
+		}
+		ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
+	} else {
+		if (ctrl_data.ft_nw_beacon_state ==
+		    CTRL_FT_NW_BEACON_STATE_STARTING) {
+			LOG_INF("Network beacon started");
+			ctrl_data.ft_nw_beacon_state =
+				CTRL_FT_NW_BEACON_STATE_STARTED;
+			dect_mgmt_nw_beacon_start_evt(ctrl_data.iface,
+						      DECT_MAC_STATUS_OK);
+			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
+			dect_mgmt_network_status_evt(
+				ctrl_data.iface,
+				(struct dect_network_status_evt){
+					.network_status =
+						DECT_NETWORK_STATUS_CREATED,
+				});
+		} else {
+			__ASSERT_NO_MSG(ctrl_data.ft_nw_beacon_state ==
+					CTRL_FT_NW_BEACON_STATE_STOPPING);
+			LOG_INF("Network beacon stopped");
+			ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
+			dect_mgmt_nw_beacon_stop_evt(ctrl_data.iface,
+						     DECT_MAC_STATUS_OK);
+		}
+	}
+}
+
+static void handle_mdm_nw_beacon_stop(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	int err;
+	struct nrf_modem_dect_mac_network_beacon_configure_params beacon_params = {
+		.channel = 0,
+		.num_additional_channels = 0,
+	};
+
+	LOG_INF("Stopping network beacon.");
+
+	err = nrf_modem_dect_mac_network_beacon_configure(&beacon_params);
+	if (err) {
+		dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
+		LOG_ERR("nrf_modem_dect_mac_network_beacon_configure failed: %s "
+			"(%d)",
+			tmp_str, err);
+		ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
+		dect_mgmt_nw_beacon_stop_evt(ctrl_data.iface,
+						 DECT_MAC_STATUS_OS_ERROR);
+	} else {
+		ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_STOPPING;
+	}
+}
+
+static void handle_mdm_cluster_beacon_rcvd(struct dect_mac_common_op_event_msgq_item *event)
+{
+	/* TODO: PT mobility? we are getting these for every
+	 * received beacon when associated and we have a rssi level from rx
+	 * rx_signal_info -> poor enough could be used for mobility trigger?
+	 */
+	struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *params = event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+	bool add_to_cluster_channels = ctrl_data.scan_data.on_going;
+
+	/* Did we already mark this to cluster_channels? */
+	for (int i = 0; i < DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS &&
+	     add_to_cluster_channels; i++) {
+		if (ctrl_data.scan_data.cluster_channels[i].channel ==
+		    params->channel) {
+			add_to_cluster_channels = false;
+			break;
+		}
+	}
+	/* Store channel and RSSI: used by FT when creating a cluster and
+	 * when PT selecting RD for association.
+	 */
+	if (add_to_cluster_channels) {
+		ctrl_data.scan_data.cluster_channels[
+			ctrl_data.scan_data.current_cluster_channel_index].channel =
+			params->channel;
+		ctrl_data.scan_data.cluster_channels[
+			ctrl_data.scan_data.current_cluster_channel_index].rssi_2 =
+			params->rx_signal_info.rssi_2;
+		ctrl_data.scan_data.cluster_channels[
+			ctrl_data.scan_data.current_cluster_channel_index]
+			.long_rd_id = params->transmitter_long_rd_id;
+
+		ctrl_data.scan_data.current_cluster_channel_index++;
+		__ASSERT_NO_MSG(ctrl_data.scan_data.current_cluster_channel_index <
+				ARRAY_SIZE(ctrl_data.scan_data.cluster_channels));
+	}
+	if (ctrl_data.scan_data.scan_result_cb) {
+		struct dect_scan_result_evt scan_result = {
+			.beacon_type = DECT_SCAN_RESULT_TYPE_CLUSTER_BEACON,
+			.channel = params->channel,
+			.transmitter_short_rd_id = params->transmitter_short_rd_id,
+			.transmitter_long_rd_id = params->transmitter_long_rd_id,
+			.network_id = params->network_id,
+			.rx_signal_info.mcs = params->rx_signal_info.mcs,
+			.rx_signal_info.transmit_power =
+				params->rx_signal_info.transmit_power,
+			.rx_signal_info.rssi_2 = params->rx_signal_info.rssi_2,
+			.rx_signal_info.snr = params->rx_signal_info.snr,
+		};
+
+		ctrl_data.scan_data.scan_result_cb(ctrl_data.iface, 0,
+						   &scan_result);
+	}
+	if (set_ptr->net_mgmt_common.device_type != DECT_DEVICE_TYPE_PT) {
+		/* Cluster beacon can be also received if FT device and
+		 * if same short nw id and in same channel
+		 */
+		LOG_DBG("Cluster beacon received, but not PT device!!!");
+		return;
+	}
+	if (ctrl_data.ass_config.pt_association_state !=
+		CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
+	    dect_nrf91_utils_cluster_acceptable_for_association(params)) {
+		ctrl_data.ass_config.pt_association_state =
+			CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
+		ctrl_data.ass_config.network_id = params->network_id;
+		ctrl_data.ass_config.parent_long_rd_id =
+			params->transmitter_long_rd_id;
+
+		if (ctrl_data.configure_params.auto_start) {
+			if (nrf_modem_dect_mac_network_scan_stop() != 0) {
+				LOG_ERR("OP_MDM_CLUSTER_BEACON_RCVD: error in "
+					"Network scan stop!");
+			} else {
+				LOG_DBG("nw scan stopping requested");
+			}
+		}
+	}
+	if (ctrl_data.ass_config.pt_association_state ==
+	    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
+	    set_ptr->net_mgmt_common.association.min_sensitivity_dbm >=
+	    params->rx_signal_info.rssi_2) {
+		LOG_WRN("Signal (rssi_2 %d) is below the minimum "
+			"sensitivity threshold (%d)",
+			params->rx_signal_info.rssi_2,
+			set_ptr->net_mgmt_common.association.min_sensitivity_dbm);
+	}
+}
+
+static void handle_mdm_nw_beacon_rcvd(struct dect_mac_common_op_event_msgq_item *event)
+{
+	int err;
+	struct nrf_modem_dect_mac_network_beacon_ntf_cb_params *params = event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	LOG_DBG("Network beacon information:");
+	LOG_DBG("  network id (32bit).............................%u (0x%08x)",
+		params->network_id, params->network_id);
+	LOG_DBG("  transmitter id (long RD ID)....................%u (0x%08x)",
+		params->transmitter_long_rd_id, params->transmitter_long_rd_id);
+	LOG_DBG("  short RD ID....................................%u (0x%04x)",
+		params->transmitter_short_rd_id, params->transmitter_short_rd_id);
+	LOG_DBG("  channel number.................................%d",
+		params->channel);
+	LOG_DBG("  next_cluster_channel number....................%d",
+		params->beacon.next_cluster_channel);
+
+	if (ctrl_data.scan_data.scan_result_cb) {
+		struct dect_scan_result_evt scan_result = {
+			.beacon_type = DECT_SCAN_RESULT_TYPE_NW_BEACON,
+			.channel = params->channel,
+			.transmitter_short_rd_id = params->transmitter_short_rd_id,
+			.transmitter_long_rd_id = params->transmitter_long_rd_id,
+			.network_id = params->network_id,
+			.rx_signal_info.mcs = params->rx_signal_info.mcs,
+			.rx_signal_info.transmit_power =
+				params->rx_signal_info.transmit_power,
+			.rx_signal_info.rssi_2 = params->rx_signal_info.rssi_2,
+			.rx_signal_info.snr = params->rx_signal_info.snr,
+		};
+		struct dect_network_beacon_data nw_beacon = {
+			.next_cluster_channel = params->beacon.next_cluster_channel,
+			.current_cluster_channel =
+				params->beacon.current_cluster_channel,
+			.num_network_beacon_channels =
+				params->beacon.num_network_beacon_channels,
+		};
+
+		for (int i = 0; i < params->beacon.num_network_beacon_channels;
+		     i++) {
+			nw_beacon.network_beacon_channels[i] =
+				params->beacon.network_beacon_channels[i];
+		}
+		scan_result.network_beacon = nw_beacon;
+		ctrl_data.scan_data.scan_result_cb(ctrl_data.iface, 0,
+						   &scan_result);
+	}
+
+	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT &&
+	    ctrl_data.ass_config.pt_association_state !=
+		    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
+		ctrl_data.ass_config.pt_association_state =
+			CTRL_PT_ASSOCIATION_STATE_CLUSTER_FOUND;
+		ctrl_data.ass_config.network_id = params->network_id;
+		ctrl_data.ass_config.parent_long_rd_id =
+			params->transmitter_long_rd_id;
+
+		if (ctrl_data.configure_params.auto_start &&
+		    (set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
+			     DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
+		     set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
+			     params->transmitter_long_rd_id)) {
+			err = nrf_modem_dect_mac_network_scan_stop();
+			if (err) {
+				LOG_ERR("%s: error in stopping nw scan, err: %d",
+					(__func__), err);
+			}
+		}
+	}
+}
+
+static void handle_mdm_nw_scan_complete(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	int err;
+	struct nrf_modem_dect_mac_network_scan_cb_params *evt_data =
+		(struct nrf_modem_dect_mac_network_scan_cb_params *)event->data;
+	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
+
+		LOG_ERR("Network scan completed with err %s (%d)", tmp_str,
+			evt_data->status);
+		/* TODO: send nw status with error if doing a join? */
+	} else {
+		LOG_INF("Network scan completed: %d channels scanned",
+			evt_data->num_scanned_channels);
+	}
+	ctrl_data.scan_data.on_going = false;
+	if (ctrl_data.scan_data.scan_result_cb) {
+		ctrl_data.scan_data.scan_result_cb(
+			ctrl_data.iface,
+			dect_nrf91_utils_modem_status_to_net_mgmt_status(
+				evt_data->status),
+			NULL);
+		ctrl_data.scan_data.scan_result_cb = NULL;
+	}
+	if (!ctrl_data.configure_params.auto_start) {
+		/* We are done here */
+		return;
+	}
+	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+		if (ctrl_data.ass_config.pt_association_state ==
+		    CTRL_PT_ASSOCIATION_STATE_CLUSTER_FOUND) {
+			LOG_INF("auto start: sending cluster beacon receive req, "
+				"Long RD ID: 0x%X, NW ID: 0x%X",
+				ctrl_data.ass_config.parent_long_rd_id,
+				ctrl_data.ass_config.network_id);
+
+			struct nrf_modem_dect_mac_cluster_beacon_config
+				cluster_config = {
+					.long_rd_id = ctrl_data.ass_config
+							      .parent_long_rd_id,
+					.network_id =
+						ctrl_data.ass_config.network_id,
+				};
+			struct nrf_modem_dect_mac_cluster_beacon_receive_params
+				params = {
+					.num_configs = 1,
+					.configs = &cluster_config,
+				};
+
+			err = nrf_modem_dect_mac_cluster_beacon_receive(&params);
+			if (err) {
+				LOG_ERR("Error in Cluster beacon receive: err %d",
+					err);
+			}
+		} else if (ctrl_data.ass_config.pt_association_state ==
+			   CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED) {
+			dect_mac_ctrl_trigger_association();
+		} else {
+			struct dect_nrf91_ctrl_cluster_channel_list_item
+				best_channel_data;
+			bool best_channel_found =
+			dect_nrf91_ctrl_cluster_channels_list_best_channel_get(
+				&best_channel_data);
+
+			/* MAC spec 5.1.4:
+			 * If none of the detected cluster beacons meets
+			 * the minimum quality level, the RD may:
+			 * - initiate association to the RD providing
+			 * the highest RSSI-2 value
+			 */
+			if (best_channel_found) {
+				LOG_INF("Nw scan done: selecting best channel: "
+					"Long RD ID: 0x%X, RSSI-2: %d",
+					best_channel_data.long_rd_id,
+					best_channel_data.rssi_2);
+				ctrl_data.ass_config.pt_association_state =
+				CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
+				ctrl_data.ass_config.network_id =
+					set_ptr->net_mgmt_common.identities
+						.network_id;
+				ctrl_data.ass_config.parent_long_rd_id =
+					best_channel_data.long_rd_id;
+				dect_mac_ctrl_trigger_association();
+			} else {
+				dect_mgmt_network_status_evt(
+					ctrl_data.iface,
+					(struct dect_network_status_evt){
+						.network_status =
+						DECT_NETWORK_STATUS_FAILURE,
+						.dect_err_cause =
+						DECT_MAC_STATUS_RD_NOT_FOUND,
+					});
+				LOG_WRN("No cluster found with NW scan");
+				ctrl_data.configure_params.auto_start = false;
+			}
+		}
+	} else {
+		/* As a default RSSI params from settings  */
+		struct nrf_modem_dect_mac_rssi_scan_params params = {
+			.channel_scan_length =
+				set_ptr->net_mgmt_common.rssi_scan
+					.time_per_channel_ms / 10,
+			.threshold_min =
+				set_ptr->net_mgmt_common.rssi_scan
+					.free_threshold_dbm,
+			.threshold_max =
+				set_ptr->net_mgmt_common.rssi_scan
+					.busy_threshold_dbm,
+			.num_channels = 0,
+			.band = set_ptr->net_mgmt_common.band_nbr,
+		};
+
+		__ASSERT_NO_MSG(
+			set_ptr->net_mgmt_common.device_type ==
+				DECT_DEVICE_TYPE_FT);
+		if (ctrl_data.ft_requested_cluster_channel !=
+			DECT_CLUSTER_CHANNEL_ANY) {
+			params.num_channels = 1;
+			params.channel_list[0] =
+				ctrl_data.ft_requested_cluster_channel;
+		}
+
+		dect_nrf91_ctrl_msgq_data_op_add(
+			DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
+			&params,
+			sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
+	}
+}
+
+static void handle_mdm_nw_scan_stopped(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+		LOG_ERR("Network scan stopping failed with err %s (%d)", tmp_str,
+			*status);
+		return;
+	}
+	LOG_INF("Network scan stopped");
+}
+
+static void handle_mdm_cluster_rcv_complete(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	enum nrf_modem_dect_mac_err *status =
+		(enum nrf_modem_dect_mac_err *)event->data;
+
+	if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
+		LOG_ERR("Cluster beacon rcv failed with err %s (%d)", tmp_str,
+			*status);
+		return;
+	}
+	LOG_INF("Cluster beacon reception completed");
+
+	if (ctrl_data.configure_params.auto_start) {
+		if (ctrl_data.ass_config.pt_association_state ==
+		    CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED) {
+			dect_mac_ctrl_trigger_association();
+		} else {
+			LOG_WRN("No cluster found with Cluster beacon receive");
+		}
+	}
+	/* TODO some event to detect channel & other changes */
+}
+
+static void handle_mdm_cluster_info(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_cluster_info_cb_params *evt_data = event->data;
+	struct dect_cluster_info_evt l2_results_evt = {
+		.status = dect_nrf91_utils_modem_status_to_net_mgmt_status(
+			evt_data->status),
+	};
+	struct dect_cluster_status_info *cluster_info = &l2_results_evt.status_info;
+	struct dect_rssi_scan_result_data *rssi_result = &cluster_info->rssi_result;
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
+		LOG_ERR("Cluster info rcv failed with err %s (%d)", tmp_str,
+			evt_data->status);
+	} else {
+		cluster_info->num_association_failures =
+			evt_data->info.num_association_failures;
+		cluster_info->num_association_requests =
+			evt_data->info.num_association_requests;
+		cluster_info->num_neighbors = evt_data->info.num_neighbors;
+		cluster_info->num_ftpt_neighbors =
+			evt_data->info.num_ftpt_neighbors;
+		cluster_info->num_rach_rx_pdc = evt_data->info.num_rach_rx_pdc;
+		cluster_info->num_rach_rx_pcc_crc_failures =
+			evt_data->info.num_rach_rx_pcc_crc_failures;
+		cluster_info->rssi_result.busy_percentage =
+			evt_data->info.rssi_result.busy_percentage;
+
+		LOG_DBG("Cluster status information:");
+		LOG_DBG("  num_association_requests.......................%u",
+			evt_data->info.num_association_requests);
+		LOG_DBG("  num_association_failures.......................%u",
+			evt_data->info.num_association_failures);
+		LOG_DBG("  num_neighbors..................................%u",
+			evt_data->info.num_neighbors);
+		LOG_DBG("  num_ftpt_neighbors.............................%u",
+			evt_data->info.num_ftpt_neighbors);
+		LOG_DBG("  num_rach_rx_pdc................................%u",
+			evt_data->info.num_rach_rx_pdc);
+		LOG_DBG("  num_rach_rx_pcc_crc_fail.......................%u",
+			evt_data->info.num_rach_rx_pcc_crc_failures);
+		LOG_DBG("  channel busy percentage........................%u",
+			evt_data->info.rssi_result.busy_percentage);
+
+		struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
+			&evt_data->info.rssi_result;
+		int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(
+			mdm_rssi_res, rssi_result);
+
+		if (err) {
+			LOG_ERR("Error in converting RSSI results to L2 data: %d",
+				err);
+		}
+	}
+	/* Send L2 evt */
+	dect_mgmt_cluster_info_evt(ctrl_data.iface, l2_results_evt);
+}
+
+static void handle_mdm_neighbor_info(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct nrf_modem_dect_mac_neighbor_info_cb_params *evt_data = event->data;
+	struct dect_neighbor_info_evt l2_results_evt = {
+		.long_rd_id = evt_data->long_rd_id,
+		.status = dect_nrf91_utils_modem_status_to_net_mgmt_status(
+			evt_data->status),
+	};
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
+		LOG_ERR("Neighbor info rcv failed with err %s (%d)", tmp_str,
+			evt_data->status);
+	} else {
+		LOG_DBG("Neighbor status information:");
+		LOG_DBG("  Neighbor (long RD ID).......................%u (0x%08x)",
+			evt_data->long_rd_id, evt_data->long_rd_id);
+		LOG_DBG("  Network ID..................................%u (0x%08x)",
+			evt_data->network_id, evt_data->network_id);
+		LOG_DBG("  Associated..................................%s",
+			evt_data->associated ? "true" : "false");
+		LOG_DBG("  FT mode.....................................%s",
+			evt_data->ft_mode ? "true" : "false");
+		LOG_DBG("  Channel.....................................%d",
+			evt_data->channel);
+		LOG_DBG("  Time in ms since neighbor is last seen......%u ms",
+			evt_data->time_since_last_rx_ms);
+		LOG_DBG("  RX mcs......................................%u",
+			evt_data->last_rx_signal_info.mcs);
+		LOG_DBG("  RX transmit power...........................%d",
+			evt_data->last_rx_signal_info.transmit_power);
+		LOG_DBG("  RX RSSI 2...................................%d",
+			evt_data->last_rx_signal_info.rssi_2);
+		LOG_DBG("  RX SNR.....................................%d",
+			evt_data->last_rx_signal_info.snr);
+		LOG_DBG("  beacon_average_rx_rssi_2..................%d",
+			evt_data->beacon_average_rx_rssi_2);
+		LOG_DBG("  beacon_average_rx_snr.......................%d",
+			evt_data->beacon_average_rx_snr);
+		l2_results_evt.network_id = evt_data->network_id;
+		l2_results_evt.associated = evt_data->associated;
+		l2_results_evt.ft_mode = evt_data->ft_mode;
+		l2_results_evt.channel = evt_data->channel;
+		l2_results_evt.time_since_last_rx_ms =
+			evt_data->time_since_last_rx_ms;
+		l2_results_evt.last_rx_signal_info.mcs =
+			evt_data->last_rx_signal_info.mcs;
+		l2_results_evt.last_rx_signal_info.transmit_power =
+			evt_data->last_rx_signal_info.transmit_power;
+		l2_results_evt.last_rx_signal_info.rssi_2 =
+			evt_data->last_rx_signal_info.rssi_2;
+		l2_results_evt.last_rx_signal_info.snr =
+			evt_data->last_rx_signal_info.snr;
+		l2_results_evt.beacon_average_rx_txpower =
+			evt_data->beacon_average_rx_txpower;
+		l2_results_evt.beacon_average_rx_rssi_2 =
+			evt_data->beacon_average_rx_rssi_2;
+		l2_results_evt.beacon_average_rx_snr =
+			evt_data->beacon_average_rx_snr;
+
+		LOG_DBG("  total_missed_cluster_beacons................%u",
+			evt_data->status_info.total_missed_cluster_beacons);
+		LOG_DBG("  current_consecutive_missed_cluster_beacons..%u",
+			evt_data->status_info
+				.current_consecutive_missed_cluster_beacons);
+		LOG_DBG("  num_rx_paging...............................%u",
+			evt_data->status_info.num_rx_paging);
+		LOG_DBG("  average_rx_mcs..............................%u",
+			evt_data->status_info.average_rx_mcs);
+		LOG_DBG("  average_rx_txpower..........................%d",
+			evt_data->status_info.average_rx_txpower);
+		LOG_DBG("  average_rx_rssi_2...........................%d",
+			evt_data->status_info.average_rx_rssi_2);
+		LOG_DBG("  average_rx_snr..............................%d",
+			evt_data->status_info.average_rx_snr);
+		LOG_DBG("  average_tx_mcs..............................%u",
+			evt_data->status_info.average_tx_mcs);
+		LOG_DBG("  average_tx_txpower..........................%d",
+			evt_data->status_info.average_tx_txpower);
+		LOG_DBG("  num_tx_attempts.............................%u",
+			evt_data->status_info.num_tx_attempts);
+		LOG_DBG("  num_lbt_failures............................%u",
+			evt_data->status_info.num_lbt_failures);
+		LOG_DBG("  num_rx_pdc..................................%u",
+			evt_data->status_info.num_rx_pdc);
+		LOG_DBG("  num_rx_pdc_crc_fail.........................%u",
+			evt_data->status_info.num_rx_pdc_crc_failures);
+		LOG_DBG("  num_no_response.............................%u",
+			evt_data->status_info.num_no_response);
+		LOG_DBG("  num_harq_ack................................%u",
+			evt_data->status_info.num_harq_ack);
+		LOG_DBG("  num_harq_nack...............................%u",
+			evt_data->status_info.num_harq_nack);
+		LOG_DBG("  num_arq_retx................................%u",
+			evt_data->status_info.num_arq_retx);
+		LOG_DBG("  inactive_time_ms............................%u ms",
+			evt_data->status_info.inactive_time_ms);
+
+		l2_results_evt.status_info.total_missed_cluster_beacons =
+			evt_data->status_info.total_missed_cluster_beacons;
+		l2_results_evt.status_info
+			.current_consecutive_missed_cluster_beacons =
+			evt_data->status_info
+				.current_consecutive_missed_cluster_beacons;
+		l2_results_evt.status_info.num_rx_paging =
+			evt_data->status_info.num_rx_paging;
+		l2_results_evt.status_info.average_rx_mcs =
+			evt_data->status_info.average_rx_mcs;
+		l2_results_evt.status_info.average_rx_txpower =
+			evt_data->status_info.average_rx_txpower;
+		l2_results_evt.status_info.average_rx_rssi_2 =
+			evt_data->status_info.average_rx_rssi_2;
+		l2_results_evt.status_info.average_rx_snr =
+			evt_data->status_info.average_rx_snr;
+		l2_results_evt.status_info.average_tx_mcs =
+			evt_data->status_info.average_tx_mcs;
+		l2_results_evt.status_info.average_tx_txpower =
+			evt_data->status_info.average_tx_txpower;
+		l2_results_evt.status_info.num_tx_attempts =
+			evt_data->status_info.num_tx_attempts;
+		l2_results_evt.status_info.num_lbt_failures =
+			evt_data->status_info.num_lbt_failures;
+		l2_results_evt.status_info.num_rx_pdc =
+			evt_data->status_info.num_rx_pdc;
+		l2_results_evt.status_info.num_rx_pdc_crc_failures =
+			evt_data->status_info.num_rx_pdc_crc_failures;
+		l2_results_evt.status_info.num_no_response =
+			evt_data->status_info.num_no_response;
+		l2_results_evt.status_info.num_harq_ack =
+			evt_data->status_info.num_harq_ack;
+		l2_results_evt.status_info.num_harq_nack =
+			evt_data->status_info.num_harq_nack;
+		l2_results_evt.status_info.num_arq_retx =
+			evt_data->status_info.num_arq_retx;
+		l2_results_evt.status_info.inactive_time_ms =
+			evt_data->status_info.inactive_time_ms;
+	}
+
+	/* Send L2 evt */
+	dect_mgmt_neighbor_info_evt(ctrl_data.iface, l2_results_evt);
+}
+
+static void handle_mdm_neighbor_list(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+	struct dect_nrf91_ctrl_neighbor_list_resp_evt *evt_data =
+		(struct dect_nrf91_ctrl_neighbor_list_resp_evt *)event->data;
+	struct dect_neighbor_list_evt l2_results_evt;
+
+	l2_results_evt.neighbor_count = evt_data->num_neighbors;
+	l2_results_evt.status =
+		dect_nrf91_utils_modem_status_to_net_mgmt_status(evt_data->status);
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
+		LOG_ERR("Neighbor list rcv failed with err %s (%d)", tmp_str,
+			evt_data->status);
+
+		l2_results_evt.neighbor_count = 0;
+		dect_mgmt_neighbor_list_evt(ctrl_data.iface, l2_results_evt);
+		return;
+	}
+
+	LOG_DBG("Neighbors:");
+	LOG_DBG("  num_neighbors..................................%u",
+		evt_data->num_neighbors);
+	for (uint32_t i = 0; i < evt_data->num_neighbors; i++) {
+		LOG_DBG("  Neighbor (long RD ID)..........................%u "
+			"(0x%08x)",
+			evt_data->neighbor_long_rd_ids[i],
+			evt_data->neighbor_long_rd_ids[i]);
+		if (i >= DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT) {
+			LOG_ERR("Neighbor list too long, max is %d",
+				DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT);
+			l2_results_evt.neighbor_count =
+				DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT;
+			break;
+		}
+		l2_results_evt.neighbor_long_rd_ids[i] =
+			evt_data->neighbor_long_rd_ids[i];
+	}
+	dect_mgmt_neighbor_list_evt(ctrl_data.iface, l2_results_evt);
+}
+
+static void handle_mdm_dlc_data_resp(struct dect_mac_common_op_event_msgq_item *event)
+{
+	char tmp_str[128] = {0};
+#if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
+	struct dect_nrf91_ctrl_dlc_data_tx_resp_evt *evt_data = event->data;
+	int arr_index;
+
+	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
+		dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
+		LOG_ERR("DLC data TX response failed to rd id %u with err %s (%d), "
+			"transaction id %u",
+			evt_data->long_rd_id, tmp_str, evt_data->status,
+			evt_data->acked_data[0].transaction_id);
+	}
+
+	/* Update total_unacked_tx_data_amount (even if is error) */
+	k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER);
+	for (int i = 0; i < evt_data->num_acked_data; i++) {
+		arr_index = evt_data->acked_data[i].transaction_id -
+			    DECT_MAC_DATA_TX_HANDLE_START;
+		if (arr_index < 0 ||
+		    arr_index >= DECT_NRF91_DLC_DATA_INFO_MAX_COUNT) {
+			LOG_ERR("Transaction ID %d not found in array",
+				evt_data->acked_data[i].transaction_id);
+			continue;
+		}
+		ctrl_data.dlc_data_tx_infos[arr_index].req_on_going = false;
+		ctrl_data.total_unacked_tx_data_amount -=
+			ctrl_data.dlc_data_tx_infos[arr_index].data_len;
+		ctrl_data.total_unacked_req_amount--;
+	}
+	k_mutex_unlock(&dect_mac_ctrl_data_mtx);
+	LOG_DBG("DLC data response (towards RD ID %u): "
+		"total %d bytes unacked left, total req count %d",
+		evt_data->long_rd_id,
+		ctrl_data.total_unacked_tx_data_amount,
+		ctrl_data.total_unacked_req_amount);
+#endif
+}
+
+/**************************************************************************************************/
+
 static void dect_nrf91_ctrl_msgq_thread_handler(void)
 {
 	struct dect_mac_common_op_event_msgq_item event;
-	int err;
-	char tmp_str[128] = {0};
 
 	while (true) {
 		k_msgq_get(&dect_nrf91_ctrl_msgq, &event, K_FOREVER);
 
 		switch (event.id) {
-		case DECT_NRF91_CTRL_OP_MDM_CAPABILITIES: {
-			struct nrf_modem_dect_mac_capability_ntf_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_capability_ntf_cb_params *)event.data;
-
-			LOG_INF("Modem Capabilities:");
-			LOG_INF("  max_mcs: %hhu", evt_data->max_mcs);
-			for (int i = 0; i < evt_data->num_band_info_elems; i++) {
-				LOG_INF("    band[%hhu]:                   %hhu", i,
-					evt_data->band_info_elems[i].band);
-				LOG_DBG("    band_group_index[%hhu]:       %hhu", i,
-					evt_data->band_info_elems[i].band_group_index);
-				LOG_INF("    power_class[%hhu]:            %hhu", i,
-					evt_data->band_info_elems[i].power_class);
-				LOG_INF("    min_carrier[%hhu]:            %hu", i,
-					evt_data->band_info_elems[i].min_carrier);
-				LOG_INF("    max_carrier[%hhu]:            %hu", i,
-					evt_data->band_info_elems[i].max_carrier);
-			}
-			/* Store capabilities */
-			ctrl_data.mdm_capas = *evt_data;
+		case DECT_NRF91_CTRL_OP_MDM_CAPABILITIES:
+			handle_mdm_capabilities(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-
-				LOG_ERR("Error in configure: err %s (%d)", tmp_str, *status);
-				break;
-			}
-			k_sem_give(&dect_mac_libmodem_api_sema);
-
-			if (ctrl_data.configure_params.auto_activate ||
-			    ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ ||
-			    ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_CONFIGURE) {
-				LOG_DBG("Modem configured: "
-					"activating to full functional mode");
-
-				if (dect_nrf91_ctrl_mdm_activate_req()) {
-					ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
-					LOG_ERR("Error in initiating modem activation");
-				}
-			} else {
-				LOG_INF("Modem configured without auto start - deactivated");
-				ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
-			}
+		case DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP:
+			handle_mdm_configure_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_CFUN_RESP: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				/* Operation wasn't successful -> no change to activation state */
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-				if (ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ) {
-					dect_mgmt_activate_done_evt(
-						ctrl_data.iface,
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							*status));
-
-				} else {
-					__ASSERT_NO_MSG(ctrl_data.mdm_activation_state ==
-								CTRL_MDM_DEACTIVATE_REQ ||
-							ctrl_data.mdm_activation_state ==
-								CTRL_MDM_DEACTIVATED);
-					dect_mgmt_deactivate_done_evt(
-						ctrl_data.iface,
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							*status));
-				}
-				LOG_ERR("Error in activate/CFUN req: err %s (%d)", tmp_str,
-					*status);
-				break;
-			}
-
-			if ((ctrl_data.configure_params.auto_activate &&
-			     (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATE_REQ &&
-			      ctrl_data.mdm_activation_state !=
-				      CTRL_MDM_REACTIVATING_DEACTIVATE)) ||
-			    ctrl_data.mdm_activation_state == CTRL_MDM_ACTIVATE_REQ ||
-			    ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_CONFIGURE) {
-				dect_nrf91_ctrl_msgq_non_data_op_add(
-					DECT_NRF91_CTRL_OP_MDM_ACTIVATED);
-			} else {
-				__ASSERT_NO_MSG(
-					ctrl_data.mdm_activation_state == CTRL_MDM_DEACTIVATE_REQ ||
-					ctrl_data.mdm_activation_state == CTRL_MDM_DEACTIVATED ||
-					ctrl_data.mdm_activation_state ==
-						CTRL_MDM_REACTIVATING_DEACTIVATE);
-				dect_nrf91_ctrl_msgq_non_data_op_add(
-					DECT_NRF91_CTRL_OP_MDM_DEACTIVATED);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_CFUN_RESP:
+			handle_mdm_cfun_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_ACTIVATED: {
-			if (ctrl_data.mdm_activation_state != CTRL_MDM_REACTIVATING_CONFIGURE) {
-				net_if_carrier_on(ctrl_data.iface);
-				dect_mgmt_activate_done_evt(ctrl_data.iface, DECT_MAC_STATUS_OK);
-			}
-			ctrl_data.mdm_activation_state = CTRL_MDM_ACTIVATED;
-			ctrl_data.tx_mdm_flow_ctrl_on = false;
-#if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
-			ctrl_data.total_unacked_tx_data_amount = 0;
-			memset(ctrl_data.dlc_data_tx_infos, 0, sizeof(ctrl_data.dlc_data_tx_infos));
-#endif
-			k_sem_give(&dect_mac_ctrl_reactivate_sema);
-			LOG_INF("Modem activated - ready for commands");
+		case DECT_NRF91_CTRL_OP_MDM_ACTIVATED:
+			handle_mdm_activated(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_DEACTIVATED: {
-			bool reactivate =
-				(ctrl_data.mdm_activation_state == CTRL_MDM_REACTIVATING_DEACTIVATE)
-					? true
-					: false;
-
-			ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
-			ctrl_data.configure_params.channel = 0;
-			if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE ||
-			    ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_NONE) {
-				struct dect_network_status_evt network_status_data = {
-					.network_status = DECT_NETWORK_STATUS_REMOVED,
-				};
-
-				if (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATE_REQ) {
-					/* If not deactivated by user, then we need to
-					 * reactivate the modem to be able to remove network,
-					 */
-					reactivate = true;
-				}
-				dect_nrf91_child_association_all_removed(
-					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON);
-				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
-			} else if (ctrl_data.ass_config.pt_association_state ==
-				CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-				dect_nrf91_parent_association_removed(
-					ctrl_data.ass_config.parent_long_rd_id,
-					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_OTHER_REASON, false);
-			}
-			ctrl_data.mdm_activation_state = CTRL_MDM_DEACTIVATED;
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
-			ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
-			ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
-			ctrl_data.ft_cluster_reconfig_params.channel = DECT_CLUSTER_CHANNEL_ANY;
-			ctrl_data.ft_cluster_reconfig_ongoing = false;
-			ctrl_data.configure_params.auto_start = false;
-			ctrl_data.ass_config.pt_association_state = CTRL_PT_ASSOCIATION_STATE_NONE;
-
-			if (reactivate) {
-				LOG_DBG("Deactivated. Next configure before reactivate");
-				/* Reactivate modem to be able to give commands still */
-				if (dect_nrf91_ctrl_api_mdm_configure_n_activate()) {
-					LOG_ERR("Error in initiating modem configure and activate");
-				} else {
-					ctrl_data.mdm_activation_state =
-						CTRL_MDM_REACTIVATING_CONFIGURE;
-					/* we do not want to send dectivate evt when reactivating */
-					break;
-				}
-			}
-			LOG_INF("Modem state: deactivated");
-			net_if_carrier_off(ctrl_data.iface);
-			dect_mgmt_deactivate_done_evt(ctrl_data.iface, DECT_MAC_STATUS_OK);
-
+		case DECT_NRF91_CTRL_OP_MDM_DEACTIVATED:
+			handle_mdm_deactivated(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ: {
-			struct dect_cluster_reconfig_req_params *params =
-				(struct dect_cluster_reconfig_req_params *)event.data;
-
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
-
-			ctrl_data.ft_requested_cluster_channel = params->channel;
-			ctrl_data.ft_cluster_reconfig_params = *params;
-
-			ctrl_data.ft_cluster_reconfig_ongoing = true;
-
-			/* Store current channel in case of cluster_reconfig failure */
-			ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
-				ctrl_data.configure_params.channel;
-
-			ctrl_data.configure_params.channel = 0;
-
-			dect_nrf91_ctrl_msgq_non_data_op_add(
-				DECT_NRF91_CTRL_OP_AUTO_START);
+		case DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ:
+			handle_cluster_reconfig_req(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ: {
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
-
-			/* Keep current channel, just reconfig ipv6 cfg  */
-			ctrl_data.ft_requested_cluster_channel =
-				ctrl_data.configure_params.channel;
-			ctrl_data.ft_cluster_reconfig_prev_cluster_channel =
-				ctrl_data.configure_params.channel;
-
-			ctrl_data.ft_cluster_reconfig_ongoing = true;
-
-			dect_nrf91_ctrl_msgq_non_data_op_add(
-				DECT_NRF91_CTRL_OP_AUTO_START);
+		case DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ:
+			handle_cluster_ipv6_prefix_change_reconfig_req(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_START_REQ: {
-			struct dect_cluster_start_req_params *params =
-				(struct dect_cluster_start_req_params *)event.data;
-
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTING;
-			ctrl_data.ft_requested_cluster_channel = params->channel;
-
-			dect_nrf91_ctrl_msgq_non_data_op_add(
-				DECT_NRF91_CTRL_OP_AUTO_START);
+		case DECT_NRF91_CTRL_OP_CLUSTER_START_REQ:
+			handle_cluster_start_req(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP: {
-			struct nrf_modem_dect_mac_cluster_configure_cb_params *params = event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			struct dect_cluster_start_resp_evt resp_evt = {
-				.status = params->status,
-				.cluster_channel = 0,
-			};
-			struct dect_network_status_evt network_status_data;
-
-			ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
-
-			if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				if (ctrl_data.ft_cluster_reconfig_ongoing &&
-				    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
-					/* Reconfig failure, existing cluster config
-					 * still running
-					 */
-					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
-					ctrl_data.ft_cluster_reconfig_ongoing = false;
-					ctrl_data.ft_requested_cluster_channel =
-						DECT_CLUSTER_CHANNEL_ANY;
-					ctrl_data.configure_params.channel =
-						ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
-					break;
-				}
-
-				network_status_data.network_status = DECT_NETWORK_STATUS_FAILURE;
-				network_status_data.dect_err_cause =
-					dect_nrf91_utils_modem_status_to_net_mgmt_status(
-						params->status);
-
-				dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
-				LOG_ERR("Error in Cluster config: err %s (%d)", tmp_str,
-					params->status);
-
-				ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
-				ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
-				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
-				goto send_events;
-			}
-			LOG_INF("Cluster configured");
-
-			__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-					DECT_DEVICE_TYPE_FT);
-
-			ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
-			resp_evt.cluster_channel = ctrl_data.configure_params.channel;
-			ctrl_data.ft_cluster_reconfig_ongoing = false;
-send_events:
-			dect_mgmt_cluster_created_evt(ctrl_data.iface, resp_evt);
-			ctrl_data.configure_params.auto_start =
-				false; /* TODO: is this right if creating nw and going to start
-					* network beacon also?
-					*/
-			if (ctrl_data.ft_network_state == CTRL_FT_NETWORK_STATE_STARTING) {
-				if (set_ptr->net_mgmt_common.nw_beacon.channel !=
-				    DECT_MAC_NW_BEACON_CHANNEL_NOT_USED) {
-					/* Network beacon start if configured */
-					struct dect_nrf91_settings *set_ptr =
-						dect_nrf91_settings_ref_get();
-					struct dect_nw_beacon_start_req_params params = {
-						.channel =
-							set_ptr->net_mgmt_common.nw_beacon.channel,
-						.additional_ch_count =
-							0, /* TODO: settings support to be added? */
-					};
-
-					dect_nrf91_ctrl_msgq_data_op_add(
-						DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START, &params,
-						sizeof(struct dect_nw_beacon_start_req_params));
-				} else {
-					LOG_INF("Network created - network beacon not configured");
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
-					network_status_data.network_status =
-						DECT_NETWORK_STATUS_CREATED;
-					dect_mgmt_network_status_evt(ctrl_data.iface,
-								     network_status_data);
-				}
-			}
+		case DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP:
+			handle_cluster_config_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_CH_LOAD_CHANGED: {
-			struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_cluster_ch_load_change_ntf_cb_params *)
-					event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
-				&evt_data->rssi_result;
-			struct dect_rssi_scan_result_data rssi_data;
-
-			LOG_INF("Cluster channel load changed: channel %u, busy_percentage %d",
-				evt_data->rssi_result.channel,
-				evt_data->rssi_result.busy_percentage);
-
-			/* TODO: trigger a new channel selection procedure RSSI scan for
-			 * neighbor channels
-			 */
-			if (set_ptr->net_mgmt_common.cluster.channel_loaded_percent == 0) {
-				/* Channel reselection/reconfigure disabled, no worth to continue */
-				break;
-			}
-			if (ctrl_data.ft_cluster_state != CTRL_FT_CLUSTER_STATE_STARTED) {
-				/* Cluster not started - cannot reconfigure */
-				break;
-			}
-			int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(mdm_rssi_res,
-										    &rssi_data);
-
-			if (err) {
-				LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
-				break;
-			}
-			uint8_t channel_loaded_percent = 100 - rssi_data.scan_suitable_percent;
-
-			if (channel_loaded_percent > set_ptr->net_mgmt_common
-				.cluster.channel_loaded_percent) {
-				LOG_WRN("Cluster channel load (%u%%) exceeded threshold (%d%%): "
-					"channel %u",
-					channel_loaded_percent,
-					set_ptr->net_mgmt_common
-						.cluster.channel_loaded_percent,
-					evt_data->rssi_result.channel);
-				if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-					struct dect_nrf91_settings *set_ptr =
-						dect_nrf91_settings_ref_get();
-					struct dect_cluster_reconfig_req_params params = {
-						.channel = DECT_CLUSTER_CHANNEL_ANY,
-						.max_beacon_tx_power_dbm =
-							set_ptr->net_mgmt_common.cluster
-								.max_beacon_tx_power_dbm,
-						.max_cluster_power_dbm = set_ptr->net_mgmt_common
-							.cluster.max_cluster_power_dbm,
-						.period = set_ptr->net_mgmt_common
-							.cluster.beacon_period,
-					};
-
-					LOG_INF("FT: starting channel reselection procedure");
-
-					/* Trigger a channel reselection procedure */
-					dect_nrf91_ctrl_msgq_data_op_add(
-						DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ, &params,
-						sizeof(struct dect_cluster_reconfig_req_params));
-				}
-			}
+		case DECT_NRF91_CTRL_OP_CLUSTER_CH_LOAD_CHANGED:
+			handle_cluster_ch_load_changed(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY: {
-			struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_neighbor_inactivity_ntf_cb_params *)
-					event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_INF("Neighbor inactivity: long_rd_id %u (0x%X)", evt_data->long_rd_id,
-				evt_data->long_rd_id);
-
-			/* If inactivity timer is supported and child has been too long as inactive
-			 * -> drop it
-			 */
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
-			    set_ptr->net_mgmt_common.cluster
-				.neighbor_inactivity_disconnect_timer_ms) {
-				LOG_WRN("Neighbor inactive for too long - "
-					"releasing association: long_rd_id %u (0x%X)",
-					evt_data->long_rd_id, evt_data->long_rd_id);
-
-				/* Release association for this child neighbor */
-				dect_nrf91_ctrl_api_associate_release_cmd(
-					evt_data->long_rd_id,
-					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
-			}
+		case DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY:
+			handle_neighbor_inactivity(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_AUTO_START: {
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			ctrl_data.configure_params.auto_start = true;
-
-			/* Clear seen cluster channels */
-			memset(ctrl_data.scan_data.cluster_channels, 0,
-			sizeof(ctrl_data.scan_data.cluster_channels));
-			ctrl_data.scan_data.current_cluster_channel_index = 0;
-
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-				struct nrf_modem_dect_mac_network_scan_params params = {
-					.network_id_filter_mode =
-						NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_NONE,
-					.band = set_ptr->net_mgmt_common.band_nbr,
-					.scan_time = 2100, /* TODO: a config setting for this one?*/
-					.num_channels = 0,
-				};
-
-				if (ctrl_data.ft_requested_cluster_channel !=
-				    DECT_CLUSTER_CHANNEL_ANY) {
-					params.num_channels = 1;
-					params.channel_list[0] =
-						ctrl_data.ft_requested_cluster_channel;
-				} else {
-					uint8_t num_channels =
-						NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ;
-					uint16_t channel_list
-					[NRF_MODEM_DECT_MAC_MAX_CHANNELS_IN_NETWORK_SCAN_REQ];
-
-					if (dect_common_utils_use_harmonized_std(
-						    set_ptr->net_mgmt_common.band_nbr) &&
-					    dect_common_utils_harmonized_band_channel_array_get(
-						    set_ptr->net_mgmt_common.band_nbr, channel_list,
-						    &num_channels)) {
-						/* Per harmonized std: only odd number channels at
-						 * band #1:
-						 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
-						 */
-						params.num_channels = num_channels;
-						memcpy(params.channel_list, channel_list,
-						       num_channels * sizeof(uint16_t));
-					}
-				}
-
-				if (ctrl_data.ft_cluster_reconfig_ongoing) {
-					/* Do not initiate nw scan if cluster is already running and
-					 * doing reconfig
-					 */
-					err = -EALREADY;
-				} else {
-					LOG_INF("FT device auto start for cluster start: "
-						"starting NW scanning to see where other "
-						"clusters are: band %hhu, num_channels %hhu",
-						params.band, params.num_channels);
-					err = nrf_modem_dect_mac_network_scan(&params);
-				}
-				if (!err) {
-					ctrl_data.scan_data.on_going = true;
-					ctrl_data.scan_data.scan_result_cb = NULL;
-					ctrl_data.scan_data.scan_params = params;
-				} else {
-					/* As a default RSSI params from settings  */
-					struct nrf_modem_dect_mac_rssi_scan_params params = {
-						.channel_scan_length =
-							set_ptr->net_mgmt_common.rssi_scan
-								.time_per_channel_ms /
-							10,
-						.threshold_min = set_ptr->net_mgmt_common.rssi_scan
-									 .free_threshold_dbm,
-						.threshold_max = set_ptr->net_mgmt_common.rssi_scan
-									 .busy_threshold_dbm,
-						.num_channels = 0,
-						.band = set_ptr->net_mgmt_common.band_nbr,
-					};
-
-					__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-							DECT_DEVICE_TYPE_FT);
-					if (ctrl_data.ft_requested_cluster_channel !=
-					    DECT_CLUSTER_CHANNEL_ANY) {
-						params.num_channels = 1;
-						params.channel_list[0] =
-							ctrl_data.ft_requested_cluster_channel;
-					}
-					if (ctrl_data.ft_cluster_reconfig_ongoing) {
-						/* Only one frame RSSI measurement if reconfiguring
-						 */
-						params.channel_scan_length = 1;
-					} else {
-						LOG_WRN("Error initiating NW scan: err %d -"
-							"starting directly RSSI scan",
-							err);
-					}
-
-					dect_nrf91_ctrl_msgq_data_op_add(
-						DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
-						&params,
-						sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
-				}
-			} else {
-				LOG_INF("PT device auto start: starting network scan");
-
-				struct nrf_modem_dect_mac_network_scan_params params = {
-					.network_id_filter_mode =
-						NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_32BIT,
-					.network_id_filter =
-						set_ptr->net_mgmt_common.identities.network_id,
-					.scan_time = 2200,
-					.num_channels = 0,
-					.band = set_ptr->net_mgmt_common.band_nbr,
-				};
-
-				err = nrf_modem_dect_mac_network_scan(&params);
-				if (err) {
-					dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
-					LOG_ERR("Error in Network scan: err %s (%d)", tmp_str, err);
-					ctrl_data.configure_params.auto_start = false;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
-							.os_err_cause = err,
-						});
-				} else {
-					ctrl_data.scan_data.on_going = true;
-					ctrl_data.scan_data.scan_result_cb = NULL;
-					ctrl_data.scan_data.scan_params = params;
-				}
-			}
+		case DECT_NRF91_CTRL_OP_AUTO_START:
+			handle_auto_start(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD: {
-			struct nrf_modem_dect_mac_rssi_scan_params *params =
-				(struct nrf_modem_dect_mac_rssi_scan_params *)event.data;
-			int err;
-
-			LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD: "
-				"channel_scan_length %hu, num_channels %hu, band %hhu, "
-				"min_threshold %hhd, max_threshold %hhd",
-				params->channel_scan_length, params->num_channels, params->band,
-				params->threshold_min, params->threshold_max);
-
-			/* Log channels */
-			for (uint32_t i = 0; i < params->num_channels; i++) {
-				LOG_INF("  channel[%hhu]: %d", i, params->channel_list[i]);
-			}
-			err = nrf_modem_dect_mac_rssi_scan(params);
-			if (err) {
-				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
-				LOG_ERR("Error initiating RSSI scan by params: err %s (%d)",
-					tmp_str, err);
-				dect_mgmt_rssi_scan_done_evt(
-					ctrl_data.iface,
-					dect_nrf91_utils_modem_status_to_net_mgmt_status(err));
-				if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
-							.os_err_cause = err,
-						});
-				}
-			} else {
-				LOG_INF("RSSI scan started");
-				dect_nrf91_ctrl_rssi_scan_data_init(true);
-
-			}
+		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD:
+			handle_rssi_start_req_cmd(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: {
-			struct nrf_modem_dect_mac_rssi_scan_params *params =
-				(struct nrf_modem_dect_mac_rssi_scan_params *)event.data;
-
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_INF("DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION: "
-				"channel_scan_length %hu, num_channels %hu, band %hhu, "
-				"min_threshold %hhd, max_threshold %hhd",
-				params->channel_scan_length, params->num_channels, params->band,
-				params->threshold_min, params->threshold_max);
-
-			if (params->num_channels == 0 &&
-			    dect_common_utils_use_harmonized_std(
-				set_ptr->net_mgmt_common.band_nbr) == true) {
-				/* Per harmonized std: only odd number channels at band #1:
-				 * ETSI EN 301 406-2, V3.0.1, ch 4.3.2.3.
-				 */
-				bool array_filled = false;
-
-				params->num_channels = DECT_MAC_MAX_CHANNELS_IN_RSSI_SCAN;
-				array_filled = dect_common_utils_harmonized_band_channel_array_get(
-					set_ptr->net_mgmt_common.band_nbr, params->channel_list,
-					&params->num_channels);
-				if (!array_filled) {
-					LOG_ERR("RSSI scanning start: "
-						"error in channel array filling");
-					break;
-				}
-			}
-			err = nrf_modem_dect_mac_rssi_scan(params);
-			if (err) {
-				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
-				LOG_ERR("Enrf_modem_dect_mac_rssi_scan failed: %s (%d)", tmp_str,
-					err);
-				if (ctrl_data.ft_cluster_reconfig_ongoing &&
-				    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
-					/* Reconfig failure, existing cluster config
-					 * still running
-					 */
-					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
-					ctrl_data.configure_params.channel =
-						ctrl_data.ft_cluster_reconfig_prev_cluster_channel;
-					/* TODO send failure event?*/
-				} else {
-					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
-				}
-				ctrl_data.ft_requested_cluster_channel = DECT_CLUSTER_CHANNEL_ANY;
-				ctrl_data.ft_cluster_reconfig_ongoing = false;
-				dect_mgmt_rssi_scan_done_evt(ctrl_data.iface,
-							     DECT_MAC_STATUS_OS_ERROR);
-			} else {
-				dect_nrf91_ctrl_rssi_scan_data_init(false);
-				LOG_INF("RSSI scan started with params: "
-					"channel_scan_length %hu, num_channels %hu, band %hhu, "
-					"min_threshold %hhd, max_threshold %hhd",
-					params->channel_scan_length, params->num_channels,
-					params->band, params->threshold_min, params->threshold_max);
-			}
+		case DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION:
+			handle_rssi_start_req_ch_selection(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_RSSI_RESULT: {
-			struct dect_nrf91_ctrl_rssi_measurement_data_evt *evt_data =
-				(struct dect_nrf91_ctrl_rssi_measurement_data_evt *)event.data;
-			struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
-				&evt_data->rssi_result;
-			bool channel_has_another_cluster = false;
-
-			LOG_DBG("RSSI scan results received");
-
-			bool scan_suitable_percent_ok = false;
-			bool all_subslots_free = false;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			struct dect_rssi_scan_result_evt l2_results_evt;
-			struct dect_rssi_scan_result_data *rssi_data =
-				&l2_results_evt.rssi_scan_result;
-			int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(mdm_rssi_res,
-										    rssi_data);
-
-			if (err) {
-				LOG_ERR("Error in converting RSSI results to L2 data: %d", err);
-			}
-
-			/* Check if we have seen another cluster in this channel */
-			if (dect_nrf91_ctrl_cluster_channels_list_channel_exists(
-				rssi_data->channel)) {
-				LOG_DBG("RSSI results: another cluster seen in this"
-					" channel %d was seen in nw scanning phase",
-					rssi_data->channel);
-				channel_has_another_cluster = true;
-				rssi_data->another_cluster_detected_in_channel = true;
-			}
-			all_subslots_free = rssi_data->all_subslots_free;
-			if (rssi_data->scan_suitable_percent >=
-				    set_ptr->net_mgmt_common.rssi_scan.scan_suitable_percent) {
-				scan_suitable_percent_ok = true;
-			}
-
-			LOG_INF("RSSI scan results: channel %d, all_subslots_free: %s, "
-				"scan_suitable_percent: %d%%, "
-				"busy_percentage: %d%%, "
-				"another_cluster_detected_in_channel: %s",
-				rssi_data->channel,
-				(rssi_data->all_subslots_free) ? "yes" : "no",
-				rssi_data->scan_suitable_percent,
-				rssi_data->busy_percentage,
-				(rssi_data->another_cluster_detected_in_channel) ? "yes" : "no");
-
-			dect_mgmt_rssi_scan_result_evt(ctrl_data.iface, l2_results_evt);
-
-			/* Store results for internal usage in cluster channel selection */
-			if (ctrl_data.rssi_scan_data.current_results_index <
-			    DECT_NRF91_CTRL_RSSI_SCAN_RESULTS_MAX_CHANNELS) {
-				struct dect_nrf91_ctrl_rssi_scan_result_data results_item = {
-					.channel = rssi_data->channel,
-					.all_subslots_free = all_subslots_free,
-					.scan_suitable_percent_ok = scan_suitable_percent_ok,
-					.busy_percentage = rssi_data->busy_percentage,
-					.busy_percentage_ok =
-						(rssi_data->busy_percentage <
-						(100 - set_ptr->net_mgmt_common
-							.rssi_scan.scan_suitable_percent)),
-					.another_cluster_detected_in_channel =
-						channel_has_another_cluster,
-					.possible_subslot_cnt = rssi_data->possible_subslot_cnt,
-					.busy_subslot_cnt = rssi_data->busy_subslot_cnt,
-				};
-
-				ctrl_data.rssi_scan_data.results
-					[ctrl_data.rssi_scan_data.current_results_index++] =
-					results_item;
-			}
-			if (ctrl_data.rssi_scan_data.cmd_on_going) {
-				/* Actual RSSI scanning command was running, let it run */
-				break;
-			}
-			if ((channel_has_another_cluster == false &&
-			     all_subslots_free && scan_suitable_percent_ok &&
-			     rssi_data->busy_percentage == 0) &&
-			    (ctrl_data.configure_params.auto_start ||
-			     ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) &&
-			    (ctrl_data.configure_params.channel == 0)) {
-				/* MAC spec, ch. 5.1.2:
-				 * if any channel where all subslots are "free", is found,
-				 * then select channel for the cluster & stop the scan.
-				 * Additionally, we made this rule stricter, we checked
-				 * that no other cluster is present in the channel and
-				 * calculated busy percentage is also zero.
-				 */
-				ctrl_data.configure_params.channel = mdm_rssi_res->channel;
-
-				err = nrf_modem_dect_mac_rssi_scan_stop();
-				if (err) {
-					dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
-					LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str,
-						err);
-				}
-			}
+		case DECT_NRF91_CTRL_OP_MDM_RSSI_RESULT:
+			handle_mdm_rssi_result(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_RSSI_COMPLETE: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			bool reconfig_on_same_channel = (ctrl_data.ft_cluster_reconfig_ongoing &&
-				ctrl_data.configure_params.channel ==
-				ctrl_data.ft_cluster_reconfig_prev_cluster_channel);
-
-			if (!reconfig_on_same_channel) {
-				/* Reconfig for prefix on going, RSSI scan result is bypassed */
-				dect_mgmt_rssi_scan_done_evt(
-					ctrl_data.iface,
-					dect_nrf91_utils_modem_status_to_net_mgmt_status(*status));
-			}
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK &&
-			    !(reconfig_on_same_channel)) {
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-
-				LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
-					*status);
-
-				if (ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
-					if (ctrl_data.ft_cluster_reconfig_ongoing) {
-						/* RSSI failure during reconfig, prev cluster conf
-						 * still running
-						 */
-						ctrl_data.ft_cluster_state =
-							CTRL_FT_CLUSTER_STATE_STARTED;
-						ctrl_data.ft_cluster_reconfig_ongoing = false;
-						ctrl_data.ft_requested_cluster_channel =
-							DECT_CLUSTER_CHANNEL_ANY;
-						ctrl_data.configure_params.channel =
-							ctrl_data
-							.ft_cluster_reconfig_prev_cluster_channel;
-
-						LOG_WRN("RSSI scan failed on reconfig - "
-							"keeping cluster running");
-						/* TODO send failure event for reconfig? */
-						break;
-					}
-					ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_NONE;
-					ctrl_data.configure_params.channel = 0;
-					ctrl_data.ft_requested_cluster_channel =
-						DECT_CLUSTER_CHANNEL_ANY;
-					dect_mgmt_cluster_created_evt(
-						ctrl_data.iface,
-						(struct dect_cluster_start_resp_evt){
-							.status =
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							*status),
-							.cluster_channel = 0,
-						});
-				}
-				if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
-					struct dect_network_status_evt network_status_data = {
-						.network_status = DECT_NETWORK_STATUS_FAILURE,
-						.dect_err_cause =
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							*status),
-					};
-
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
-					dect_mgmt_network_status_evt(ctrl_data.iface,
-								     network_status_data);
-				}
-				break;
-			}
-			LOG_INF("RSSI scan completed");
-			if (ctrl_data.rssi_scan_data.cmd_on_going) {
-				ctrl_data.rssi_scan_data.cmd_on_going = false;
-				break;
-			}
-			if (!(ctrl_data.configure_params.auto_start ||
-			    ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING)) {
-				/* Not auto start or cluster start req - nothing to do here more */
-				break;
-
-			}
-
-			if (ctrl_data.configure_params.channel == 0) {
-				struct dect_nrf91_ctrl_rssi_scan_result_data best_rssi_meas;
-
-				if (dect_nrf91_ctrl_rssi_scan_data_results_best_get(
-					&best_rssi_meas)) {
-					ctrl_data.configure_params.channel = best_rssi_meas.channel;
-				} else {
-					if (ctrl_data.ft_cluster_reconfig_ongoing) {
-						/* Reconfig failure, existing cluster config
-						 * still running
-						 */
-						LOG_WRN("No free enough channel found in "
-							"RSSI scan,"
-							" cannot reconfigure cluster");
-						ctrl_data.ft_cluster_reconfig_ongoing =
-							false;
-						ctrl_data.ft_cluster_state =
-							CTRL_FT_CLUSTER_STATE_STARTED;
-						ctrl_data.configure_params.channel =
-						ctrl_data
-						.ft_cluster_reconfig_prev_cluster_channel;
-						break;
-					}
-					LOG_ERR("No free enough channel found in RSSI scan,"
-						" cannot start cluster");
-					ctrl_data.ft_cluster_state =
-						CTRL_FT_CLUSTER_STATE_NONE;
-					dect_mgmt_cluster_created_evt(
-						ctrl_data.iface,
-						(struct dect_cluster_start_resp_evt){
-							.status =
-							DECT_MAC_STATUS_NO_RESOURCES,
-							.cluster_channel = 0,
-						});
-					ctrl_data.ft_network_state =
-						CTRL_FT_NETWORK_STATE_NONE;
-					ctrl_data.ft_requested_cluster_channel =
-						DECT_CLUSTER_CHANNEL_ANY;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause =
-							DECT_MAC_STATUS_NO_RESOURCES,
-						});
-					break;
-				}
-			}
-			/* TODO: own op evt for this: */
-			LOG_INF("%s: starting a cluster on a channel %d.",
-				ctrl_data.configure_params.auto_start ? "auto start"
-								      : "cluster_start_req",
-				ctrl_data.configure_params.channel);
-			/* Start a cluster in a chosen channel */
-			struct nrf_modem_dect_mac_cluster_config cluster_config = {
-				.flags = {
-						.has_max_tx_power = true,
-						.has_rach_config = true,
-					},
-				.count_to_trigger = NRF_MODEM_DECT_MAC_COUNT_TO_TRIGGER_2,
-				.relative_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
-				.min_quality = NRF_MODEM_DECT_MAC_QUALITY_THRESHOLD_0,
-				.beacon_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-					set_ptr->net_mgmt_common.cluster.max_beacon_tx_power_dbm),
-				.cluster_max_tx_power = dect_nrp_utils_dbm_to_phy_tx_power(
-					set_ptr->net_mgmt_common.cluster.max_cluster_power_dbm),
-				.cluster_beacon_period =
-					set_ptr->net_mgmt_common.cluster.beacon_period,
-				.cluster_channel = ctrl_data.configure_params.channel,
-				.network_id = ctrl_data.configure_params.network_id,
-				.rach_configuration = {
-					 .policy =
-						 NRF_MODEM_DECT_MAC_RACH_CONFIG_POLICY_FILL,
-					 .common = {
-							 .response_window_length = 8,
-							 .max_transmission_length = 8,
-							 .cw_min_sig = 2,
-							 .cw_max_sig = 7,
-						 },
-					 .config = { .fill = {
-								.percentage = 100,
-							}}},
-				.triggers = {
-						.busy_threshold = 20,
-					}
-			};
-			struct nrf_modem_dect_mac_association_config ass_config = {
-				.max_num_neighbours =
-					set_ptr->net_mgmt_common.cluster.max_num_neighbors,
-				.max_num_ft_neighbours = 2,
-				.neighbor_info_triggers = {
-						.inactivity_timer = set_ptr->net_mgmt_common
-							.cluster
-							.neighbor_inactivity_disconnect_timer_ms,
-					},
-				.default_tx_flow_config = {
-					{
-						.dlc_service_type =
-						NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
-					},
-					{
-						.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-					},
-					{
-						.priority = 3,
-						.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-					},
-					{
-						.priority = 4,
-						.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-					},
-					{
-						.priority = 5,
-						.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-					},
-					{
-						.priority = 6,
-						.dlc_service_type =
-							NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-						.dlc_sdu_lifetime =
-						NRF_MODEM_DECT_DLC_SDU_LIFETIME_INFINITY,
-					}},
-			};
-			struct nrf_modem_dect_mac_cluster_configure_params params = {
-				.cluster_period_start_offset = 0,
-				.association_config = &ass_config,
-				.cluster_config = &cluster_config,
-			};
-			/* Set our IPv6 address prefix to modem to be passed to children */
-			struct dect_nrf91_ipv6_prefix global_prefix;
-
-			if (dect_nrf91_sink_ipv6_prefix_get(&global_prefix)) {
-				/* Pass prefix to children */
-				__ASSERT_NO_MSG(global_prefix.len == 8);
-				memcpy(&cluster_config.ipv6_config.address,
-				       global_prefix.prefix.s6_addr, global_prefix.len);
-				cluster_config.ipv6_config.type =
-					NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_PREFIX;
-			} else {
-				/* Using link local (already set to us)*/
-				cluster_config.ipv6_config.type =
-					NRF_MODEM_DECT_MAC_IPV6_ADDRESS_TYPE_NONE;
-				LOG_WRN("%s: no IPv6 prefix to set - using link local only",
-					__func__);
-			}
-			if (ctrl_data.ft_cluster_reconfig_ongoing) {
-				/* Use reconfigure params for certain cluster configs */
-				cluster_config.beacon_tx_power =
-					dect_nrp_utils_dbm_to_phy_tx_power(
-						ctrl_data.ft_cluster_reconfig_params
-							.max_beacon_tx_power_dbm);
-				cluster_config.cluster_max_tx_power =
-					dect_nrp_utils_dbm_to_phy_tx_power(
-						ctrl_data.ft_cluster_reconfig_params
-							.max_cluster_power_dbm);
-				cluster_config.cluster_beacon_period =
-					ctrl_data.ft_cluster_reconfig_params.period;
-			}
-			err = nrf_modem_dect_mac_cluster_configure(&params);
-			if (err) {
-				LOG_ERR("nrf_modem_dect_mac_cluster_configure returned err "
-					"%d",
-					err);
-				if (ctrl_data.ft_cluster_reconfig_ongoing &&
-				    ctrl_data.ft_cluster_state ==
-					CTRL_FT_CLUSTER_STATE_STARTING) {
-					/* Reconfig failure, existing cluster config
-					 * still running
-					 */
-					ctrl_data.ft_cluster_state =
-						CTRL_FT_CLUSTER_STATE_STARTED;
-					ctrl_data.configure_params.channel =
-						ctrl_data
-						.ft_cluster_reconfig_prev_cluster_channel;
-				} else if (ctrl_data.ft_network_state !=
-				    CTRL_FT_NETWORK_STATE_NONE) {
-					ctrl_data.ft_network_state =
-						CTRL_FT_NETWORK_STATE_NONE;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause =
-								DECT_MAC_STATUS_OS_ERROR,
-							.os_err_cause = err,
-						});
-				}
-				ctrl_data.ft_cluster_reconfig_ongoing = false;
-				ctrl_data.ft_requested_cluster_channel =
-					DECT_CLUSTER_CHANNEL_ANY;
-			}
-		break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_RSSI_STOPPED: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-
-				LOG_ERR("Error in RSSI scan stop: err %s (%d)", tmp_str, *status);
-			} else {
-				LOG_INF("RSSI scan stopped");
-			}
+		case DECT_NRF91_CTRL_OP_MDM_RSSI_COMPLETE:
+			handle_mdm_rssi_complete(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START: {
-			struct dect_nw_beacon_start_req_params *params =
-				(struct dect_nw_beacon_start_req_params *)event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			struct nrf_modem_dect_mac_network_beacon_configure_params beacon_params = {
-				.channel = params->channel,
-				.num_additional_channels = 0,
-				.nw_beacon_period = set_ptr->net_mgmt_common
-							.nw_beacon.beacon_period,
-			};
-
-			beacon_params.num_additional_channels = params->additional_ch_count;
-			beacon_params.additional_channels = params->additional_ch_list;
-
-			LOG_INF("starting network beacon on a channel %d.", params->channel);
-
-			err = nrf_modem_dect_mac_network_beacon_configure(&beacon_params);
-			if (err) {
-				LOG_ERR("nrf_modem_dect_mac_network_beacon_configure failed: %d",
-					err);
-				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
-				dect_mgmt_nw_beacon_start_evt(
-					ctrl_data.iface,
-					dect_nrf91_utils_modem_status_to_net_mgmt_status(err));
-
-				if (ctrl_data.ft_network_state != CTRL_FT_NETWORK_STATE_NONE) {
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_NONE;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-							.dect_err_cause = DECT_MAC_STATUS_OS_ERROR,
-							.os_err_cause = err,
-						});
-				}
-			} else {
-				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_STARTING;
-			}
+		case DECT_NRF91_CTRL_OP_MDM_RSSI_STOPPED:
+			handle_mdm_rssi_stopped(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START_OR_STOP_DONE: {
-			struct nrf_modem_dect_mac_network_beacon_configure_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_network_beacon_configure_cb_params *)
-					event.data;
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-
-				LOG_ERR("Error in network beacon start/stop: err %s (%d)", tmp_str,
-					evt_data->status);
-				if (ctrl_data.ft_nw_beacon_state ==
-				    CTRL_FT_NW_BEACON_STATE_STOPPING) {
-					dect_mgmt_nw_beacon_stop_evt(
-						ctrl_data.iface,
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							evt_data->status));
-				} else if (ctrl_data.ft_nw_beacon_state ==
-					   CTRL_FT_NW_BEACON_STATE_STARTING) {
-					dect_mgmt_nw_beacon_start_evt(
-						ctrl_data.iface,
-						dect_nrf91_utils_modem_status_to_net_mgmt_status(
-							evt_data->status));
-
-					/* Eventhough nw beacon failed, cluster is still running*/
-					if (ctrl_data.ft_network_state ==
-					    CTRL_FT_NETWORK_STATE_STARTING) {
-						dect_mgmt_network_status_evt(
-							ctrl_data.iface,
-							(struct dect_network_status_evt){
-								.network_status =
-									DECT_NETWORK_STATUS_CREATED,
-							});
-						LOG_WRN("Network beacon start failed, "
-							"but cluster is still running");
-					}
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
-				}
-				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
-			} else {
-				if (ctrl_data.ft_nw_beacon_state ==
-				    CTRL_FT_NW_BEACON_STATE_STARTING) {
-					LOG_INF("Network beacon started");
-					ctrl_data.ft_nw_beacon_state =
-						CTRL_FT_NW_BEACON_STATE_STARTED;
-					dect_mgmt_nw_beacon_start_evt(ctrl_data.iface,
-								      DECT_MAC_STATUS_OK);
-					ctrl_data.ft_network_state = CTRL_FT_NETWORK_STATE_CREATED;
-					dect_mgmt_network_status_evt(
-						ctrl_data.iface,
-						(struct dect_network_status_evt){
-							.network_status =
-								DECT_NETWORK_STATUS_CREATED,
-						});
-				} else {
-					__ASSERT_NO_MSG(ctrl_data.ft_nw_beacon_state ==
-							CTRL_FT_NW_BEACON_STATE_STOPPING);
-					LOG_INF("Network beacon stopped");
-					ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
-					dect_mgmt_nw_beacon_stop_evt(ctrl_data.iface,
-								     DECT_MAC_STATUS_OK);
-				}
-			}
+		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START:
+			handle_mdm_nw_beacon_start(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_STOP: {
-			struct nrf_modem_dect_mac_network_beacon_configure_params beacon_params = {
-				.channel = 0,
-				.num_additional_channels = 0,
-			};
-
-			LOG_INF("Stopping network beacon.");
-
-			err = nrf_modem_dect_mac_network_beacon_configure(&beacon_params);
-			if (err) {
-				dect_nrf91_utils_modem_mac_err_to_string(err, tmp_str);
-				LOG_ERR("nrf_modem_dect_mac_network_beacon_configure failed: %s "
-					"(%d)",
-					tmp_str, err);
-				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_NONE;
-				dect_mgmt_nw_beacon_stop_evt(ctrl_data.iface,
-							     DECT_MAC_STATUS_OS_ERROR);
-			} else {
-				ctrl_data.ft_nw_beacon_state = CTRL_FT_NW_BEACON_STATE_STOPPING;
-			}
+		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START_OR_STOP_DONE:
+			handle_mdm_nw_beacon_start_or_stop_done(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD: {
-			/* TODO: PT mobility? we are getting these for every
-			 * received beacon when associated and we have a rssi level from rx
-			 * rx_signal_info -> poor enough could be used for mobility trigger?
-			 */
-			struct nrf_modem_dect_mac_cluster_beacon_ntf_cb_params *params = event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			bool add_to_cluster_channels = ctrl_data.scan_data.on_going;
-
-			/* Did we already mark this to cluster_channels? */
-			for (int i = 0; i < DECT_NRF91_CTRL_CLUSTER_SCAN_DATA_MAX_CHANNELS &&
-			     add_to_cluster_channels; i++) {
-				if (ctrl_data.scan_data.cluster_channels[i].channel ==
-				    params->channel) {
-					add_to_cluster_channels = false;
-					break;
-				}
-			}
-			/* Store channel and RSSI: used by FT when creating a cluster and
-			 * when PT selecting RD for association.
-			 */
-			if (add_to_cluster_channels) {
-				ctrl_data.scan_data.cluster_channels[
-					ctrl_data.scan_data.current_cluster_channel_index].channel =
-					params->channel;
-				ctrl_data.scan_data.cluster_channels[
-					ctrl_data.scan_data.current_cluster_channel_index].rssi_2 =
-						params->rx_signal_info.rssi_2;
-				ctrl_data.scan_data.cluster_channels[
-					ctrl_data.scan_data.current_cluster_channel_index]
-						.long_rd_id = params->transmitter_long_rd_id;
-
-				ctrl_data.scan_data.current_cluster_channel_index++;
-				__ASSERT_NO_MSG(ctrl_data.scan_data.current_cluster_channel_index <
-						ARRAY_SIZE(ctrl_data.scan_data.cluster_channels));
-			}
-			if (ctrl_data.scan_data.scan_result_cb) {
-				struct dect_scan_result_evt scan_result = {
-					.beacon_type = DECT_SCAN_RESULT_TYPE_CLUSTER_BEACON,
-					.channel = params->channel,
-					.transmitter_short_rd_id = params->transmitter_short_rd_id,
-					.transmitter_long_rd_id = params->transmitter_long_rd_id,
-					.network_id = params->network_id,
-					.rx_signal_info.mcs = params->rx_signal_info.mcs,
-					.rx_signal_info.transmit_power =
-						params->rx_signal_info.transmit_power,
-					.rx_signal_info.rssi_2 = params->rx_signal_info.rssi_2,
-					.rx_signal_info.snr = params->rx_signal_info.snr,
-				};
-
-				ctrl_data.scan_data.scan_result_cb(ctrl_data.iface, 0,
-								   &scan_result);
-			}
-			if (set_ptr->net_mgmt_common.device_type != DECT_DEVICE_TYPE_PT) {
-				/* Cluster beacon can be also received if FT device and
-				 * if same short nw id and in same channel
-				 */
-				LOG_DBG("Cluster beacon received, but not PT device!!!");
-				break;
-			}
-			if (ctrl_data.ass_config.pt_association_state !=
-				CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
-			    dect_nrf91_utils_cluster_acceptable_for_association(params)) {
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
-				ctrl_data.ass_config.network_id = params->network_id;
-				ctrl_data.ass_config.parent_long_rd_id =
-					params->transmitter_long_rd_id;
-
-				if (ctrl_data.configure_params.auto_start) {
-					if (nrf_modem_dect_mac_network_scan_stop() != 0) {
-						LOG_ERR("OP_MDM_CLUSTER_BEACON_RCVD: error in "
-							"Network scan stop!");
-					} else {
-						LOG_DBG("nw scan stopping requested");
-					}
-				}
-			}
-			if (ctrl_data.ass_config.pt_association_state ==
-			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED &&
-			    set_ptr->net_mgmt_common.association.min_sensitivity_dbm >=
-			    params->rx_signal_info.rssi_2) {
-				LOG_WRN("Signal (rssi_2 %d) is below the minimum "
-					"sensitivity threshold (%d)",
-					params->rx_signal_info.rssi_2,
-					set_ptr->net_mgmt_common.association.min_sensitivity_dbm);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_STOP:
+			handle_mdm_nw_beacon_stop(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_RCVD: {
-			struct nrf_modem_dect_mac_network_beacon_ntf_cb_params *params = event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_DBG("Network beacon information:");
-			LOG_DBG("  network id (32bit).............................%u (0x%08x)",
-				params->network_id, params->network_id);
-			LOG_DBG("  transmitter id (long RD ID)....................%u (0x%08x)",
-				params->transmitter_long_rd_id, params->transmitter_long_rd_id);
-			LOG_DBG("  short RD ID....................................%u (0x%04x)",
-				params->transmitter_short_rd_id, params->transmitter_short_rd_id);
-			LOG_DBG("  channel number.................................%d",
-				params->channel);
-			LOG_DBG("  next_cluster_channel number....................%d",
-				params->beacon.next_cluster_channel);
-
-			if (ctrl_data.scan_data.scan_result_cb) {
-				struct dect_scan_result_evt scan_result = {
-					.beacon_type = DECT_SCAN_RESULT_TYPE_NW_BEACON,
-					.channel = params->channel,
-					.transmitter_short_rd_id = params->transmitter_short_rd_id,
-					.transmitter_long_rd_id = params->transmitter_long_rd_id,
-					.network_id = params->network_id,
-					.rx_signal_info.mcs = params->rx_signal_info.mcs,
-					.rx_signal_info.transmit_power =
-						params->rx_signal_info.transmit_power,
-					.rx_signal_info.rssi_2 = params->rx_signal_info.rssi_2,
-					.rx_signal_info.snr = params->rx_signal_info.snr,
-				};
-				struct dect_network_beacon_data nw_beacon = {
-					.next_cluster_channel = params->beacon.next_cluster_channel,
-					.current_cluster_channel =
-						params->beacon.current_cluster_channel,
-					.num_network_beacon_channels =
-						params->beacon.num_network_beacon_channels,
-				};
-
-				for (int i = 0; i < params->beacon.num_network_beacon_channels;
-				     i++) {
-					nw_beacon.network_beacon_channels[i] =
-						params->beacon.network_beacon_channels[i];
-				}
-				scan_result.network_beacon = nw_beacon;
-				ctrl_data.scan_data.scan_result_cb(ctrl_data.iface, 0,
-								   &scan_result);
-			}
-
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT &&
-			    ctrl_data.ass_config.pt_association_state !=
-				    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_CLUSTER_FOUND;
-				ctrl_data.ass_config.network_id = params->network_id;
-				ctrl_data.ass_config.parent_long_rd_id =
-					params->transmitter_long_rd_id;
-
-				if (ctrl_data.configure_params.auto_start &&
-				    (set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
-					     DECT_SETT_NETWORK_JOIN_TARGET_FT_ANY ||
-				     set_ptr->net_mgmt_common.network_join.target_ft_long_rd_id ==
-					     params->transmitter_long_rd_id)) {
-					err = nrf_modem_dect_mac_network_scan_stop();
-					if (err) {
-						LOG_ERR("%s: error in stopping nw scan, err: %d",
-							(__func__), err);
-					}
-				}
-			}
-
+		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD:
+			handle_mdm_cluster_beacon_rcvd(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_SCAN_COMPLETE: {
-			struct nrf_modem_dect_mac_network_scan_cb_params *evt_data =
-				(struct nrf_modem_dect_mac_network_scan_cb_params *)event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-
-				LOG_ERR("Network scan completed with err %s (%d)", tmp_str,
-					evt_data->status);
-				/* TODO: send nw status with error if doing a join? */
-			} else {
-				LOG_INF("Network scan completed: %d channels scanned",
-					evt_data->num_scanned_channels);
-			}
-			ctrl_data.scan_data.on_going = false;
-			if (ctrl_data.scan_data.scan_result_cb) {
-				ctrl_data.scan_data.scan_result_cb(
-					ctrl_data.iface,
-					dect_nrf91_utils_modem_status_to_net_mgmt_status(
-						evt_data->status),
-					NULL);
-				ctrl_data.scan_data.scan_result_cb = NULL;
-			}
-			if (!ctrl_data.configure_params.auto_start) {
-				/* We are done here */
-				break;
-			}
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
-				if (ctrl_data.ass_config.pt_association_state ==
-				    CTRL_PT_ASSOCIATION_STATE_CLUSTER_FOUND) {
-					LOG_INF("auto start: sending cluster beacon receive req, "
-						"Long RD ID: 0x%X, NW ID: 0x%X",
-						ctrl_data.ass_config.parent_long_rd_id,
-						ctrl_data.ass_config.network_id);
-
-					struct nrf_modem_dect_mac_cluster_beacon_config
-						cluster_config = {
-							.long_rd_id = ctrl_data.ass_config
-									      .parent_long_rd_id,
-							.network_id =
-								ctrl_data.ass_config.network_id,
-						};
-					struct nrf_modem_dect_mac_cluster_beacon_receive_params
-						params = {
-							.num_configs = 1,
-							.configs = &cluster_config,
-						};
-
-					err = nrf_modem_dect_mac_cluster_beacon_receive(&params);
-					if (err) {
-						LOG_ERR("Error in Cluster beacon receive: err %d",
-							err);
-					}
-				} else if (ctrl_data.ass_config.pt_association_state ==
-					   CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED) {
-					dect_mac_ctrl_trigger_association();
-				} else {
-					struct dect_nrf91_ctrl_cluster_channel_list_item
-						best_channel_data;
-					bool best_channel_found =
-					dect_nrf91_ctrl_cluster_channels_list_best_channel_get(
-						&best_channel_data);
-
-					/* MAC spec 5.1.4:
-					 * If none of the detected cluster beacons meets
-					 * the minimum quality level, the RD may:
-					 * - initiate association to the RD providing
-					 * the highest RSSI-2 value
-					 */
-					if (best_channel_found) {
-						LOG_INF("Nw scan done: selecting best channel: "
-							"Long RD ID: 0x%X, RSSI-2: %d",
-							best_channel_data.long_rd_id,
-							best_channel_data.rssi_2);
-						ctrl_data.ass_config.pt_association_state =
-						CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED;
-						ctrl_data.ass_config.network_id =
-							set_ptr->net_mgmt_common.identities
-								.network_id;
-						ctrl_data.ass_config.parent_long_rd_id =
-							best_channel_data.long_rd_id;
-						dect_mac_ctrl_trigger_association();
-					} else {
-						dect_mgmt_network_status_evt(
-							ctrl_data.iface,
-							(struct dect_network_status_evt){
-								.network_status =
-								DECT_NETWORK_STATUS_FAILURE,
-								.dect_err_cause =
-								DECT_MAC_STATUS_RD_NOT_FOUND,
-							});
-						LOG_WRN("No cluster found with NW scan");
-						ctrl_data.configure_params.auto_start = false;
-					}
-				}
-			} else {
-				struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-				/* As a default RSSI params from settings  */
-				struct nrf_modem_dect_mac_rssi_scan_params params = {
-					.channel_scan_length =
-						set_ptr->net_mgmt_common.rssi_scan
-							.time_per_channel_ms / 10,
-					.threshold_min =
-						set_ptr->net_mgmt_common.rssi_scan
-							.free_threshold_dbm,
-					.threshold_max =
-						set_ptr->net_mgmt_common.rssi_scan
-							.busy_threshold_dbm,
-					.num_channels = 0,
-					.band = set_ptr->net_mgmt_common.band_nbr,
-				};
-
-				__ASSERT_NO_MSG(
-					set_ptr->net_mgmt_common.device_type ==
-						DECT_DEVICE_TYPE_FT);
-				if (ctrl_data.ft_requested_cluster_channel !=
-					DECT_CLUSTER_CHANNEL_ANY) {
-					params.num_channels = 1;
-					params.channel_list[0] =
-						ctrl_data.ft_requested_cluster_channel;
-				}
-
-				dect_nrf91_ctrl_msgq_data_op_add(
-					DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
-					&params,
-					sizeof(struct nrf_modem_dect_mac_rssi_scan_params));
-			}
+		case DECT_NRF91_CTRL_OP_MDM_NW_BEACON_RCVD:
+			handle_mdm_nw_beacon_rcvd(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NW_SCAN_STOPPED: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-				LOG_ERR("Network scan stopping failed with err %s (%d)", tmp_str,
-					*status);
-				break;
-			}
-			LOG_INF("Network scan stopped");
+		case DECT_NRF91_CTRL_OP_MDM_NW_SCAN_COMPLETE:
+			handle_mdm_nw_scan_complete(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_RCV_COMPLETE: {
-			enum nrf_modem_dect_mac_err *status =
-				(enum nrf_modem_dect_mac_err *)event.data;
-
-			if (*status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(*status, tmp_str);
-				LOG_ERR("Cluster beacon rcv failed with err %s (%d)", tmp_str,
-					*status);
-				break;
-			}
-			LOG_INF("Cluster beacon reception completed");
-
-			if (ctrl_data.configure_params.auto_start) {
-				if (ctrl_data.ass_config.pt_association_state ==
-				    CTRL_PT_ASSOCIATION_STATE_CLUSTER_BEACON_RECEIVED) {
-					dect_mac_ctrl_trigger_association();
-				} else {
-					LOG_WRN("No cluster found with Cluster beacon receive");
-				}
-			}
-			/* TODO some event to detect channel & other changes */
+		case DECT_NRF91_CTRL_OP_MDM_NW_SCAN_STOPPED:
+			handle_mdm_nw_scan_stopped(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_INFO: {
-			struct nrf_modem_dect_mac_cluster_info_cb_params *evt_data = event.data;
-			struct dect_cluster_info_evt l2_results_evt = {
-				.status = dect_nrf91_utils_modem_status_to_net_mgmt_status(
-					evt_data->status),
-			};
-			struct dect_cluster_status_info *cluster_info = &l2_results_evt.status_info;
-			struct dect_rssi_scan_result_data *rssi_result = &cluster_info->rssi_result;
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("Cluster info rcv failed with err %s (%d)", tmp_str,
-					evt_data->status);
-			} else {
-				cluster_info->num_association_failures =
-					evt_data->info.num_association_failures;
-				cluster_info->num_association_requests =
-					evt_data->info.num_association_requests;
-				cluster_info->num_neighbors = evt_data->info.num_neighbors;
-				cluster_info->num_ftpt_neighbors =
-					evt_data->info.num_ftpt_neighbors;
-				cluster_info->num_rach_rx_pdc = evt_data->info.num_rach_rx_pdc;
-				cluster_info->num_rach_rx_pcc_crc_failures =
-					evt_data->info.num_rach_rx_pcc_crc_failures;
-				cluster_info->rssi_result.busy_percentage =
-					evt_data->info.rssi_result.busy_percentage;
-
-				LOG_DBG("Cluster status information:");
-				LOG_DBG("  num_association_requests.......................%u",
-					evt_data->info.num_association_requests);
-				LOG_DBG("  num_association_failures.......................%u",
-					evt_data->info.num_association_failures);
-				LOG_DBG("  num_neighbors..................................%u",
-					evt_data->info.num_neighbors);
-				LOG_DBG("  num_ftpt_neighbors.............................%u",
-					evt_data->info.num_ftpt_neighbors);
-				LOG_DBG("  num_rach_rx_pdc................................%u",
-					evt_data->info.num_rach_rx_pdc);
-				LOG_DBG("  num_rach_rx_pcc_crc_fail.......................%u",
-					evt_data->info.num_rach_rx_pcc_crc_failures);
-				LOG_DBG("  channel busy percentage........................%u",
-					evt_data->info.rssi_result.busy_percentage);
-
-				struct nrf_modem_dect_mac_rssi_result *mdm_rssi_res =
-					&evt_data->info.rssi_result;
-				int err = dect_nrf91_utils_mdm_rssi_results_to_l2_rssi_data(
-					mdm_rssi_res, rssi_result);
-
-				if (err) {
-					LOG_ERR("Error in converting RSSI results to L2 data: %d",
-						err);
-				}
-			}
-			/* Send L2 evt */
-			dect_mgmt_cluster_info_evt(ctrl_data.iface, l2_results_evt);
-
+		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_RCV_COMPLETE:
+			handle_mdm_cluster_rcv_complete(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_CLUSTER_BEACON_RX_FAILURE: {
-			struct nrf_modem_dect_mac_cluster_beacon_rx_failure_ntf_cb_params
-				*evt_data =
-					(struct
-					 nrf_modem_dect_mac_cluster_beacon_rx_failure_ntf_cb_params
-						 *)event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_INF("Max nbr of cluster beacon RX failures (%d): long_rd_id %u (0x%X)",
-				set_ptr->net_mgmt_common.association.max_beacon_rx_failures,
-				evt_data->long_rd_id, evt_data->long_rd_id);
-
-			/* OK, configured max amount of cluster beacon RX failures, so we can
-			 * start a dissociation process.
-			 */
-			if (ctrl_data.ass_config.pt_association_state ==
-			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-				__ASSERT_NO_MSG(
-					ctrl_data.ass_config.parent_long_rd_id ==
-						evt_data->long_rd_id);
-				LOG_INF("Starting releasing the association");
-				dect_nrf91_ctrl_api_associate_release_cmd(
-					ctrl_data.ass_config.parent_long_rd_id,
-					NRF_MODEM_DECT_MAC_RELEASE_CAUSE_LONG_INACTIVITY);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_CLUSTER_INFO:
+			handle_mdm_cluster_info(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_NEIGHBOR_PAGING_FAILURE: {
-			/* Message is an indication that a neighbor is tried to be paged for
-			 * incoming data but there was no answer. We release the association.
-			 */
-			struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *params =
-				(struct nrf_modem_dect_mac_neighbor_paging_failure_ntf_cb_params *)
-					event.data;
-
-			LOG_WRN("Neighbor paging failure: long_rd_id %u (0x%X) - "
-				"releasing association",
-				params->long_rd_id, params->long_rd_id);
-
-			dect_nrf91_ctrl_api_associate_release_cmd(
-				params->long_rd_id,
-				NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY);
+		case DECT_NRF91_CTRL_OP_CLUSTER_BEACON_RX_FAILURE:
+			handle_cluster_beacon_rx_failure(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_INFO: {
-			struct nrf_modem_dect_mac_neighbor_info_cb_params *evt_data = event.data;
-			struct dect_neighbor_info_evt l2_results_evt = {
-				.long_rd_id = evt_data->long_rd_id,
-				.status = dect_nrf91_utils_modem_status_to_net_mgmt_status(
-					evt_data->status),
-			};
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("Neighbor info rcv failed with err %s (%d)", tmp_str,
-					evt_data->status);
-			} else {
-				LOG_DBG("Neighbor status information:");
-				LOG_DBG("  Neighbor (long RD ID).......................%u (0x%08x)",
-					evt_data->long_rd_id, evt_data->long_rd_id);
-				LOG_DBG("  Network ID..................................%u (0x%08x)",
-					evt_data->network_id, evt_data->network_id);
-				LOG_DBG("  Associated..................................%s",
-					evt_data->associated ? "true" : "false");
-				LOG_DBG("  FT mode.....................................%s",
-					evt_data->ft_mode ? "true" : "false");
-				LOG_DBG("  Channel.....................................%d",
-					evt_data->channel);
-				LOG_DBG("  Time in ms since neighbor is last seen......%u ms",
-					evt_data->time_since_last_rx_ms);
-				LOG_DBG("  RX mcs......................................%u",
-					evt_data->last_rx_signal_info.mcs);
-				LOG_DBG("  RX transmit power...........................%d",
-					evt_data->last_rx_signal_info.transmit_power);
-				LOG_DBG("  RX RSSI 2...................................%d",
-					evt_data->last_rx_signal_info.rssi_2);
-				LOG_DBG("  RX SNR.....................................%d",
-					evt_data->last_rx_signal_info.snr);
-				LOG_DBG("  beacon_average_rx_rssi_2..................%d",
-					evt_data->beacon_average_rx_rssi_2);
-				LOG_DBG("  beacon_average_rx_snr.......................%d",
-					evt_data->beacon_average_rx_snr);
-				l2_results_evt.network_id = evt_data->network_id;
-				l2_results_evt.associated = evt_data->associated;
-				l2_results_evt.ft_mode = evt_data->ft_mode;
-				l2_results_evt.channel = evt_data->channel;
-				l2_results_evt.time_since_last_rx_ms =
-					evt_data->time_since_last_rx_ms;
-				l2_results_evt.last_rx_signal_info.mcs =
-					evt_data->last_rx_signal_info.mcs;
-				l2_results_evt.last_rx_signal_info.transmit_power =
-					evt_data->last_rx_signal_info.transmit_power;
-				l2_results_evt.last_rx_signal_info.rssi_2 =
-					evt_data->last_rx_signal_info.rssi_2;
-				l2_results_evt.last_rx_signal_info.snr =
-					evt_data->last_rx_signal_info.snr;
-				l2_results_evt.beacon_average_rx_txpower =
-					evt_data->beacon_average_rx_txpower;
-				l2_results_evt.beacon_average_rx_rssi_2 =
-					evt_data->beacon_average_rx_rssi_2;
-				l2_results_evt.beacon_average_rx_snr =
-					evt_data->beacon_average_rx_snr;
-
-				LOG_DBG("  total_missed_cluster_beacons................%u",
-					evt_data->status_info.total_missed_cluster_beacons);
-				LOG_DBG("  current_consecutive_missed_cluster_beacons..%u",
-					evt_data->status_info
-						.current_consecutive_missed_cluster_beacons);
-				LOG_DBG("  num_rx_paging...............................%u",
-					evt_data->status_info.num_rx_paging);
-				LOG_DBG("  average_rx_mcs..............................%u",
-					evt_data->status_info.average_rx_mcs);
-				LOG_DBG("  average_rx_txpower..........................%d",
-					evt_data->status_info.average_rx_txpower);
-				LOG_DBG("  average_rx_rssi_2...........................%d",
-					evt_data->status_info.average_rx_rssi_2);
-				LOG_DBG("  average_rx_snr..............................%d",
-					evt_data->status_info.average_rx_snr);
-				LOG_DBG("  average_tx_mcs..............................%u",
-					evt_data->status_info.average_tx_mcs);
-				LOG_DBG("  average_tx_txpower..........................%d",
-					evt_data->status_info.average_tx_txpower);
-				LOG_DBG("  num_tx_attempts.............................%u",
-					evt_data->status_info.num_tx_attempts);
-				LOG_DBG("  num_lbt_failures............................%u",
-					evt_data->status_info.num_lbt_failures);
-				LOG_DBG("  num_rx_pdc..................................%u",
-					evt_data->status_info.num_rx_pdc);
-				LOG_DBG("  num_rx_pdc_crc_fail.........................%u",
-					evt_data->status_info.num_rx_pdc_crc_failures);
-				LOG_DBG("  num_no_response.............................%u",
-					evt_data->status_info.num_no_response);
-				LOG_DBG("  num_harq_ack................................%u",
-					evt_data->status_info.num_harq_ack);
-				LOG_DBG("  num_harq_nack...............................%u",
-					evt_data->status_info.num_harq_nack);
-				LOG_DBG("  num_arq_retx................................%u",
-					evt_data->status_info.num_arq_retx);
-				LOG_DBG("  inactive_time_ms............................%u ms",
-					evt_data->status_info.inactive_time_ms);
-
-				l2_results_evt.status_info.total_missed_cluster_beacons =
-					evt_data->status_info.total_missed_cluster_beacons;
-				l2_results_evt.status_info
-					.current_consecutive_missed_cluster_beacons =
-					evt_data->status_info
-						.current_consecutive_missed_cluster_beacons;
-				l2_results_evt.status_info.num_rx_paging =
-					evt_data->status_info.num_rx_paging;
-				l2_results_evt.status_info.average_rx_mcs =
-					evt_data->status_info.average_rx_mcs;
-				l2_results_evt.status_info.average_rx_txpower =
-					evt_data->status_info.average_rx_txpower;
-				l2_results_evt.status_info.average_rx_rssi_2 =
-					evt_data->status_info.average_rx_rssi_2;
-				l2_results_evt.status_info.average_rx_snr =
-					evt_data->status_info.average_rx_snr;
-				l2_results_evt.status_info.average_tx_mcs =
-					evt_data->status_info.average_tx_mcs;
-				l2_results_evt.status_info.average_tx_txpower =
-					evt_data->status_info.average_tx_txpower;
-				l2_results_evt.status_info.num_tx_attempts =
-					evt_data->status_info.num_tx_attempts;
-				l2_results_evt.status_info.num_lbt_failures =
-					evt_data->status_info.num_lbt_failures;
-				l2_results_evt.status_info.num_rx_pdc =
-					evt_data->status_info.num_rx_pdc;
-				l2_results_evt.status_info.num_rx_pdc_crc_failures =
-					evt_data->status_info.num_rx_pdc_crc_failures;
-				l2_results_evt.status_info.num_no_response =
-					evt_data->status_info.num_no_response;
-				l2_results_evt.status_info.num_harq_ack =
-					evt_data->status_info.num_harq_ack;
-				l2_results_evt.status_info.num_harq_nack =
-					evt_data->status_info.num_harq_nack;
-				l2_results_evt.status_info.num_arq_retx =
-					evt_data->status_info.num_arq_retx;
-				l2_results_evt.status_info.inactive_time_ms =
-					evt_data->status_info.inactive_time_ms;
-			}
-
-			/* Send L2 evt */
-			dect_mgmt_neighbor_info_evt(ctrl_data.iface, l2_results_evt);
+		case DECT_NRF91_CTRL_OP_NEIGHBOR_PAGING_FAILURE:
+			handle_neighbor_paging_failure(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST: {
-			struct dect_nrf91_ctrl_neighbor_list_resp_evt *evt_data =
-				(struct dect_nrf91_ctrl_neighbor_list_resp_evt *)event.data;
-			struct dect_neighbor_list_evt l2_results_evt;
-
-			l2_results_evt.neighbor_count = evt_data->num_neighbors;
-			l2_results_evt.status =
-				dect_nrf91_utils_modem_status_to_net_mgmt_status(evt_data->status);
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("Neighbor list rcv failed with err %s (%d)", tmp_str,
-					evt_data->status);
-
-				l2_results_evt.neighbor_count = 0;
-				dect_mgmt_neighbor_list_evt(ctrl_data.iface, l2_results_evt);
-				break;
-			}
-
-			LOG_DBG("Neighbors:");
-			LOG_DBG("  num_neighbors..................................%u",
-				evt_data->num_neighbors);
-			for (uint32_t i = 0; i < evt_data->num_neighbors; i++) {
-				LOG_DBG("  Neighbor (long RD ID)..........................%u "
-					"(0x%08x)",
-					evt_data->neighbor_long_rd_ids[i],
-					evt_data->neighbor_long_rd_ids[i]);
-				if (i >= DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT) {
-					LOG_ERR("Neighbor list too long, max is %d",
-						DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT);
-					l2_results_evt.neighbor_count =
-						DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT;
-					break;
-				}
-				l2_results_evt.neighbor_long_rd_ids[i] =
-					evt_data->neighbor_long_rd_ids[i];
-			}
-			dect_mgmt_neighbor_list_evt(ctrl_data.iface, l2_results_evt);
+		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_INFO:
+			handle_mdm_neighbor_info(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_FLOW_CONTROL: {
-			struct nrf_modem_dect_dlc_flow_control_ntf_cb_params *evt_data = event.data;
-
-			k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER);
-			ctrl_data.tx_mdm_flow_ctrl_on =
-				evt_data->status == NRF_MODEM_DECT_DLC_FLOW_CTRL_STATUS_ON ? true
-											   : false;
-			k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-
-			LOG_DBG("Flow control %s:",
-				evt_data->status == NRF_MODEM_DECT_DLC_FLOW_CTRL_STATUS_ON ? "ON"
-											   : "OFF");
+		case DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST:
+			handle_mdm_neighbor_list(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_DLC_DATA_RESP: {
-#if defined(CONFIG_DECT_NRP_MAC_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS)
-			struct dect_nrf91_ctrl_dlc_data_tx_resp_evt *evt_data = event.data;
-			int arr_index;
-
-			if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				dect_nrf91_utils_modem_mac_err_to_string(evt_data->status, tmp_str);
-				LOG_ERR("DLC data TX response failed to rd id %u with err %s (%d), "
-					"transaction id %u",
-					evt_data->long_rd_id, tmp_str, evt_data->status,
-					evt_data->acked_data[0].transaction_id);
-			}
-
-			/* Update total_unacked_tx_data_amount (even if is error) */
-			k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER);
-			for (int i = 0; i < evt_data->num_acked_data; i++) {
-				arr_index = evt_data->acked_data[i].transaction_id -
-					    DECT_MAC_DATA_TX_HANDLE_START;
-				if (arr_index < 0 ||
-				    arr_index >= DECT_NRF91_DLC_DATA_INFO_MAX_COUNT) {
-					LOG_ERR("Transaction ID %d not found in array",
-						evt_data->acked_data[i].transaction_id);
-					continue;
-				}
-				ctrl_data.dlc_data_tx_infos[arr_index].req_on_going = false;
-				ctrl_data.total_unacked_tx_data_amount -=
-					ctrl_data.dlc_data_tx_infos[arr_index].data_len;
-				ctrl_data.total_unacked_req_amount--;
-			}
-			k_mutex_unlock(&dect_mac_ctrl_data_mtx);
-			LOG_DBG("DLC data response (towards RD ID %u): "
-				"total %d bytes unacked left, total req count %d",
-				evt_data->long_rd_id,
-				ctrl_data.total_unacked_tx_data_amount,
-				ctrl_data.total_unacked_req_amount);
-#endif
+		case DECT_NRF91_CTRL_OP_MDM_FLOW_CONTROL:
+			handle_mdm_flow_control(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_IND: {
-			struct nrf_modem_dect_mac_association_ntf_cb_params *params = event.data;
-
-			if (params->status !=
-			    NRF_MODEM_DECT_MAC_ASSOCIATION_INDICATION_STATUS_SUCCESS) {
-				dect_nrf91_utils_modem_association_ind_err_to_string(params->status,
-										     tmp_str);
-				LOG_ERR("Association indication with err %s (%d) with long RD ID: "
-					"0x%X",
-					tmp_str, params->status, params->long_rd_id);
-				break;
-			}
-			LOG_INF("New child: association with long RD ID: %u (0x%X)",
-				params->long_rd_id, params->long_rd_id);
-
-			dect_nrf91_child_association_created(params->long_rd_id);
+		case DECT_NRF91_CTRL_OP_MDM_DLC_DATA_RESP:
+			handle_mdm_dlc_data_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RESP: {
-			struct nrf_modem_dect_mac_association_cb_params *params = event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-			struct dect_network_status_evt network_status_data = {
-				.network_status = DECT_NETWORK_STATUS_FAILURE,
-				.dect_err_cause = dect_nrf91_utils_modem_status_to_net_mgmt_status(
-					params->status),
-			};
-
-			/* Association response only with PT devices */
-			__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-					DECT_DEVICE_TYPE_PT);
-			if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
-				/* Modem operation failed */
-				dect_mgmt_association_req_failed_mdm_result_evt(
-					ctrl_data.iface,
-					params->long_rd_id,
-					network_status_data.dect_err_cause);
-				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
-
-				ctrl_data.configure_params.auto_start = false;
-				if (ctrl_data.ass_config.pt_association_state !=
-					CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-					ctrl_data.ass_config.pt_association_state =
-						CTRL_PT_ASSOCIATION_STATE_NONE;
-				}
-
-				dect_nrf91_utils_modem_mac_err_to_string(params->status, tmp_str);
-				LOG_ERR("Modem operation failed for Association Response with "
-					"err %s (%d) with long RD ID: 0x%X",
-					tmp_str, params->status, params->long_rd_id);
-				break;
-			}
-
-			if (!params->flags.has_association_response) {
-				dect_mgmt_association_req_rejected_result_evt(
-					ctrl_data.iface,
-					params->long_rd_id,
-					DECT_MAC_ASSOCIATION_NO_RESPONSE,
-					DECT_MAC_ASSOCIATION_REJECT_TIME_60S);
-
-				dect_mgmt_network_status_evt(ctrl_data.iface, network_status_data);
-				LOG_ERR("Association response with no actual response with long RD "
-					"ID: 0x%X",
-					params->long_rd_id);
-			} else if (!params->association_response.ack_status) {
-				/* Association rejected */
-				LOG_INF("Association rejected with long RD ID: %u (0x%X), cause %d",
-					params->long_rd_id, params->long_rd_id,
-					params->association_response.reject_cause);
-
-				dect_mgmt_association_req_rejected_result_evt(
-					ctrl_data.iface,
-					params->long_rd_id,
-					params->association_response.reject_cause,
-					params->association_response.reject_time);
-			} else {
-				LOG_INF("New parent: association with long RD ID: %u (0x%X)",
-					params->long_rd_id, params->long_rd_id);
-
-				ctrl_data.configure_params.auto_start = false;
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_ASSOCIATED;
-				dect_nrf91_parent_association_created(params->long_rd_id,
-								      params->ipv6_config);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_IND:
+			handle_mdm_association_ind(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_RESP: {
-			struct nrf_modem_dect_mac_association_release_cb_params *params =
-				event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_INF("Association released with long RD ID: %u (0x%08x)",
-				params->long_rd_id, params->long_rd_id);
-
-			if (ctrl_data.ass_config.pt_association_state ==
-			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_NONE;
-				dect_nrf91_parent_association_removed(
-					params->long_rd_id, ctrl_data.last_rel_cause, false);
-			} else if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-				dect_nrf91_child_association_removed(
-					params->long_rd_id, ctrl_data.last_rel_cause, false);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RESP:
+			handle_mdm_association_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_IND: {
-			struct nrf_modem_dect_mac_association_release_ntf_cb_params *params =
-				event.data;
-			struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
-
-			LOG_INF("Release req received and association released with long RD ID: "
-				"%u (0x%X)",
-				params->long_rd_id, params->long_rd_id);
-
-			if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
-				dect_nrf91_child_association_removed(
-					params->long_rd_id, params->release_cause, true);
-			} else {
-				/* Network kicked us out? */
-				ctrl_data.ass_config.pt_association_state =
-					CTRL_PT_ASSOCIATION_STATE_NONE;
-				dect_nrf91_parent_association_removed(
-					params->long_rd_id, params->release_cause, true);
-			}
+		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_RESP:
+			handle_mdm_association_release_resp(&event);
 			break;
-		}
-		case DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED: {
-			struct nrf_modem_dect_mac_ipv6_config_update_ntf_cb_params *params =
-				event.data;
-
-			LOG_WRN("IPv6 config changed, type: %d", params->ipv6_config.type);
-			if (ctrl_data.ass_config.pt_association_state ==
-			    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
-				dect_nrf91_parent_association_ipv6_config_changed(
-					params->ipv6_config);
-			} else {
-				LOG_WRN("IPv6 config changed. Not associated - ignored ");
-			}
+		case DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_IND:
+			handle_mdm_association_release_ind(&event);
 			break;
-		}
+		case DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED:
+			handle_mdm_ipv6_config_changed(&event);
+			break;
 
 		default:
 			LOG_WRN("DECT NRF91 CTRL: Unknown event %u received", event.id);
