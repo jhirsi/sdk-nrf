@@ -19,6 +19,8 @@ extern void test_dect_pt_association_request(void);
 extern void test_dect_pt_neigbor_list_info_req(void);
 extern void test_dect_pt_status_info_req(void);
 extern void test_dect_pt_association_release(void);
+extern void test_dect_ft_activate(void);
+extern void test_dect_ft_rssi_scan(void);
 extern void test_dect_deactivate(void);
 extern void test_dect_deactivated_requests_fail(void);
 extern void test_dect_ft_configuration(void);
@@ -42,7 +44,9 @@ static test_result_t test_results[] = {
 	{"PT association release", "test_dect_pt_association_release", false},
 	{"DECT stack deactivation", "test_dect_deactivate", false},
 	{"Deactivated requests fail", "test_dect_deactivated_requests_fail", false},
-	{"FT configuration", "test_dect_ft_configuration", false}};
+	{"FT configuration", "test_dect_ft_configuration", false},
+	{"DECT stack activation", "test_dect_ft_activate", false},
+	{"DECT RSSI scan", "test_dect_ft_rssi_scan", false}};
 
 #define NUM_TESTS ARRAY_SIZE(test_results)
 
@@ -80,6 +84,8 @@ int main(void)
 	RUN_TEST_AND_TRACK(test_dect_deactivate, 7);
 	RUN_TEST_AND_TRACK(test_dect_deactivated_requests_fail, 8);
 	RUN_TEST_AND_TRACK(test_dect_ft_configuration, 9);
+	RUN_TEST_AND_TRACK(test_dect_ft_activate, 10);
+	RUN_TEST_AND_TRACK(test_dect_ft_rssi_scan, 11);
 
 	/* Capture Unity statistics before UNITY_END() */
 	int total_tests = Unity.NumberOfTests;

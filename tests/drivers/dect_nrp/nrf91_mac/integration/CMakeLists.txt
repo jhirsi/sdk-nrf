@@ -18,6 +18,7 @@ project(dect_nrp_integration_test)
 target_sources(app PRIVATE
     src/main.c
     src/test_dect_integration.c
+    src/test_dect_utils.c
     src/mocks/mock_nrf_modem_dect_mac.c
 )
 

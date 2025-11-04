@@ -70,8 +70,16 @@ void simulate_async_callback(void (*callback_func)(void *), void *params)
 		/* Store callback and params for timer handler */
 		work_item->callback_func = callback_func;
 
-		/* Copy parameters to our buffer - assume max size for safety */
-		size_t param_size = 64; /* Should cover all callback parameter structures */
+		/* Copy parameters to our buffer - use actual size for capability_ntf or max size */
+		size_t param_size;
+
+		if (callback_func == (void (*)(void *))mock_ntf_callbacks.capability_ntf) {
+			/* capability_ntf_cb_params is larger, use sizeof */
+			param_size = sizeof(struct nrf_modem_dect_mac_capability_ntf_cb_params);
+		} else {
+			/* Default size for other callback parameter structures */
+			param_size = 64;
+		}
 
 		if (param_size <= sizeof(work_item->param_data)) {
 			memcpy(work_item->param_data, params, param_size);
@@ -114,6 +122,7 @@ int mock_nrf_modem_dect_mac_neighbor_info_call_count;
 int mock_nrf_modem_dect_control_systemmode_set_call_count;
 int mock_nrf_modem_dect_control_configure_call_count;
 int mock_nrf_modem_dect_control_functional_mode_set_call_count;
+int mock_nrf_modem_dect_mac_rssi_scan_call_count;
 
 /* Remove the extern - this is where we define the variables */
 
@@ -207,6 +216,14 @@ int nrf_modem_dect_mac_association(struct nrf_modem_dect_mac_association_params 
 
 int nrf_modem_dect_mac_rssi_scan(struct nrf_modem_dect_mac_rssi_scan_params *params)
 {
+	mock_nrf_modem_dect_mac_rssi_scan_call_count++;
+
+	LOG_DBG("MOCK: nrf_modem_dect_mac_rssi_scan called with channel_scan_length=%d, "
+		"num_channels=%d, band=%d",
+		params ? params->channel_scan_length : 0,
+		params ? params->num_channels : 0,
+		params ? params->band : 0);
+
 	/* Check if the DECT stack is activated */
 	if (!mock_dect_activated) {
 		/* Stack is deactivated - simulate immediate failure via async callback */
@@ -222,8 +239,43 @@ int nrf_modem_dect_mac_rssi_scan(struct nrf_modem_dect_mac_rssi_scan_params *par
 		return 0; /* Request accepted but will fail asynchronously */
 	}
 
-	/* Stack is activated - normal operation would be implemented here */
-	/* For now, just return success without triggering callback */
+	/* Stack is activated - simulate successful RSSI scan with async callbacks */
+	if (params && params->num_channels > 0 && params->channel_list) {
+		/* Simulate RSSI scan notification callback for each channel */
+		/* For test purposes, simulate one result */
+		if (mock_ntf_callbacks.rssi_scan_ntf) {
+			/* Allocate arrays for busy, possible, free subslots */
+			static uint8_t busy_array[6] = {0};
+			static uint8_t possible_array[6] = {0};
+			static uint8_t free_array[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+
+			struct nrf_modem_dect_mac_rssi_scan_ntf_cb_params ntf_params = {
+				.channel = params->channel_list[0],
+				.busy_percentage = 10, /* 10% busy */
+				.rssi_meas_array_size = 6,
+				.busy = busy_array,
+				.possible = possible_array,
+				.free = free_array
+			};
+
+			LOG_DBG("MOCK: Simulating rssi_scan_ntf callback for channel %d",
+				ntf_params.channel);
+			simulate_async_callback(
+				(void (*)(void *))mock_ntf_callbacks.rssi_scan_ntf, &ntf_params);
+		}
+
+		/* Simulate RSSI scan completion callback */
+		if (mock_op_callbacks.rssi_scan) {
+			struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_done_params = {
+				.status = NRF_MODEM_DECT_MAC_STATUS_OK
+			};
+
+			LOG_DBG("MOCK: Simulating rssi_scan op callback with success status");
+			simulate_async_callback((void (*)(void *))mock_op_callbacks.rssi_scan,
+						&rssi_done_params);
+		}
+	}
+
 	return 0;
 }
 
@@ -440,13 +492,35 @@ int nrf_modem_dect_control_systemmode_set(enum nrf_modem_dect_control_systemmode
 
 	/* Simulate success for MAC mode */
 	if (mode == NRF_MODEM_DECT_MODE_MAC) {
-		/* Simulate asynchronous callback after successful operation */
+		/* First, simulate capability_ntf callback before op callback */
+		if (mock_ntf_callbacks.capability_ntf) {
+			struct nrf_modem_dect_mac_capability_ntf_cb_params capability_params = {
+				.max_mcs = 4,
+				.num_band_info_elems = 1,
+				.band_info_elems = {
+					[0] = {
+						.band_group_index =
+						NRF_MODEM_DECT_MAC_PHY_BAND_GROUP_IDX0,
+						.band = NRF_MODEM_DECT_MAC_PHY_BAND1,
+						.power_class = 3,
+						.min_carrier = 1657,
+						.max_carrier = 1677
+					}
+				}
+			};
+			simulate_async_callback(
+				(void (*)(void *))mock_ntf_callbacks.capability_ntf,
+				&capability_params);
+		}
+
+		/* Then, simulate asynchronous op callback after successful operation */
 		if (mock_op_callbacks.control_systemmode) {
 			struct nrf_modem_dect_mac_control_systemmode_cb_params cb_params = {
 				.status = 0 /* Success */
 			};
 			simulate_async_callback(
-				(void (*)(void *))mock_op_callbacks.control_systemmode, &cb_params);
+				(void (*)(void *))mock_op_callbacks
+					.control_systemmode, &cb_params);
 		}
 		return 0;
 	}
