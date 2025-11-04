@@ -207,17 +207,17 @@ mkdir -p "${COVERAGE_DIR}"
 echo "Coverage output directory: ${COVERAGE_DIR}"
 
 # Get workspace root (assuming we're in NCS)
-# Script is at: nrf/tests/drivers/dect_nrp/integrated/
-# Workspace root should be: ../../../../../ (5 levels up: integrated ->
-# dect_nrp -> drivers -> tests -> nrf -> workspace root)
+# Script is at: nrf/tests/drivers/dect_nrp/nrf91_mac/integration/
+# Workspace root should be: ../../../../../../ (7 levels up: integration ->
+# nrf91_mac -> dect_nrp -> drivers -> tests -> nrf -> workspace root)
 if [ -z "${WORKSPACE_ROOT}" ]; then
-    # Try NCS structure: go up 5 levels from integrated/ directory
-    TEST_ROOT="${SCRIPT_DIR}/../../../../../"
+    # Try NCS structure: go up 7 levels from integration/ directory
+    TEST_ROOT="${SCRIPT_DIR}/../../../../../../"
     if [ -d "${TEST_ROOT}/nrf" ] && [ -d "${TEST_ROOT}/zephyr" ]; then
         WORKSPACE_ROOT=$(cd "${TEST_ROOT}" && pwd)
     else
-        # Try 4 levels up as fallback
-        TEST_ROOT="${SCRIPT_DIR}/../../../../"
+        # Try 6 levels up as fallback
+        TEST_ROOT="${SCRIPT_DIR}/../../../../../"
         if [ -d "${TEST_ROOT}/nrf" ] && [ -d "${TEST_ROOT}/zephyr" ]; then
             WORKSPACE_ROOT=$(cd "${TEST_ROOT}" && pwd)
         else
@@ -225,9 +225,9 @@ if [ -z "${WORKSPACE_ROOT}" ]; then
             if [ -n "${ZEPHYR_BASE}" ]; then
                 WORKSPACE_ROOT=$(dirname "${ZEPHYR_BASE}")
             else
-                # Default: assume 5 levels up
-                WORKSPACE_ROOT=$(cd "${SCRIPT_DIR}/../../../../../" 2>/dev/null && pwd ||
-			echo "${SCRIPT_DIR}/../../../../../")
+                # Default: assume 7 levels up
+                WORKSPACE_ROOT=$(cd "${SCRIPT_DIR}/../../../../../../" 2>/dev/null && pwd ||
+			echo "${SCRIPT_DIR}/../../../../../../")
                 echo -e "${YELLOW}WARNING: Using default workspace root, may be incorrect${NC}"
             fi
         fi

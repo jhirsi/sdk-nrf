@@ -1,4 +1,4 @@
-# DECT NR+ Stack Integration Tests
+# DECT NR+ Stack Integration Tests with nRF91 driver for modem MAC
 
 Unity-based integration tests for the complete DECT NR+ stack in NCS. Tests the full stack from `net_mgmt()` API down to mock libmodem backend.
 
@@ -82,8 +82,8 @@ Tests complete DECT PT device lifecycle:
 
 ```bash
 # Build and run tests
-cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/integrated
-west build -p -b native_sim . && timeout 10s ./build/integrated/zephyr/zephyr.exe
+cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/nrf91_mac/integration
+west build -p -b native_sim . && timeout 10s ./build/integration/zephyr/zephyr.exe
 
 # Generate code coverage (see Code Coverage section below)
 ./generate_coverage.sh

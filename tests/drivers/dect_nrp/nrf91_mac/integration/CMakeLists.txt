@@ -8,7 +8,7 @@ cmake_minimum_required(VERSION 3.20.0)
 set(KCONFIG_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/Kconfig)
 
 find_package(Zephyr REQUIRED HINTS $ENV{ZEPHYR_BASE})
-project(dect_nrp_integrated_test)
+project(dect_nrp_integration_test)
 
 # Unity Test Framework is provided by CONFIG_UNITY=y in prj.conf and Nordic SDK
 # CMock headers are included but implementations come from Nordic SDK

@@ -14,10 +14,10 @@ Quick start guide for running Unity-based DECT NR+ integration tests with comple
 
 ```bash
 # Navigate to test directory
-cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/integrated
+cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/nrf91_mac/integration
 
 # Build and run Unity tests with timeout (automatically exits after tests complete)
-west build -p -b native_sim . && timeout 15s ./build/integrated/zephyr/zephyr.exe
+west build -p -b native_sim . && timeout 15s ./build/integration/zephyr/zephyr.exe
 ```
 
 ### Expected Success Output
@@ -46,7 +46,7 @@ ALL TESTS PASSED!
 ## Test Directory Structure
 
 ```
-<your_root>/ncs/nrf/tests/drivers/dect_nrp/integrated/  ← Work from here
+<your_root>/ncs/nrf/tests/drivers/dect_nrp/nrf91_mac/integration/  ← Work from here
 ├── prj.conf                        # Kconfig settings (DECT stack + Unity)
 ├── CMakeLists.txt                  # Build configuration
 ├── testcase.yaml                   # Unity test framework configuration
@@ -61,7 +61,7 @@ ALL TESTS PASSED!
         ├── mock_nrf_modem_dect_mac.c   # Mock implementation
         └── mock_nrf_modem_dect_mac.h   # Mock header
 
-Build output: ./build/integrated/zephyr/zephyr.exe (from test directory)
+Build output: ./build/integration/zephyr/zephyr.exe (from test directory)
 ```
 ##  Adding New Tests
 
@@ -91,6 +91,6 @@ int main(void)
 
 Rebuild and run from test directory:
 ```bash
-cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/integrated
-west build -p -b native_sim . && timeout 15s ./build/integrated/zephyr/zephyr.exe
+cd <your_root>/ncs/nrf/tests/drivers/dect_nrp/nrf91_mac/integration
+west build -p -b native_sim . && timeout 15s ./build/integration/zephyr/zephyr.exe
 ```
