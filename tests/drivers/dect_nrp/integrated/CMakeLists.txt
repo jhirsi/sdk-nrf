@@ -47,3 +47,13 @@ target_include_directories(zephyr_interface INTERFACE
 # No need for manual compile definitions
 
 # Unity and CMock libraries are provided by Nordic SDK modules
+
+# Add custom target for coverage report generation
+if(CONFIG_COVERAGE)
+    add_custom_target(coverage_report
+        COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/generate_coverage.sh
+        WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+        COMMENT "Generating DECT NR+ stack coverage report"
+        DEPENDS app
+    )
+endif()

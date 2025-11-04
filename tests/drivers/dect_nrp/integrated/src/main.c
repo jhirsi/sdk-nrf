@@ -7,6 +7,9 @@
 #include <unity.h>
 #include <zephyr/kernel.h>
 #include <stdlib.h>
+#ifdef CONFIG_BOARD_NATIVE_SIM
+#include "posix_board_if.h"
+#endif
 
 /* Include test functions from test_dect_integration.c */
 extern void test_dect_stack_initialization(void);
@@ -116,8 +119,22 @@ int main(void)
 	printk("==============================\n");
 
 	/* Exit automatically for native_sim - prevents hanging after tests complete */
-	printk("Tests completed with result: %d. Use Ctrl+C to exit or run with timeout.\n",
-	       result);
+	printk("Tests completed with result: %d\n", result);
 
+#ifdef CONFIG_BOARD_NATIVE_SIM
+#ifdef CONFIG_COVERAGE
+	/* When coverage is enabled, we need to explicitly exit to ensure coverage data is written*/
+	/* This ensures gcov coverage data (.gcda files) are properly flushed on exit */
+	/* Note: This exits immediately, so output may be truncated - coverage data is prioritized*/
+	posix_exit(result);
+
+	/* Should be unreachable: */
+	return 1;
+#else
+	/* Without coverage, let the program exit normally so all output is visible */
 	return result;
+#endif
+#else
+	return result;
+#endif
 }
