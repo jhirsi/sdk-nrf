@@ -1703,7 +1703,7 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 	desh_print("  Auto activate:                        %s",
 		   dect_sett->auto_start.activate ? "on" : "off");
 	desh_print("  Device type:                          %s",
-		   dect_sett->device_type == DECT_DEVICE_TYPE_FT ? "FT" : "PT");
+		   (dect_sett->device_type & DECT_DEVICE_TYPE_FT) ? "FT" : "PT");
 	desh_print("  Max TX power:                         %d dBm", dect_sett->tx.max_power_dbm);
 	desh_print("  Max MCS:                              %d", dect_sett->tx.max_mcs);
 	desh_print("  Power save:                           %s",
@@ -2812,7 +2812,7 @@ static void dect_shell_connect_cmd(const struct shell *shell, size_t argc, char 
 		desh_error("Cannot read current settings: %d", err);
 		return;
 	}
-	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+	if (current_settings.device_type & DECT_DEVICE_TYPE_PT) {
 		err = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, context.iface, NULL, 0);
 		if (err) {
 			desh_error("cannot initiate request for joining "
@@ -2823,7 +2823,7 @@ static void dect_shell_connect_cmd(const struct shell *shell, size_t argc, char 
 		}
 
 	} else {
-		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		__ASSERT_NO_MSG(current_settings.device_type & DECT_DEVICE_TYPE_FT);
 		err = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, context.iface, NULL, 0);
 		if (err) {
 			desh_error("cannot initiate request for creating "
@@ -2857,7 +2857,7 @@ static void dect_shell_disconnect_cmd(const struct shell *shell, size_t argc, ch
 		desh_error("Cannot read current settings: %d\n", ret);
 		return;
 	}
-	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+	if (current_settings.device_type & DECT_DEVICE_TYPE_PT) {
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, context.iface, NULL, 0);
 		if (ret) {
 			desh_error("cannot initiate request for unjoining "
@@ -2868,7 +2868,7 @@ static void dect_shell_disconnect_cmd(const struct shell *shell, size_t argc, ch
 		}
 
 	} else {
-		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		__ASSERT_NO_MSG(current_settings.device_type & DECT_DEVICE_TYPE_FT);
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, context.iface, NULL, 0);
 		if (ret) {
 			desh_error("cannot initiate request for removing "

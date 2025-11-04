@@ -153,6 +153,13 @@ static uint16_t dect_nrf91_settings_write_validate(const struct dect_settings *s
 	    settings_in->identities.transmitter_long_rd_id == DECT_NRF91_LONG_RD_ID_ID_NOT_SET) {
 		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_IDENTITIES;
 	}
+	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_DEVICE_TYPE) ||
+	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
+	    (settings_in->device_type != DECT_DEVICE_TYPE_FT &&
+	     settings_in->device_type != DECT_DEVICE_TYPE_PT)) {
+		/* Only DECT_DEVICE_TYPE_FT or DECT_DEVICE_TYPE_PT is allowed, not both */
+		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DEVICE_TYPE;
+	}
 	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_TX) ||
 	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL)) &&
 		dect_nrf91_ctrl_utils_tx_pwr_dbm_is_valid_by_band(

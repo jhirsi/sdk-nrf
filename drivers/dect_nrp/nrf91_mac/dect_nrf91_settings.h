@@ -8,6 +8,7 @@
 #define DECT_NRF91_SETTINGS_H
 
 #include <zephyr/kernel.h>
+#include "dect_net_l2.h"
 #include "dect_net_l2_mgmt.h"
 
 #define DECT_NRF91_SETT_TREE_KEY	  "dect_nrf91_settings"

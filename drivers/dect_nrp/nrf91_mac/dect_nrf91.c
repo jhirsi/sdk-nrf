@@ -136,7 +136,7 @@ static uint8_t *dect_nrf91_current_link_addr_create(struct dect_nrf91_mac_dev_co
 
 	memset(ctx->link_addr, 0, sizeof(ctx->link_addr));
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		ctx->link_addr[0] =
 			(set_ptr->net_mgmt_common.identities.transmitter_long_rd_id >> 24) & 0xFF;
 		ctx->link_addr[1] =
@@ -154,6 +154,7 @@ static uint8_t *dect_nrf91_current_link_addr_create(struct dect_nrf91_mac_dev_co
 		ctx->link_addr[7] =
 			set_ptr->net_mgmt_common.identities.transmitter_long_rd_id & 0xFF;
 	} else {
+		__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT);
 		if (ctx->parent_long_rd_id == 0) {
 			/* Sink part to be set later when associated */
 			ctx->link_addr[4] =
@@ -457,7 +458,7 @@ int dect_nrf91_hal_associate_req(const struct device *dev,
 	struct nrf_modem_dect_mac_tx_flow_config flow_config[1];
 
 	/* Association req only with PT devices */
-	if (set_ptr->net_mgmt_common.device_type != DECT_DEVICE_TYPE_PT) {
+	if (!(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT)) {
 		LOG_ERR("%s: Association request only supported for PT devices", (__func__));
 		return -EINVAL;
 	}
@@ -568,7 +569,7 @@ static int dect_nrf91_hal_status_info_get(const struct device *dev,
 	status_info.cluster_channel = 0;
 	status_info.cluster_running = false;
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		int cluster_channel = dect_nrf91_ctrl_api_cluster_channel_get();
 
 		if (cluster_channel > 0) {
@@ -806,7 +807,7 @@ static int dect_nrf91_hal_network_create_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		return dect_nrf91_ctrl_api_network_create_req_cmd();
 	} else {
 		return -ENOTSUP;
@@ -819,7 +820,7 @@ static int dect_nrf91_hal_network_remove_req(const struct device *dev)
 	struct dect_nrf91_mac_dev_context *ctx = &dect_nrf91_mac_dev_context_data;
 	int i, ret;
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		if (dect_nrf91_ctrl_api_network_remove_req_cmd_allowed() == false) {
 			LOG_ERR("%s: Network remove not allowed", (__func__));
 			return -EPERM;
@@ -849,7 +850,7 @@ static int dect_nrf91_hal_network_join_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) {
 		return dect_nrf91_ctrl_api_network_join_req_cmd();
 	} else {
 		return -ENOTSUP;
@@ -860,7 +861,7 @@ static int dect_nrf91_hal_network_unjoin_req(const struct device *dev)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) {
 		return dect_nrf91_ctrl_api_network_unjoin_req_cmd();
 	} else {
 		return -ENOTSUP;

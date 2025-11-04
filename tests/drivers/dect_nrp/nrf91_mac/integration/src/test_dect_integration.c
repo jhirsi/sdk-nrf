@@ -447,8 +447,8 @@ void test_dect_settings_reset_to_defaults(void)
 	LOG_DBG("- auto_start.activate: %s", read_settings.auto_start.activate ? "true" : "false");
 
 	/* Validate device type is reset to PT (default) */
-	TEST_ASSERT_EQUAL_INT_MESSAGE(DECT_DEVICE_TYPE_PT, read_settings.device_type,
-				      "Default device type should be PT after reset");
+	TEST_ASSERT_TRUE_MESSAGE(read_settings.device_type & DECT_DEVICE_TYPE_PT,
+				 "Default device type should have PT bit set after reset");
 
 	/* Validate region is reset to EU (default) */
 	TEST_ASSERT_EQUAL_INT_MESSAGE(DECT_SETTINGS_REGION_EU, read_settings.region,
@@ -1533,7 +1533,7 @@ void test_dect_ft_configuration(void)
 	LOG_DBG("- device_type: %d (expected: %d for DECT_DEVICE_TYPE_FT)",
 		read_settings.device_type, DECT_DEVICE_TYPE_FT);
 
-	TEST_ASSERT_EQUAL_INT(DECT_DEVICE_TYPE_FT, read_settings.device_type);
+	TEST_ASSERT_TRUE(read_settings.device_type & DECT_DEVICE_TYPE_FT);
 
 	LOG_DBG("=== FT Configuration Test Completed Successfully ===");
 	LOG_DBG("- Settings write operation: SUCCESS");

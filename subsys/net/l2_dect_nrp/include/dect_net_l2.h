@@ -653,10 +653,12 @@ struct dect_common_resp_evt {
 
 /**************************************************************************************************/
 
-enum dect_device_type {
-	DECT_DEVICE_TYPE_FT,
-	DECT_DEVICE_TYPE_PT,
-};
+/** DECT device type bitmap */
+typedef uint32_t dect_device_type_t;
+
+/** DECT device type flags */
+#define DECT_DEVICE_TYPE_FT 0x01U  /** Fixed Terminal */
+#define DECT_DEVICE_TYPE_PT 0x02U  /** Portable Terminal */
 
 /* Note: If writing just specific scopes of the settings, then all of the setting in given scope
  * need to be filled.
@@ -826,7 +828,7 @@ struct dect_settings {
 	enum dect_settings_region region;
 
 	/** DECT device type */
-	enum dect_device_type device_type;
+	dect_device_type_t device_type;
 
 	/** DECT identifiers */
 	struct dect_settings_identities identities;
@@ -1073,7 +1075,7 @@ struct dect_net_l2_context {
 	enum net_l2_flags flags;
 
 	/** DECT device type */
-	enum dect_device_type device_type;
+	dect_device_type_t device_type;
 
 	/** Network ID */
 	uint32_t network_id;

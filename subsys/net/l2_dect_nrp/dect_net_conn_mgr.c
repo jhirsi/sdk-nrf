@@ -27,7 +27,7 @@ static int connect(struct net_if *iface)
 		return ret;
 	}
 
-	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+	if (current_settings.device_type & DECT_DEVICE_TYPE_PT) {
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_JOIN, iface, NULL, 0);
 		if (ret) {
 			LOG_ERR("%s: cannot initiate request for joining "
@@ -36,7 +36,7 @@ static int connect(struct net_if *iface)
 			       ret);
 		}
 	} else {
-		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		__ASSERT_NO_MSG(current_settings.device_type & DECT_DEVICE_TYPE_FT);
 
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_CREATE, iface, NULL, 0);
 		if (ret) {
@@ -72,7 +72,7 @@ int dect_nrp_net_if_disconnect(struct conn_mgr_conn_binding *const binding)
 		LOG_ERR("%s: cannot read current settings: %d", (__func__), ret);
 		goto exit;
 	}
-	if (current_settings.device_type == DECT_DEVICE_TYPE_PT) {
+	if (current_settings.device_type & DECT_DEVICE_TYPE_PT) {
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_UNJOIN, binding->iface, NULL, 0);
 		if (ret) {
 			LOG_ERR("%s: cannot initiate request for unjoining a network: %d",
@@ -80,7 +80,7 @@ int dect_nrp_net_if_disconnect(struct conn_mgr_conn_binding *const binding)
 			       ret);
 		}
 	} else {
-		__ASSERT_NO_MSG(current_settings.device_type == DECT_DEVICE_TYPE_FT);
+		__ASSERT_NO_MSG(current_settings.device_type & DECT_DEVICE_TYPE_FT);
 		ret = net_mgmt(NET_REQUEST_DECT_NETWORK_REMOVE, binding->iface, NULL, 0);
 		if (ret) {
 			LOG_ERR("%s: cannot initiate request for removing a network: %d",

@@ -762,7 +762,7 @@ int dect_nrf91_ctrl_api_cluster_start_req_cmd(struct dect_cluster_start_req_para
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) {
 		LOG_ERR("Cluster start not allowed for PT");
 		return -EINVAL;
 	}
@@ -831,7 +831,7 @@ static bool dect_nrf91_ctrl_nw_beacon_common_can_be_started(uint16_t channel)
 {
 	struct dect_nrf91_settings *set_ptr = dect_nrf91_settings_ref_get();
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) {
 		LOG_ERR("Network beacon can not be started for PT");
 		return false;
 	}
@@ -1385,8 +1385,7 @@ static void handle_cluster_config_resp(struct dect_mac_common_op_event_msgq_item
 	}
 	LOG_INF("Cluster configured");
 
-	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-			DECT_DEVICE_TYPE_FT);
+	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT);
 
 	ctrl_data.ft_cluster_state = CTRL_FT_CLUSTER_STATE_STARTED;
 	resp_evt.cluster_channel = ctrl_data.configure_params.channel;
@@ -1473,7 +1472,7 @@ static void handle_cluster_ch_load_changed(struct dect_mac_common_op_event_msgq_
 			set_ptr->net_mgmt_common
 				.cluster.channel_loaded_percent,
 			evt_data->rssi_result.channel);
-		if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+		if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 			struct dect_cluster_reconfig_req_params reconfig_params = {
 				.channel = DECT_CLUSTER_CHANNEL_ANY,
 				.max_beacon_tx_power_dbm =
@@ -1508,7 +1507,7 @@ static void handle_neighbor_inactivity(struct dect_mac_common_op_event_msgq_item
 	/* If inactivity timer is supported and child has been too long as inactive
 	 * -> drop it
 	 */
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT &&
+	if ((set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) &&
 	    set_ptr->net_mgmt_common.cluster
 		.neighbor_inactivity_disconnect_timer_ms) {
 		LOG_WRN("Neighbor inactive for too long - "
@@ -1615,8 +1614,7 @@ static void handle_mdm_association_resp(struct dect_mac_common_op_event_msgq_ite
 	};
 
 	/* Association response only with PT devices */
-	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-			DECT_DEVICE_TYPE_PT);
+	__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT);
 	if (params->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 		/* Modem operation failed */
 		dect_mgmt_association_req_failed_mdm_result_evt(
@@ -1688,7 +1686,7 @@ static void handle_mdm_association_release_resp(struct dect_mac_common_op_event_
 			CTRL_PT_ASSOCIATION_STATE_NONE;
 		dect_nrf91_parent_association_removed(
 			params->long_rd_id, ctrl_data.last_rel_cause, false);
-	} else if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	} else if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		dect_nrf91_child_association_removed(
 			params->long_rd_id, ctrl_data.last_rel_cause, false);
 	}
@@ -1704,7 +1702,7 @@ static void handle_mdm_association_release_ind(struct dect_mac_common_op_event_m
 		"%u (0x%X)",
 		params->long_rd_id, params->long_rd_id);
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		dect_nrf91_child_association_removed(
 			params->long_rd_id, params->release_cause, true);
 	} else {
@@ -1730,7 +1728,7 @@ static void handle_auto_start(struct dect_mac_common_op_event_msgq_item *event)
 	sizeof(ctrl_data.scan_data.cluster_channels));
 	ctrl_data.scan_data.current_cluster_channel_index = 0;
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_FT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT) {
 		struct nrf_modem_dect_mac_network_scan_params params = {
 			.network_id_filter_mode =
 				NRF_MODEM_DECT_MAC_NW_ID_FILTER_MODE_NONE,
@@ -1795,8 +1793,7 @@ static void handle_auto_start(struct dect_mac_common_op_event_msgq_item *event)
 				.band = set_ptr->net_mgmt_common.band_nbr,
 			};
 
-			__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type ==
-					DECT_DEVICE_TYPE_FT);
+			__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT);
 			if (ctrl_data.ft_requested_cluster_channel !=
 			    DECT_CLUSTER_CHANNEL_ANY) {
 				params.num_channels = 1;
@@ -2553,7 +2550,7 @@ static void handle_mdm_cluster_beacon_rcvd(struct dect_mac_common_op_event_msgq_
 		ctrl_data.scan_data.scan_result_cb(ctrl_data.iface, 0,
 						   &scan_result);
 	}
-	if (set_ptr->net_mgmt_common.device_type != DECT_DEVICE_TYPE_PT) {
+	if (!(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT)) {
 		/* Cluster beacon can be also received if FT device and
 		 * if same short nw id and in same channel
 		 */
@@ -2638,7 +2635,7 @@ static void handle_mdm_nw_beacon_rcvd(struct dect_mac_common_op_event_msgq_item 
 						   &scan_result);
 	}
 
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT &&
+	if ((set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) &&
 	    ctrl_data.ass_config.pt_association_state !=
 		    CTRL_PT_ASSOCIATION_STATE_ASSOCIATED) {
 		ctrl_data.ass_config.pt_association_state =
@@ -2692,7 +2689,7 @@ static void handle_mdm_nw_scan_complete(struct dect_mac_common_op_event_msgq_ite
 		/* We are done here */
 		return;
 	}
-	if (set_ptr->net_mgmt_common.device_type == DECT_DEVICE_TYPE_PT) {
+	if (set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_PT) {
 		if (ctrl_data.ass_config.pt_association_state ==
 		    CTRL_PT_ASSOCIATION_STATE_CLUSTER_FOUND) {
 			LOG_INF("auto start: sending cluster beacon receive req, "
@@ -2776,9 +2773,7 @@ static void handle_mdm_nw_scan_complete(struct dect_mac_common_op_event_msgq_ite
 			.band = set_ptr->net_mgmt_common.band_nbr,
 		};
 
-		__ASSERT_NO_MSG(
-			set_ptr->net_mgmt_common.device_type ==
-				DECT_DEVICE_TYPE_FT);
+		__ASSERT_NO_MSG(set_ptr->net_mgmt_common.device_type & DECT_DEVICE_TYPE_FT);
 		if (ctrl_data.ft_requested_cluster_channel !=
 			DECT_CLUSTER_CHANNEL_ANY) {
 			params.num_channels = 1;

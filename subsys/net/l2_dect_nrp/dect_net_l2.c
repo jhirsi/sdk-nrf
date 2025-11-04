@@ -93,9 +93,9 @@ static bool dect_net_l2_association_exists(uint32_t target_long_rd_id)
  * @return true if parent exists, false if no parent (FT device)
  */
 static bool dect_net_l2_association_parent_id_get(uint32_t *parent_long_rd_id_out,
-						  enum dect_device_type device_type)
+						  dect_device_type_t device_type)
 {
-	if (device_type == DECT_DEVICE_TYPE_FT) {
+	if (device_type & DECT_DEVICE_TYPE_FT) {
 		*parent_long_rd_id_out = 0;
 		return false;
 	}
@@ -414,7 +414,7 @@ static int dect_net_l2_send(struct net_if *iface, struct net_pkt *pkt)
 
 	struct net_context *context;
 	struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
-	enum dect_device_type device_type = l2_ctx->device_type;
+	dect_device_type_t device_type = l2_ctx->device_type;
 
 	if (IS_ENABLED(CONFIG_NET_IPV6) && net_pkt_family(pkt) == AF_INET6) {
 		uint32_t parent_long_rd_id = 0;
@@ -425,7 +425,7 @@ static int dect_net_l2_send(struct net_if *iface, struct net_pkt *pkt)
 		if (!dect_net_l2_association_exists(target_long_rd_id)) {
 			if (!dect_net_l2_association_parent_id_get(&parent_long_rd_id,
 								   device_type)) {
-				if (!(device_type == DECT_DEVICE_TYPE_FT &&
+				if (!((device_type & DECT_DEVICE_TYPE_FT) &&
 				    net_ipv6_is_addr_mcast_link(
 					    (struct in6_addr *)NET_IPV6_HDR(pkt)->dst))) {
 					LOG_WRN("%s: IPv6: no parent and no association with "
