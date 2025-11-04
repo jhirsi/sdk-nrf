@@ -519,7 +519,7 @@ static int dect_nrf91_ctrl_modem_configure_req_from_settings(void)
 	int ret;
 
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATED) {
-		LOG_ERR("Modem is not deactivated, cannot configure");
+		LOG_ERR("%s: Modem is not deactivated, cannot configure", (__func__));
 		return -EINVAL;
 	}
 	params.long_rd_id = set_ptr->net_mgmt_common.identities.transmitter_long_rd_id;
@@ -560,7 +560,7 @@ int dect_nrf91_ctrl_api_mdm_configure_n_activate(void)
 	int ret = 0;
 
 	if (ctrl_data.mdm_activation_state != CTRL_MDM_DEACTIVATED) {
-		LOG_ERR("Modem is not deactivated, cannot configure");
+		LOG_ERR("%s: Modem is not deactivated, cannot configure", (__func__));
 		return -EINVAL;
 	}
 	ret = dect_nrf91_ctrl_modem_configure_req_from_settings();
@@ -2092,6 +2092,7 @@ static void handle_mdm_rssi_complete(struct dect_mac_common_op_event_msgq_item *
 
 		LOG_ERR("Error in RSSI scan complete: err %s (%d)", tmp_str,
 			*status);
+		ctrl_data.rssi_scan_data.cmd_on_going = false;
 
 		if (ctrl_data.ft_cluster_state == CTRL_FT_CLUSTER_STATE_STARTING) {
 			if (ctrl_data.ft_cluster_reconfig_ongoing) {
