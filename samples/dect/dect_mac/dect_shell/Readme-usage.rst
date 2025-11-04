@@ -73,7 +73,7 @@ Main command structure:
        nw_create
        nw_remove
        nw_join
-       ne_unjoin
+       nw_unjoin
        connect
        disconnect
        rx
@@ -393,7 +393,7 @@ PT: ICMPv6 Ping a FT device
 DeSh command: ``ping``
 The ``ping`` command sends ICMPv6 echo request to a FT device by using AF_INET6/SOCK_RAW/IPPROTO_IP sockets.
 
-* PT device: by using global Ipv6 address of the FT device (global address only available if FT device is connected to the internet):
+* PT device: by using global IPv6 address of the FT device (global address only available if FT device is connected to the internet):
 
   .. code-block:: console
 

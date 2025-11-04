@@ -41,14 +41,16 @@ Preferred: LTE with SLM running on external 9151DK
 
    20 (PWR) -> 31 (PWR)
 
-NOTE: change VDD (nPM VOUT1) from 1.8V to 3.3V with “nRF Connect for Desktop → Board Configurator” in both DKes.
+NOTE: change VDD (nPM VOUT1) from 1.8V to 3.3V with "nRF Connect for Desktop → Board Configurator" in both DKs.
 
 Ethernet with Phytec shield
 ---------------------------
 
-NOTE 1: This config not used in a while....
+.. note::
+   This configuration has not been used in a while.
 
-NOTE 2: change VDD (nPM VOUT1) from 1.8V to 3.3V with “nRF Connect for Desktop → Board Configurator” before connecting the shield.
+.. note::
+   Change VDD (nPM VOUT1) from 1.8V to 3.3V with "nRF Connect for Desktop → Board Configurator" before connecting the shield.
 
 * DeSH with Phytec Shield support:
 
@@ -57,8 +59,9 @@ NOTE 2: change VDD (nPM VOUT1) from 1.8V to 3.3V with “nRF Connect for Desktop
    nrf9151dk:
    west build -p -b nrf9151dk/nrf9151/ns -- -DOVERLAY_CONFIG="overlay-phytec_eth_client.conf" -DSHIELD="link_board_eth"
 
-Note: ethernet needs to offer IPv6 connectivity to the Internet and zephyr networking interface needs to have global ipv6 address, e.g. get from ipv6 RA.
-MoSH with custom LTE-Eth GW functionalities have been used that.
+.. note::
+   Ethernet needs to offer IPv6 connectivity to the Internet and the Zephyr networking interface needs to have a global IPv6 address, e.g., obtained from IPv6 Router Advertisement.
+   MoSH with custom LTE-Eth GW functionalities have been used for this.
 
 Only with Ethernet sink:
 mosh LTE-Eth GW:
@@ -127,7 +130,8 @@ PT device: dect_shell with zephyr network management based shell commands:
    nrf9151dk:
    $ west build -p -b nrf9151dk/nrf9151/ns -- -DOVERLAY_CONFIG="overlay-nrf_cloud_coap.conf"
 
-Note: system time is retrieved by using NTP.
+.. note::
+   System time is retrieved by using NTP.
 
 REST (not supported)
 --------------------
@@ -138,10 +142,15 @@ PT device: dect_shell with zephyr network management based shell commands:
    nrf9151dk:
    $ west build -p -b nrf9151dk/nrf9151/ns -- -DOVERLAY_CONFIG="overlay-nrf_cloud_mqtt.conf;overlay-nrf_cloud_rest.conf"
 
-Note: set local time:
-date set 2025-04-01 14:15:00
+.. note::
+   Set local time:
 
-Note: nrf cloud does not support ipv6 on REST, thus cloud_rest command does not work
+   .. code-block:: console
+
+      date set 2025-04-01 14:15:00
+
+.. note::
+   nRF Cloud does not support IPv6 on REST, thus the ``cloud_rest`` command does not work.
 
 Troubleshooting
 ***************
