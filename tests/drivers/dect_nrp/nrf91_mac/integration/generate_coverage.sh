@@ -25,6 +25,8 @@ BUILD_DIR="${BUILD_DIR:-build}"
 COVERAGE_DIR="${COVERAGE_DIR:-${SCRIPT_DIR}/${BUILD_DIR}/coverage_report}"
 BOARD="${BOARD:-native_sim}"
 TIMEOUT="${TIMEOUT:-60}"
+# Clean up generated files after completion (set to "true" to enable)
+CLEANUP="${CLEANUP:-false}"
 
 # DECT stack directories to include in coverage (only these specific paths)
 DECT_STACK_DIRS=(
@@ -77,12 +79,21 @@ echo -e "${YELLOW}[1/5] Building test with coverage enabled...${NC}"
 if [ "${USE_TEMP_PRJ_CONF}" = true ]; then
     echo "Building with temporary prj.conf.coverage..."
     # Use the temporary prj.conf file
-    cp "${PRJ_CONF_TO_USE}" prj.conf.bak
-    mv "${PRJ_CONF_TO_USE}" prj.conf
+    # Backup original prj.conf
+    cp prj.conf prj.conf.bak
+    # Replace with coverage-enabled version
+    cp "${PRJ_CONF_TO_USE}" prj.conf
+    # Build
     west build -p -b "${BOARD}" . -d "${BUILD_DIR}"
-    mv prj.conf "${PRJ_CONF_TO_USE}"
+    # Restore original prj.conf
     mv prj.conf.bak prj.conf
+    echo "Restored original prj.conf (coverage disabled)"
+    # Clean up backup file
+    rm -f prj.conf.bak
 else
+    # Coverage already enabled in prj.conf - warn user
+    echo -e "${YELLOW}WARNING: CONFIG_COVERAGE is already enabled in prj.conf${NC}"
+    echo -e "${YELLOW}This will be left enabled after the script completes${NC}"
     west build -p -b "${BOARD}" . -d "${BUILD_DIR}"
 fi
 
@@ -550,5 +561,24 @@ echo -e "${GREEN}Coverage measurement complete!${NC}"
 if [ "${USE_TEMP_PRJ_CONF}" = true ] && [ -f "${PRJ_CONF_TO_USE}" ]; then
     rm -f "${PRJ_CONF_TO_USE}"
     echo "Cleaned up temporary prj.conf file"
+fi
+
+# Clean up temporary files created in root directory if requested
+if [ "${CLEANUP}" = "true" ]; then
+    echo ""
+    echo -e "${YELLOW}Cleaning up temporary files in root directory...${NC}"
+
+    # Remove any temporary prj.conf files that might remain
+    if [ -f "prj.conf.bak" ]; then
+        rm -f "prj.conf.bak"
+        echo "Removed prj.conf.bak"
+    fi
+
+    # Remove any other temporary files that might have been created
+    rm -f "${SCRIPT_DIR}"/prj.conf.*.tmp 2>/dev/null || true
+    rm -f "${SCRIPT_DIR}"/tmp_*.txt 2>/dev/null || true
+
+    echo -e "${GREEN}Cleanup complete!${NC}"
+    echo "Note: Coverage data files (.gcda, .gcno) and coverage reports are preserved"
 fi
 
