@@ -12,6 +12,30 @@
 
 #include "dect_nrf91_common.h"
 
+/**
+ * @file dect_nrf91_ctrl.h
+ * @brief DECT NR+ Control Module Architecture
+ *
+ * @details
+ * The control module manages DECT modem operations, cluster configuration,
+ * network management, and device associations.
+ *
+ * Architecture:
+ * - API Layer (dect_nrf91_ctrl_api.c): Interface for dect_nrf91_*.c usage.
+ *   Functions validate state and queue operations to the message queue thread.
+ *   Some API functions may also be called from the message queue thread when
+ *   they don't queue operations (e.g., direct modem API calls are OK).
+ * - Handler Layer (dect_nrf91_ctrl.c): Processes operations asynchronously
+ *   via a dedicated message queue thread. Handles modem callbacks and state
+ *   transitions.
+ * - Data Layer: Shared control data (ctrl_data) protected by mutex.
+ *   Contains modem, cluster, network, and association state.
+ *
+ * Thread Safety: All ctrl_data access is protected by dect_mac_ctrl_data_mtx.
+ * Modem callbacks are queued as events and processed sequentially by the
+ * message queue thread to avoid blocking modem operations.
+ */
+
 #define NRF91_DECT_UL_BUFFER_SIZE DECT_NRP_MTU
 
 #define DECT_MAC_DATA_TX_HANDLE_START 1000
@@ -21,45 +45,7 @@
 #define DECT_MAC_DATA_TX_HANDLE_COUNT                                                              \
 	(DECT_MAC_DATA_TX_HANDLE_END - DECT_MAC_DATA_TX_HANDLE_START + 1)
 
-typedef enum {
-	DECT_NRF91_CTRL_OP_MDM_CAPABILITIES,
-	DECT_NRF91_CTRL_OP_MDM_CONFIGURE_RESP,
-	DECT_NRF91_CTRL_OP_MDM_CFUN_RESP,
-	DECT_NRF91_CTRL_OP_MDM_ACTIVATED,
-	DECT_NRF91_CTRL_OP_MDM_DEACTIVATED,
-	DECT_NRF91_CTRL_OP_AUTO_START,
-	DECT_NRF91_CTRL_OP_CLUSTER_START_REQ,
-	DECT_NRF91_CTRL_OP_CLUSTER_RECONFIG_REQ,
-	DECT_NRF91_CTRL_OP_CLUSTER_IPV6_PREFIX_CHANGE_RECONFIG_REQ,
-	DECT_NRF91_CTRL_OP_CLUSTER_CONFIG_RESP,
-	DECT_NRF91_CTRL_OP_CLUSTER_CH_LOAD_CHANGED,
-	DECT_NRF91_CTRL_OP_NEIGHBOR_INACTIVITY,
-	DECT_NRF91_CTRL_OP_RSSI_START_REQ_CMD,
-	DECT_NRF91_CTRL_OP_RSSI_START_REQ_CH_SELECTION,
-	DECT_NRF91_CTRL_OP_MDM_RSSI_RESULT,
-	DECT_NRF91_CTRL_OP_MDM_RSSI_COMPLETE,
-	DECT_NRF91_CTRL_OP_MDM_RSSI_STOPPED,
-	DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START,
-	DECT_NRF91_CTRL_OP_MDM_NW_BEACON_START_OR_STOP_DONE,
-	DECT_NRF91_CTRL_OP_MDM_NW_BEACON_STOP,
-	DECT_NRF91_CTRL_OP_MDM_NW_SCAN_COMPLETE,
-	DECT_NRF91_CTRL_OP_MDM_NW_SCAN_STOPPED,
-	DECT_NRF91_CTRL_OP_MDM_CLUSTER_BEACON_RCVD,
-	DECT_NRF91_CTRL_OP_MDM_NW_BEACON_RCVD,
-	DECT_NRF91_CTRL_OP_MDM_CLUSTER_RCV_COMPLETE,
-	DECT_NRF91_CTRL_OP_MDM_CLUSTER_INFO,
-	DECT_NRF91_CTRL_OP_CLUSTER_BEACON_RX_FAILURE,
-	DECT_NRF91_CTRL_OP_NEIGHBOR_PAGING_FAILURE,
-	DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_INFO,
-	DECT_NRF91_CTRL_OP_MDM_NEIGHBOR_LIST,
-	DECT_NRF91_CTRL_OP_MDM_FLOW_CONTROL,
-	DECT_NRF91_CTRL_OP_MDM_DLC_DATA_RESP,
-	DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_IND,
-	DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RESP,
-	DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_IND,
-	DECT_NRF91_CTRL_OP_MDM_ASSOCIATION_RELEASE_RESP,
-	DECT_NRF91_CTRL_OP_MDM_IPV6_CONFIG_CHANGED,
-} dect_nrf91_ctrl_op_t;
+/* Internal operation enum moved to dect_nrf91_ctrl_internal.h */
 typedef struct {
 	uint8_t flow_id;
 
