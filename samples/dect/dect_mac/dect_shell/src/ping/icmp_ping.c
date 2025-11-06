@@ -609,7 +609,6 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 	/* Now we can check the max payload len vs link MTU (IPv6 check later): */
 	uint32_t ipv4_max_payload_len = ping_args->mtu - ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN;
 
-	ping_args->conn_info_read_uptime = k_uptime_get();
 	if (!ping_args->force_ipv6 && ping_args->len > ipv4_max_payload_len) {
 		desh_warn("Payload size exceeds the link limits: MTU %d - headers %d = %d ",
 			  ping_args->force_ipv6, (ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN),
@@ -684,6 +683,7 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 			  ping_argv->mtu, (ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN), ipv6_max_payload_len);
 		/* Continue still: */
 	}
+	ping_args->conn_info_read_uptime = k_uptime_get();
 	return true;
 exit:
 	return false;
