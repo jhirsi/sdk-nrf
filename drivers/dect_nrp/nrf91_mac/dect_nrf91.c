@@ -1,4 +1,8 @@
-
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
 
 #include <stdlib.h>
 #include <zephyr/kernel.h>

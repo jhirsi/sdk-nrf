@@ -66,6 +66,9 @@ enum net_request_dect_cmd {
 	/** FT device type: manually reconfigure a cluster */
 	NET_REQUEST_DECT_CMD_CLUSTER_RECONFIG_REQ,
 
+	/** FT device type: stop a cluster */
+	NET_REQUEST_DECT_CMD_CLUSTER_STOP_REQ,
+
 	/** FT device type: start a network beacon */
 	NET_REQUEST_DECT_CMD_NW_BEACON_START_REQ,
 
@@ -294,7 +297,7 @@ enum net_event_dect_cmd {
 	NET_MGMT_CMD(NET_EVENT_DECT_CMD_NW_BEACON_START_RESP),
 	/** Network beacon stopped event */
 	NET_MGMT_CMD(NET_EVENT_DECT_CMD_NW_BEACON_STOP_RESP),
-	/** Neigbor list response */
+	/** Neighbor list response */
 	NET_MGMT_CMD(NET_EVENT_DECT_CMD_NEIGHBOR_LIST_RESP),
 	/** Neighbor info response */
 	NET_MGMT_CMD(NET_EVENT_DECT_CMD_NEIGHBOR_INFO_RESP),
@@ -328,7 +331,7 @@ enum net_event_dect_cmd {
 #define NET_EVENT_DECT_ACTIVATE_DONE (_NET_DECT_EVENT | NET_EVENT_DECT_CMD_ACTIVATE_DONE)
 
 /**
- * Signals the result of the @ref NET_REQUEST_DECT_ACTIVATE net management commands.
+ * Signals the result of the @ref NET_REQUEST_DECT_DEACTIVATE net management command.
  *
  * See @ref dect_status_values for event parameters.
  */
@@ -336,7 +339,7 @@ enum net_event_dect_cmd {
 
 /**
  * Signals the result of the @ref NET_REQUEST_DECT_RSSI_SCAN net management command and
- * sent also unsolitedly when connecting.
+ * sent also unsolicitedly when connecting.
  *
  * See @ref dect_rssi_scan_result_evt for event parameters.
  */
@@ -344,7 +347,7 @@ enum net_event_dect_cmd {
 
 /**
  * Signals the completion of the @ref NET_REQUEST_DECT_RSSI_SCAN net management command and
- * sent also unsolitedly when connecting.
+ * sent also unsolicitedly when connecting.
  *
  * See @ref dect_common_resp_evt for event parameters.
  */
@@ -359,7 +362,7 @@ enum net_event_dect_cmd {
 
 /**
  * Signals the completion of the @ref NET_REQUEST_DECT_SCAN net management command
- * and unsolitedly when connecting.
+ * and unsolicitedly when connecting.
  *
  * See @ref dect_common_resp_evt for event parameters.
  */
@@ -368,7 +371,7 @@ enum net_event_dect_cmd {
 /**
  * Signals association related changes, including the result of the
  * @ref NET_REQUEST_DECT_ASSOCIATION and @ref NET_REQUEST_DECT_ASSOCIATION_RELEASE net management
- * commands but sent also when unsolitedly released or otherwise changed.
+ * commands but sent also when unsolicitedly released or otherwise changed.
  * See @ref dect_association_changed_evt for event parameters.
  */
 #define NET_EVENT_DECT_ASSOCIATION_CHANGED                                                         \
@@ -400,8 +403,15 @@ enum net_event_dect_cmd {
 	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_CLUSTER_START_RESP)
 
 /**
+ * Signals the result of the @ref NET_REQUEST_DECT_CLUSTER_STOP net management command.
+ * See @ref dect_common_resp_evt for event parameters.
+ */
+#define NET_EVENT_DECT_CLUSTER_STOPPED_RESULT                                                      \
+	(_NET_DECT_EVENT | NET_EVENT_DECT_CMD_CLUSTER_STOPPED_RESP)
+
+/**
  * Signals the result of the @ref NET_REQUEST_DECT_NW_BEACON_START net management command.
- * Sent also unsolitedly when connecting with network beacon configuration.
+ * Sent also unsolicitedly when connecting with network beacon configuration.
  * See @ref dect_common_resp_evt for event parameters.
  */
 #define NET_EVENT_DECT_NW_BEACON_START_RESULT                                                      \
@@ -451,9 +461,9 @@ void dect_mgmt_activate_done_evt(struct net_if *iface, enum dect_status_values s
  */
 void dect_mgmt_deactivate_done_evt(struct net_if *iface, enum dect_status_values status);
 
-/** Send NET_EVENT_DECT_SCAN_RESULT
+/** Send NET_EVENT_DECT_RSSI_SCAN_RESULT
  * @param iface Network interface
- * @param result_data Scan result data.
+ * @param result_data RSSI scan result data.
  */
 void dect_mgmt_rssi_scan_result_evt(struct net_if *iface,
 				    struct dect_rssi_scan_result_evt result_data);
@@ -466,7 +476,7 @@ void dect_mgmt_rssi_scan_done_evt(struct net_if *iface, enum dect_status_values 
 
 /** Send NET_EVENT_DECT_ASSOCIATION_CHANGED
  * @param iface Network interface
- * @param status Status of the scan request.
+ * @param evt_data Association changed event data.
  */
 void dect_mgmt_association_changed_evt(
 	struct net_if *iface,
@@ -532,6 +542,12 @@ void dect_mgmt_association_req_rejected_result_evt(
  */
 void dect_mgmt_cluster_created_evt(struct net_if *iface,
 				   struct dect_cluster_start_resp_evt resp_data);
+
+/** Send NET_EVENT_DECT_CLUSTER_STOPPED_RESULT
+ * @param iface Network interface
+ * @param status Status of the cluster stop request.
+ */
+void dect_mgmt_cluster_stopped_evt(struct net_if *iface, enum dect_status_values status);
 
 /** Send NET_EVENT_DECT_CLUSTER_INFO
  * @param iface Network interface

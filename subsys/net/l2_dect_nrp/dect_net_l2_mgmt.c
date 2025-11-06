@@ -170,6 +170,16 @@ void dect_mgmt_cluster_created_evt(struct net_if *iface,
 					sizeof(struct dect_cluster_start_resp_evt));
 }
 
+void dect_mgmt_cluster_stopped_evt(struct net_if *iface, enum dect_status_values status)
+{
+	struct dect_common_resp_evt evt = {
+		.status = status,
+	};
+
+	net_mgmt_event_notify_with_info(NET_EVENT_DECT_CLUSTER_STOPPED_RESULT, iface, &evt,
+					sizeof(evt));
+}
+
 void dect_mgmt_network_status_evt(struct net_if *iface,
 				  struct dect_network_status_evt network_status_data)
 {
@@ -513,8 +523,11 @@ static int dect_mgmt_cluster_stop_req(uint64_t mgmt_request, struct net_if *ifac
 	const struct dect_nrp_hal_api *const api = get_dect_nrp_hal_api(iface, dev);
 	struct dect_cluster_stop_req_params *params = data;
 
-	if (len != sizeof(struct dect_cluster_stop_req_params) || api == NULL ||
-	    api->cluster_stop_req == NULL) {
+	if (len != sizeof(struct dect_cluster_stop_req_params)) {
+		return -EINVAL;
+	}
+
+	if (api == NULL || api->cluster_stop_req == NULL) {
 		return -ENOTSUP;
 	}
 

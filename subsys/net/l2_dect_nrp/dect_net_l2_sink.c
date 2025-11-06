@@ -1,4 +1,17 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
 
+/**
+ * @file dect_net_l2_sink.c
+ * @brief DECT NR+ L2 Sink Layer
+ *
+ * Implements DECT NR+-aware sink layer that integrates with Zephyr networking stack.
+ * Provides global IPv6 prefix for DECT NR+ network.
+ *
+ */
 
 #include <stdlib.h>
 #include <zephyr/kernel.h>

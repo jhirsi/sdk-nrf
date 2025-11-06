@@ -9,6 +9,8 @@
 
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_l2.h>
+#include <zephyr/net/net_ip.h>
+#include <zephyr/net/net_pkt.h>
 
 #define DECT_NRP_MTU 1280
 
@@ -233,7 +235,6 @@ enum dect_association_reject_cause {
 	DECT_MAC_ASSOCIATION_REJECT_CAUSE_OTHER_REASON = 5,
 	/** Other reasons than from mac spec  */
 	DECT_MAC_ASSOCIATION_NO_RESPONSE = 6,
-	/** Request to modem failed */
 };
 /**
  * @brief Association reject times. Application must wait the time before re-attempt
