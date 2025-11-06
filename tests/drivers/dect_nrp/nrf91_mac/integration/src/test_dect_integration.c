@@ -29,7 +29,7 @@ LOG_MODULE_REGISTER(test_dect_integration, LOG_LEVEL_INF);
 static struct net_if *test_iface;
 
 /* Forward declaration for DECT driver initialization function (now non-static for tests) */
-extern void dect_nrf91_ctrl_on_modem_lib_init(int ret, void *ctx);
+extern void dect_nrf91_ctrl_mdm_on_modem_lib_init(int ret, void *ctx);
 
 /* Event tracking for activation tests */
 bool dect_activate_done_received;
@@ -395,7 +395,7 @@ void test_dect_stack_initialization(void)
 	int baseline_functional_mode = mock_nrf_modem_dect_control_functional_mode_set_call_count;
 
 	/* Call the DECT driver's initialization callback directly (ret=0 for success) */
-	dect_nrf91_ctrl_on_modem_lib_init(0, NULL);
+	dect_nrf91_ctrl_mdm_on_modem_lib_init(0, NULL);
 
 	/* Wait for the activation event using semaphore with timeout */
 	int sem_result = k_sem_take(&activation_done_sem, K_MSEC(100));

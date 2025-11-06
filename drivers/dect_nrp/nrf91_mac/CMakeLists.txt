@@ -8,6 +8,7 @@ zephyr_library_sources(
 	dect_nrf91.c
 	dect_nrf91_rx.c
 	dect_nrf91_ctrl.c
+	dect_nrf91_ctrl_mdm.c
 	dect_nrf91_ctrl_api.c
 	dect_nrf91_utils.c
 	dect_nrf91_settings.c

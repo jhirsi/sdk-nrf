@@ -473,7 +473,7 @@ void mock_simulate_cluster_beacon_received(void)
 
 /*
  * Note: The MAC driver registers its initialization callback using:
- * NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_on_modem_lib_init, NULL)
+ * NRF_MODEM_LIB_ON_INIT(dect_nrf91_ctrl_api_init_hook, dect_nrf91_ctrl_mdm_on_modem_lib_init, NULL)
  *
  * This callback is automatically executed during system initialization, and it calls
  * nrf_modem_dect_mac_callback_set() which we mock below.
@@ -541,7 +541,7 @@ void mock_simulate_nrf_modem_lib_init(void)
 	/* Set mock modem as initialized */
 	mock_modem_initialized = true;
 
-	/* Note: Tests can now directly call dect_nrf91_ctrl_on_modem_lib_init()
+	/* Note: Tests can now directly call dect_nrf91_ctrl_mdm_on_modem_lib_init()
 	 * since it's been made non-static for testing.
 	 */
 }

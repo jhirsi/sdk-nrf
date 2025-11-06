@@ -4,6 +4,19 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+/**
+ * @file dect_nrf91_ctrl_internal.h
+ * @brief Internal definitions for DECT NR+ Control Module
+ *
+ * @details
+ * This header file is for internal use only within the control module files:
+ * - dect_nrf91_ctrl.c
+ * - dect_nrf91_ctrl_mdm.c
+ * - dect_nrf91_ctrl_api.c
+ *
+ * Do not include this header in other modules.
+ */
+
 #ifndef DECT_NRF91_CTRL_INTERNAL_H
 #define DECT_NRF91_CTRL_INTERNAL_H
 
@@ -194,9 +207,43 @@ struct dect_nrf91_ctrl_data {
 	struct net_if *iface;
 };
 
+/* Event structures used for message queue communication */
+struct dect_nrf91_ctrl_rssi_measurement_data_evt {
+	struct nrf_modem_dect_mac_rssi_result rssi_result;
+};
+
+#define DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT 50
+struct dect_nrf91_ctrl_neighbor_list_resp_evt {
+	int status;
+	uint8_t num_neighbors;
+	uint32_t neighbor_long_rd_ids[DECT_NRF91_MAX_NEIGHBOR_LIST_COUNT];
+};
+
+struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item {
+	uint32_t transaction_id;
+};
+
+struct dect_nrf91_ctrl_dlc_data_tx_resp_evt {
+	enum nrf_modem_dect_mac_err status;
+	uint8_t flow_id;
+	uint32_t long_rd_id;
+
+	uint8_t num_acked_data;
+#if defined(CONFIG_DECT_NRP_MAC_MDM_BUNDLED_TX_RESPS)
+	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item
+		acked_data[DECT_NRF91_DLC_DATA_INFO_MAX_COUNT];
+#else
+	struct dect_nrf91_ctrl_dlc_data_tx_evt_data_item acked_data[1];
+#endif
+};
+
 /* External mutex and semaphores (defined in dect_nrf91_ctrl.c) */
 extern struct k_mutex dect_mac_ctrl_data_mtx;
 extern struct k_sem dect_mac_ctrl_reactivate_sema;
+extern struct k_sem dect_mac_libmodem_api_sema;
+
+/* External control data (defined in dect_nrf91_ctrl.c) */
+extern struct dect_nrf91_ctrl_data ctrl_data;
 
 /* Helper macros for ctrl_data mutex access */
 #define CTRL_DATA_LOCK()   k_mutex_lock(&dect_mac_ctrl_data_mtx, K_FOREVER)
