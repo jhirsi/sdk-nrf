@@ -42,42 +42,15 @@ static int auto_connect_shell_disable(const struct shell *shell, size_t argc, ch
 	return 0;
 }
 
-static int auto_connect_shell_delay_set(const struct shell *shell, size_t argc, char **argv)
-{
-	int delay_secs;
-
-	if (argc < 2) {
-		desh_error("Invalid number of arguments");
-		return -EINVAL;
-	}
-
-	delay_secs = atoi(argv[1]);
-	if (delay_secs < 0) {
-		desh_error("Invalid delay_secs %d", delay_secs);
-		return -EINVAL;
-	}
-	int err = auto_connect_sett_delay_set(delay_secs);
-
-	if (err) {
-		desh_error("Failed to set auto connect delay: %d", err);
-		return err;
-	}
-
-	desh_print("Auto connect delay set to %d seconds", delay_secs);
-	return 0;
-}
-
 static int auto_connect_shell_sett_read(const struct shell *shell, size_t argc, char **argv)
 {
 	ARG_UNUSED(argc);
 	ARG_UNUSED(argv);
 
 	bool enabled = auto_connect_sett_is_enabled();
-	int delay_secs = auto_connect_sett_delay_get();
 
 	desh_print("Auto connect settings:");
 	desh_print("  Enabled: %s", enabled ? "true" : "false");
-	desh_print("  Delay (secs): %d", delay_secs);
 
 	return 0;
 }
@@ -94,8 +67,6 @@ SHELL_STATIC_SUBCMD_SET_CREATE(
 		"FT device as set in nw_join settings.\n",
 		auto_connect_shell_enable, 1, 0),
 	SHELL_CMD(disable, NULL, "Setting to disable auto connect.\n", auto_connect_shell_disable),
-	SHELL_CMD_ARG(delay, NULL, "Auto connect delay (in secs) after activation\n",
-		      auto_connect_shell_delay_set, 2, 0),
 	SHELL_CMD(sett_read, NULL, "Read auto connect settings\n", auto_connect_shell_sett_read),
 
 	SHELL_SUBCMD_SET_END);

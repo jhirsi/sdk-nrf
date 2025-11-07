@@ -74,20 +74,7 @@ static void auto_connect_work_fn(struct k_work *item)
 	}
 #if defined(CONFIG_NET_CONNECTION_MANAGER)
 	int ret;
-#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
-	int additional_secs_to_wait = 10;
 
-	/* Wait still for a while if sink is getting connected,
-	 * TODO: this could be in connmgr instead?
-	 */
-	if (auto_connect_sett_delay_get() == 0) {
-		additional_secs_to_wait = 0;
-	}
-	ret = k_sem_take(&auto_conn_sink_connected_sem, K_SECONDS(additional_secs_to_wait));
-	if (ret) {
-		desh_warn("Sink is not yet connected, but continuing with auto connect");
-	}
-#endif
 	ret = conn_mgr_if_connect(context.iface);
 	if (ret < 0) {
 		desh_error("Failed to initiate a connect: %d", ret);
@@ -378,11 +365,6 @@ int auto_connect_init(void)
 
 	/* Settings init */
 	sett_auto_connect_enabled = false;
-#if defined(CONFIG_DECT_NRP_MAC_BORDER_ROUTER)
-	sett_auto_connect_delay_secs = 30;
-#else
-	sett_auto_connect_delay_secs = 0;
-#endif
 	ret = settings_subsys_init();
 	if (ret) {
 		printk("Failed to initialize settings subsystem, error: %d\n", ret);
