@@ -31,6 +31,7 @@ LOG_MODULE_REGISTER(mock_nrf_modem_dect_mac, LOG_LEVEL_INF);
 /* Mock state tracking */
 static bool mock_modem_initialized;
 static bool mock_dect_activated;
+bool mock_cluster_creation_band1; /* Track if this is a cluster creation RSSI scan at band 1 */
 struct nrf_modem_dect_mac_op_callbacks mock_op_callbacks;
 struct nrf_modem_dect_mac_ntf_callbacks mock_ntf_callbacks;
 
@@ -123,6 +124,8 @@ int mock_nrf_modem_dect_control_systemmode_set_call_count;
 int mock_nrf_modem_dect_control_configure_call_count;
 int mock_nrf_modem_dect_control_functional_mode_set_call_count;
 int mock_nrf_modem_dect_mac_rssi_scan_call_count;
+int mock_nrf_modem_dect_mac_rssi_scan_stop_call_count;
+int mock_nrf_modem_dect_mac_cluster_configure_call_count;
 
 /* Remove the extern - this is where we define the variables */
 
@@ -163,8 +166,7 @@ int nrf_modem_dect_mac_network_scan(struct nrf_modem_dect_mac_network_scan_param
 		if (mock_op_callbacks.network_scan) {
 			struct nrf_modem_dect_mac_network_scan_cb_params scan_fail_params = {
 				.status = NRF_MODEM_DECT_MAC_STATUS_NOT_ALLOWED,
-				.num_scanned_channels = 0
-			};
+				.num_scanned_channels = 0};
 			LOG_DBG("MOCK: Network scan not allowed - DECT stack is deactivated");
 			simulate_async_callback((void (*)(void *))mock_op_callbacks.network_scan,
 						&scan_fail_params);
@@ -220,8 +222,7 @@ int nrf_modem_dect_mac_rssi_scan(struct nrf_modem_dect_mac_rssi_scan_params *par
 
 	LOG_DBG("MOCK: nrf_modem_dect_mac_rssi_scan called with channel_scan_length=%d, "
 		"num_channels=%d, band=%d",
-		params ? params->channel_scan_length : 0,
-		params ? params->num_channels : 0,
+		params ? params->channel_scan_length : 0, params ? params->num_channels : 0,
 		params ? params->band : 0);
 
 	/* Check if the DECT stack is activated */
@@ -229,8 +230,7 @@ int nrf_modem_dect_mac_rssi_scan(struct nrf_modem_dect_mac_rssi_scan_params *par
 		/* Stack is deactivated - simulate immediate failure via async callback */
 		if (mock_op_callbacks.rssi_scan) {
 			struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_fail_params = {
-				.status = NRF_MODEM_DECT_MAC_STATUS_NOT_ALLOWED
-			};
+				.status = NRF_MODEM_DECT_MAC_STATUS_NOT_ALLOWED};
 
 			LOG_DBG("MOCK: RSSI scan not allowed - DECT stack is deactivated");
 			simulate_async_callback((void (*)(void *))mock_op_callbacks.rssi_scan,
@@ -239,42 +239,61 @@ int nrf_modem_dect_mac_rssi_scan(struct nrf_modem_dect_mac_rssi_scan_params *par
 		return 0; /* Request accepted but will fail asynchronously */
 	}
 
-	/* Stack is activated - simulate successful RSSI scan with async callbacks */
+	/* Stack is activated - simulate RSSI scan with async callbacks */
 	if (params && params->num_channels > 0 && params->channel_list) {
-		/* Simulate RSSI scan notification callback for each channel */
-		/* For test purposes, simulate one result */
-		if (mock_ntf_callbacks.rssi_scan_ntf) {
-			/* Allocate arrays for busy, possible, free subslots */
-			static uint8_t busy_array[6] = {0};
-			static uint8_t possible_array[6] = {0};
-			static uint8_t free_array[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
+		/* Check if this is a cluster creation RSSI scan (flag set by test case) */
+		if (mock_cluster_creation_band1) {
+			/* Cluster creation RSSI scan (band 1, 11 odd channels per ETSI EN 301
+			 * 406-2, V3.0.1, ch 4.3.2.3): Do NOT auto-simulate completion callback -
+			 * the test case will simulate it manually in the correct order: RSSI
+			 * results -> rssi_scan_stop() called -> rssi completion -> rssi stop
+			 * completion
+			 */
+			LOG_DBG("MOCK: Cluster creation RSSI scan (flag set by test) - "
+				"completion callback will be handled by test case");
+		} else {
+			/* Simulate RSSI scan notification callback for each channel
+			 * For test purposes, simulate one result
+			 */
+			if (mock_ntf_callbacks.rssi_scan_ntf) {
+				/* Allocate arrays for busy, possible, free subslots */
+				static uint8_t busy_array[6] = {0};
+				static uint8_t possible_array[6] = {0};
+				static uint8_t free_array[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF};
 
-			struct nrf_modem_dect_mac_rssi_scan_ntf_cb_params ntf_params = {
-				.channel = params->channel_list[0],
-				.busy_percentage = 10, /* 10% busy */
-				.rssi_meas_array_size = 6,
-				.busy = busy_array,
-				.possible = possible_array,
-				.free = free_array
-			};
+				struct nrf_modem_dect_mac_rssi_scan_ntf_cb_params ntf_params = {
+					.channel = params->channel_list[0],
+					.busy_percentage = 10, /* 10% busy */
+					.rssi_meas_array_size = 6,
+					.busy = busy_array,
+					.possible = possible_array,
+					.free = free_array};
 
-			LOG_DBG("MOCK: Simulating rssi_scan_ntf callback for channel %d",
-				ntf_params.channel);
-			simulate_async_callback(
-				(void (*)(void *))mock_ntf_callbacks.rssi_scan_ntf, &ntf_params);
-		}
+				LOG_DBG("MOCK: Simulating rssi_scan_ntf callback for channel %d",
+					ntf_params.channel);
+				simulate_async_callback(
+					(void (*)(void *))mock_ntf_callbacks.rssi_scan_ntf,
+					&ntf_params);
+			}
 
-		/* Simulate RSSI scan completion callback */
-		if (mock_op_callbacks.rssi_scan) {
-			struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_done_params = {
-				.status = NRF_MODEM_DECT_MAC_STATUS_OK
-			};
+			/* Simulate RSSI scan completion callback for regular explicit channel list
+			 * scans
+			 */
+			if (mock_op_callbacks.rssi_scan) {
+				struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_done_params = {
+					.status = NRF_MODEM_DECT_MAC_STATUS_OK};
 
-			LOG_DBG("MOCK: Simulating rssi_scan op callback with success status");
-			simulate_async_callback((void (*)(void *))mock_op_callbacks.rssi_scan,
-						&rssi_done_params);
+				LOG_DBG("MOCK: Simulating rssi_scan op callback with success "
+					"status");
+				simulate_async_callback(
+					(void (*)(void *))mock_op_callbacks.rssi_scan,
+					&rssi_done_params);
+			}
 		}
 	}
+	/* For band-based scans (num_channels == 0):
+	 * Completion callback is NOT simulated here - the test case will simulate it manually
+	 */
 
 	return 0;
 }
@@ -298,6 +317,29 @@ int nrf_modem_dect_mac_cluster_beacon_receive_stop(void)
 
 int nrf_modem_dect_mac_cluster_configure(struct nrf_modem_dect_mac_cluster_configure_params *params)
 {
+	mock_nrf_modem_dect_mac_cluster_configure_call_count++;
+
+	if (params && params->cluster_config) {
+		LOG_DBG("MOCK: nrf_modem_dect_mac_cluster_configure called with channel=%d",
+			params->cluster_config->cluster_channel);
+	} else {
+		LOG_DBG("MOCK: nrf_modem_dect_mac_cluster_configure called with NULL params");
+	}
+
+	if (mock_modem_initialized) {
+		/* Simulate asynchronous callback after successful cluster configuration */
+		if (mock_op_callbacks.cluster_configure) {
+			struct nrf_modem_dect_mac_cluster_configure_cb_params cb_params = {
+				.status = NRF_MODEM_DECT_MAC_STATUS_OK};
+
+			LOG_DBG("MOCK: Simulating cluster_configure op callback with success "
+				"status");
+			simulate_async_callback(
+				(void (*)(void *))mock_op_callbacks.cluster_configure, &cb_params);
+		}
+		return 0;
+	}
+
 	return 0;
 }
 
@@ -308,6 +350,16 @@ int nrf_modem_dect_mac_network_scan_stop(void)
 
 int nrf_modem_dect_mac_rssi_scan_stop(void)
 {
+	mock_nrf_modem_dect_mac_rssi_scan_stop_call_count++;
+
+	LOG_DBG("MOCK: nrf_modem_dect_mac_rssi_scan_stop called");
+
+	/* Note: For band-based scans (cluster creation phase), the test manually calls
+	 * the operation callbacks in the correct order:
+	 * 1. RSSI scan completion callback (rssi_scan op callback)
+	 * 2. RSSI scan stop completion callback (rssi_scan_stop op callback)
+	 * So we don't auto-simulate them here.
+	 */
 	return 0;
 }
 
@@ -395,8 +447,7 @@ int nrf_modem_dect_control_functional_mode_set(enum nrf_modem_dect_control_funct
 		/* Simulate asynchronous callback after successful activation */
 		if (mock_op_callbacks.control_functional_mode) {
 			struct nrf_modem_dect_mac_control_functional_mode_cb_params cb_params = {
-				.status = NRF_MODEM_DECT_MAC_STATUS_OK
-			};
+				.status = NRF_MODEM_DECT_MAC_STATUS_OK};
 			simulate_async_callback(
 				(void (*)(void *))mock_op_callbacks.control_functional_mode,
 				&cb_params);
@@ -407,8 +458,7 @@ int nrf_modem_dect_control_functional_mode_set(enum nrf_modem_dect_control_funct
 		/* Simulate asynchronous callback after successful deactivation */
 		if (mock_op_callbacks.control_functional_mode) {
 			struct nrf_modem_dect_mac_control_functional_mode_cb_params cb_params = {
-				.status = NRF_MODEM_DECT_MAC_STATUS_OK
-			};
+				.status = NRF_MODEM_DECT_MAC_STATUS_OK};
 
 			LOG_DBG("Calling control_functional_mode callback for DEACTIVATE");
 			simulate_async_callback(
@@ -448,6 +498,7 @@ void mock_nrf_modem_dect_mac_reset(void)
 	expected_callback_set_return = 0;
 	expected_network_scan_return = 0;
 	expected_cluster_beacon_receive_return = 0;
+	mock_cluster_creation_band1 = false;
 
 	/* Note: We do NOT reset mock_op_callbacks and mock_ntf_callbacks here
 	 * because they represent the real DECT driver's callback registration
@@ -498,19 +549,14 @@ int nrf_modem_dect_control_systemmode_set(enum nrf_modem_dect_control_systemmode
 				.max_mcs = 4,
 				.num_band_info_elems = 1,
 				.band_info_elems = {
-					[0] = {
-						.band_group_index =
-						NRF_MODEM_DECT_MAC_PHY_BAND_GROUP_IDX0,
-						.band = NRF_MODEM_DECT_MAC_PHY_BAND1,
-						.power_class = 3,
-						.min_carrier = 1657,
-						.max_carrier = 1677
-					}
-				}
-			};
-			simulate_async_callback(
-				(void (*)(void *))mock_ntf_callbacks.capability_ntf,
-				&capability_params);
+					[0] = {.band_group_index =
+						       NRF_MODEM_DECT_MAC_PHY_BAND_GROUP_IDX0,
+					       .band = NRF_MODEM_DECT_MAC_PHY_BAND1,
+					       .power_class = 3,
+					       .min_carrier = 1657,
+					       .max_carrier = 1677}}};
+			simulate_async_callback((void (*)(void *))mock_ntf_callbacks.capability_ntf,
+						&capability_params);
 		}
 
 		/* Then, simulate asynchronous op callback after successful operation */
@@ -519,8 +565,7 @@ int nrf_modem_dect_control_systemmode_set(enum nrf_modem_dect_control_systemmode
 				.status = 0 /* Success */
 			};
 			simulate_async_callback(
-				(void (*)(void *))mock_op_callbacks
-					.control_systemmode, &cb_params);
+				(void (*)(void *))mock_op_callbacks.control_systemmode, &cb_params);
 		}
 		return 0;
 	}

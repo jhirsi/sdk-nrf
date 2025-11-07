@@ -34,6 +34,9 @@ extern int mock_nrf_modem_dect_control_systemmode_set_call_count;
 extern int mock_nrf_modem_dect_control_configure_call_count;
 extern int mock_nrf_modem_dect_control_functional_mode_set_call_count;
 extern int mock_nrf_modem_dect_mac_rssi_scan_call_count;
+extern int mock_nrf_modem_dect_mac_rssi_scan_stop_call_count;
+extern int mock_nrf_modem_dect_mac_cluster_configure_call_count;
+extern bool mock_cluster_creation_band1; /* Flag to indicate cluster creation RSSI scan at band 1 */
 
 /* Mock return values */
 extern int mock_nrf_modem_dect_mac_callback_set_return;

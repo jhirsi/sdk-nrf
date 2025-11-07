@@ -25,6 +25,7 @@ extern void test_dect_deactivate(void);
 extern void test_dect_deactivated_requests_fail(void);
 extern void test_dect_ft_configuration(void);
 extern void test_dect_pt_complete_workflow(void);
+extern void test_dect_ft_cluster_start(void);
 
 /* Test result tracking structure */
 typedef struct {
@@ -46,7 +47,8 @@ static test_result_t test_results[] = {
 	{"Deactivated requests fail", "test_dect_deactivated_requests_fail", false},
 	{"FT configuration", "test_dect_ft_configuration", false},
 	{"DECT stack activation", "test_dect_ft_activate", false},
-	{"DECT RSSI scan", "test_dect_ft_rssi_scan", false}};
+	{"DECT RSSI scan", "test_dect_ft_rssi_scan", false},
+	{"DECT FT cluster start", "test_dect_ft_cluster_start", false}};
 
 #define NUM_TESTS ARRAY_SIZE(test_results)
 
@@ -86,6 +88,7 @@ int main(void)
 	RUN_TEST_AND_TRACK(test_dect_ft_configuration, 9);
 	RUN_TEST_AND_TRACK(test_dect_ft_activate, 10);
 	RUN_TEST_AND_TRACK(test_dect_ft_rssi_scan, 11);
+	RUN_TEST_AND_TRACK(test_dect_ft_cluster_start, 12);
 
 	/* Capture Unity statistics before UNITY_END() */
 	int total_tests = Unity.NumberOfTests;

@@ -38,10 +38,11 @@ extern enum dect_status_values dect_rssi_scan_done_status;
 /* External mock call counters */
 extern int mock_nrf_modem_dect_control_configure_call_count;
 extern int mock_nrf_modem_dect_control_functional_mode_set_call_count;
+extern int mock_nrf_modem_dect_mac_cluster_configure_call_count;
 
 int test_dect_network_scan(struct net_if *iface, const struct dect_scan_params *scan_params,
-			   const struct dect_scan_beacon_params *beacon_params,
-			   bool simulate_completion, struct dect_scan_result *result)
+			   const struct test_dect_scan_beacon_params *beacon_params,
+			   bool simulate_completion, struct test_dect_scan_result *result)
 {
 	int ret;
 
@@ -79,13 +80,10 @@ int test_dect_network_scan(struct net_if *iface, const struct dect_scan_params *
 			.transmitter_short_rd_id = beacon_params->transmitter_short_rd_id,
 			.transmitter_long_rd_id = beacon_params->transmitter_long_rd_id,
 			.network_id = beacon_params->network_id,
-			.rx_signal_info = {
-				.mcs = beacon_params->mcs,
-				.transmit_power = beacon_params->transmit_power,
-				.rssi_2 = beacon_params->rssi_2,
-				.snr = beacon_params->snr
-			}
-		};
+			.rx_signal_info = {.mcs = beacon_params->mcs,
+					   .transmit_power = beacon_params->transmit_power,
+					   .rssi_2 = beacon_params->rssi_2,
+					   .snr = beacon_params->snr}};
 
 		LOG_DBG("Simulating cluster beacon callback: channel=%d, short_rd_id=0x%04X, "
 			"long_rd_id=0x%08X",
@@ -104,8 +102,7 @@ int test_dect_network_scan(struct net_if *iface, const struct dect_scan_params *
 	if (simulate_completion && mock_op_callbacks.network_scan) {
 		struct nrf_modem_dect_mac_network_scan_cb_params scan_complete_params = {
 			.status = NRF_MODEM_DECT_MAC_STATUS_OK,
-			.num_scanned_channels = scan_params->channel_count
-		};
+			.num_scanned_channels = scan_params->channel_count};
 
 		LOG_DBG("Simulating scan completion: status=OK, channels=%d",
 			scan_complete_params.num_scanned_channels);
@@ -122,22 +119,21 @@ int test_dect_network_scan(struct net_if *iface, const struct dect_scan_params *
 	result->scan_done_status = dect_scan_done_status;
 	result->beacon_data_valid = beacon_data_valid;
 	if (beacon_data_valid) {
-		memcpy(&result->beacon_data,
-			&received_beacon_data, sizeof(result->beacon_data));
+		memcpy(&result->beacon_data, &received_beacon_data, sizeof(result->beacon_data));
 	}
 
 	LOG_DBG("Network scan completed: result_received=%s, done_received=%s, status=%d",
 		result->scan_result_received ? "true" : "false",
-		result->scan_done_received ? "true" : "false",
-		result->scan_done_status);
+		result->scan_done_received ? "true" : "false", result->scan_done_status);
 
 	return 0;
 }
 
-int test_dect_association_request(struct net_if *iface, uint32_t target_long_rd_id,
-				  const struct dect_association_response_params *response_params,
-				  bool simulate_completion, bool simulate_network_joined,
-				  struct dect_association_result *result)
+int test_dect_association_request(
+	struct net_if *iface, uint32_t target_long_rd_id,
+	const struct test_dect_association_response_params *response_params,
+	bool simulate_completion, bool simulate_network_joined,
+	struct test_dect_association_result *result)
 {
 	int ret;
 	struct dect_associate_req_params assoc_params = {
@@ -145,16 +141,15 @@ int test_dect_association_request(struct net_if *iface, uint32_t target_long_rd_
 	};
 
 	/* Default association response parameters */
-	struct dect_association_response_params default_response = {
+	struct test_dect_association_response_params default_response = {
 		.ack_status = true,
 		.number_of_flows = 1,
 		.number_of_rx_harq_processes = 4,
 		.max_number_of_harq_re_rx = 3,
 		.number_of_tx_harq_processes = 4,
-		.max_number_of_harq_re_tx = 3
-	};
+		.max_number_of_harq_re_tx = 3};
 
-	const struct dect_association_response_params *resp_params =
+	const struct test_dect_association_response_params *resp_params =
 		response_params ? response_params : &default_response;
 
 	if (!iface || !result) {
@@ -195,8 +190,7 @@ int test_dect_association_request(struct net_if *iface, uint32_t target_long_rd_
 			.rx_signal_info = {0},
 			.ipv6_config = {0},
 			.number_of_ies = 0,
-			.ies = NULL
-		};
+			.ies = NULL};
 
 		/* Initialize association response structure */
 		assoc_op_params.association_response.bit_mask = 0;
@@ -235,8 +229,7 @@ int test_dect_association_request(struct net_if *iface, uint32_t target_long_rd_
 		struct dect_network_status_evt network_joined_event = {
 			.network_status = DECT_NETWORK_STATUS_JOINED,
 			.dect_err_cause = DECT_MAC_STATUS_OK,
-			.os_err_cause = 0
-		};
+			.os_err_cause = 0};
 
 		/* Simulate sending the network status event through the real DECT stack */
 		dect_mgmt_network_status_evt(iface, network_joined_event);
@@ -307,12 +300,10 @@ int test_dect_status_info_get(struct net_if *iface, struct dect_status_info *sta
 
 int test_dect_association_release(struct net_if *iface, uint32_t target_long_rd_id,
 				  bool simulate_completion, bool simulate_network_unjoined,
-				  struct dect_association_release_result *result)
+				  struct test_dect_association_release_result *result)
 {
 	int ret;
-	struct dect_associate_rel_params release_params = {
-		.target_long_rd_id = target_long_rd_id
-	};
+	struct dect_associate_rel_params release_params = {.target_long_rd_id = target_long_rd_id};
 
 	if (!iface || !result) {
 		return -EINVAL;
@@ -341,8 +332,7 @@ int test_dect_association_release(struct net_if *iface, uint32_t target_long_rd_
 	/* Optionally simulate association release operation completion */
 	if (simulate_completion && mock_op_callbacks.association_release) {
 		struct nrf_modem_dect_mac_association_release_cb_params release_op_params = {
-			.long_rd_id = target_long_rd_id
-		};
+			.long_rd_id = target_long_rd_id};
 
 		LOG_DBG("Simulating association release operation completion for long_rd_id=0x%08X",
 			release_op_params.long_rd_id);
@@ -365,8 +355,7 @@ int test_dect_association_release(struct net_if *iface, uint32_t target_long_rd_
 		struct dect_network_status_evt network_unjoined_event = {
 			.network_status = DECT_NETWORK_STATUS_UNJOINED,
 			.dect_err_cause = DECT_MAC_STATUS_OK,
-			.os_err_cause = 0
-		};
+			.os_err_cause = 0};
 
 		/* Simulate sending the network status event through the real DECT stack */
 		dect_mgmt_network_status_evt(iface, network_unjoined_event);
@@ -396,7 +385,7 @@ int test_dect_association_release(struct net_if *iface, uint32_t target_long_rd_
 }
 
 int test_dect_perform_activate(struct net_if *iface, uint32_t wait_timeout_ms,
-				struct dect_activate_result *result)
+			       struct test_dect_activate_result *result)
 {
 	int ret;
 	uint32_t timeout = wait_timeout_ms > 0 ? wait_timeout_ms : 250;
@@ -440,7 +429,7 @@ int test_dect_perform_activate(struct net_if *iface, uint32_t wait_timeout_ms,
 
 	/* Verify that nrf_modem_dect_control_functional_mode_set was called after configure */
 	if (mock_nrf_modem_dect_control_functional_mode_set_call_count !=
-		baseline_functional_mode_set + 1) {
+	    baseline_functional_mode_set + 1) {
 		LOG_WRN("nrf_modem_dect_control_functional_mode_set "
 			"call count mismatch: expected %d, got %d",
 			baseline_functional_mode_set + 1,
@@ -461,16 +450,15 @@ int test_dect_perform_activate(struct net_if *iface, uint32_t wait_timeout_ms,
 	/* Populate result structure */
 	result->activate_done_received = dect_activate_done_received;
 	result->activate_done_status = dect_activate_done_status;
-	result->configure_called = (mock_nrf_modem_dect_control_configure_call_count ==
-		baseline_configure + 1);
+	result->configure_called =
+		(mock_nrf_modem_dect_control_configure_call_count == baseline_configure + 1);
 	result->functional_mode_set_called =
 		(mock_nrf_modem_dect_control_functional_mode_set_call_count ==
-			baseline_functional_mode_set + 1);
+		 baseline_functional_mode_set + 1);
 
 	LOG_DBG("DECT activation completed: done_received=%s, status=%d, configure_called=%s, "
 		"functional_mode_set_called=%s",
-		result->activate_done_received ? "true" : "false",
-		result->activate_done_status,
+		result->activate_done_received ? "true" : "false", result->activate_done_status,
 		result->configure_called ? "true" : "false",
 		result->functional_mode_set_called ? "true" : "false");
 
@@ -478,7 +466,7 @@ int test_dect_perform_activate(struct net_if *iface, uint32_t wait_timeout_ms,
 }
 
 int test_dect_perform_deactivate(struct net_if *iface, uint32_t wait_timeout_ms,
-				 struct dect_deactivate_result *result)
+				 struct test_dect_deactivate_result *result)
 {
 	int ret;
 	uint32_t timeout = wait_timeout_ms > 0 ? wait_timeout_ms : 250;
@@ -520,7 +508,7 @@ int test_dect_perform_deactivate(struct net_if *iface, uint32_t wait_timeout_ms,
 }
 
 int test_dect_perform_rssi_scan(struct net_if *iface, struct dect_rssi_scan_params *params,
-				uint32_t wait_timeout_ms, struct dect_rssi_scan_result *result)
+				uint32_t wait_timeout_ms, struct test_dect_rssi_scan_result *result)
 {
 	int ret;
 	uint32_t timeout = wait_timeout_ms > 0 ? wait_timeout_ms : 500;
@@ -545,7 +533,8 @@ int test_dect_perform_rssi_scan(struct net_if *iface, struct dect_rssi_scan_para
 
 	if (ret != 0) {
 		LOG_WRN("DECT RSSI scan request returned error: %d "
-			"(may be accepted but fail async)", ret);
+			"(may be accepted but fail async)",
+			ret);
 		/* Continue anyway - the request may be accepted but fail asynchronously */
 		/* Wait a bit to see if the driver still processes it */
 		k_sleep(K_MSEC(20));
@@ -590,21 +579,53 @@ int test_dect_perform_rssi_scan(struct net_if *iface, struct dect_rssi_scan_para
 			"all_subslots_free=%s, scan_suitable_percent=%d%%, "
 			"free_subslot_cnt=%d, possible_subslot_cnt=%d, busy_subslot_cnt=%d, "
 			"another_cluster_detected=%s",
-			rssi_data->channel,
-			rssi_data->busy_percentage,
+			rssi_data->channel, rssi_data->busy_percentage,
 			rssi_data->all_subslots_free ? "true" : "false",
-			rssi_data->scan_suitable_percent,
-			rssi_data->free_subslot_cnt,
-			rssi_data->possible_subslot_cnt,
-			rssi_data->busy_subslot_cnt,
+			rssi_data->scan_suitable_percent, rssi_data->free_subslot_cnt,
+			rssi_data->possible_subslot_cnt, rssi_data->busy_subslot_cnt,
 			rssi_data->another_cluster_detected_in_channel ? "true" : "false");
 	}
 
 	LOG_DBG("DECT RSSI scan completed: result_received=%s, done_received=%s, status=%d",
 		result->rssi_scan_result_received ? "true" : "false",
-		result->rssi_scan_done_received ? "true" : "false",
-		result->rssi_scan_done_status);
+		result->rssi_scan_done_received ? "true" : "false", result->rssi_scan_done_status);
 
 	return 0;
 }
 
+int test_dect_perform_cluster_configure(struct net_if *iface, uint32_t wait_timeout_ms,
+					struct test_dect_cluster_configure_result *result)
+{
+	uint32_t timeout = wait_timeout_ms > 0 ? wait_timeout_ms : 200;
+
+	ARG_UNUSED(iface);
+
+	if (!result) {
+		return -EINVAL;
+	}
+
+	/* Initialize result structure */
+	memset(result, 0, sizeof(*result));
+
+	/* Record baseline call count (state persists between tests) */
+	int baseline_cluster_configure = mock_nrf_modem_dect_mac_cluster_configure_call_count;
+
+	LOG_DBG("Waiting for cluster configure to be called and async callback to complete");
+
+	/* Wait for cluster configure processing with async callback */
+	/* The mock automatically simulates the cluster_configure op callback via
+	 * simulate_async_callback, which triggers the async callback chain.
+	 * Wait for the full cluster configure process.
+	 */
+	k_sleep(K_MSEC(timeout));
+
+	/* Populate result structure */
+	result->cluster_configure_called =
+		(mock_nrf_modem_dect_mac_cluster_configure_call_count > baseline_cluster_configure);
+
+	LOG_DBG("DECT cluster configure completed: called=%s (call_count=%d, baseline=%d)",
+		result->cluster_configure_called ? "true" : "false",
+		mock_nrf_modem_dect_mac_cluster_configure_call_count, baseline_cluster_configure);
+
+	return 0;
+}

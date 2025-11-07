@@ -71,6 +71,10 @@ static struct dect_neighbor_list_evt received_neighbor_list_data;
 static bool dect_neighbor_info_received;
 static struct dect_neighbor_info_evt received_neighbor_info_data;
 
+/* Event tracking for cluster created tests */
+static bool dect_cluster_created_received;
+static struct dect_cluster_start_resp_evt received_cluster_created_data;
+
 /* Storage for received beacon data from NET_EVENT_DECT_SCAN_RESULT */
 struct dect_scan_result_evt received_beacon_data;
 bool beacon_data_valid;
@@ -281,6 +285,27 @@ void dect_mgmt_event_handler(struct net_mgmt_event_callback *cb, uint64_t mgmt_e
 		dect_neighbor_info_received = true;
 		break;
 	}
+	case NET_EVENT_DECT_CLUSTER_CREATED_RESULT: {
+		/* Cluster created/started result */
+		LOG_DBG("NET_EVENT_DECT_CLUSTER_CREATED_RESULT received in event handler!");
+
+		if (cb->info) {
+			struct dect_cluster_start_resp_evt *cluster_evt =
+				(struct dect_cluster_start_resp_evt *)cb->info;
+			LOG_DBG("Cluster created: status=%d, cluster_channel=%d",
+				cluster_evt->status, cluster_evt->cluster_channel);
+
+			/* Store the cluster created event data for validation */
+			memcpy(&received_cluster_created_data, cluster_evt,
+			       sizeof(received_cluster_created_data));
+		} else {
+			LOG_WRN("NET_EVENT_DECT_CLUSTER_CREATED_RESULT received but no event data "
+				"available");
+		}
+
+		dect_cluster_created_received = true;
+		break;
+	}
 	default:
 		break;
 	}
@@ -348,7 +373,8 @@ void setUp(void)
 			NET_EVENT_DECT_SCAN_RESULT | NET_EVENT_DECT_SCAN_DONE |
 			NET_EVENT_DECT_RSSI_SCAN_RESULT | NET_EVENT_DECT_RSSI_SCAN_DONE |
 			NET_EVENT_DECT_ASSOCIATION_CHANGED | NET_EVENT_DECT_NETWORK_STATUS |
-			NET_EVENT_DECT_NEIGHBOR_LIST | NET_EVENT_DECT_NEIGHBOR_INFO);
+			NET_EVENT_DECT_NEIGHBOR_LIST | NET_EVENT_DECT_NEIGHBOR_INFO |
+			NET_EVENT_DECT_CLUSTER_CREATED_RESULT);
 	net_mgmt_add_event_callback(&dect_mgmt_cb);
 	dect_stack_initialized = true;
 
@@ -407,12 +433,12 @@ void test_dect_stack_initialization(void)
 	/* Verify that the DECT driver's callback triggered the expected function calls */
 	/* Check that counts increased by 1 from baseline (state persists between tests) */
 	TEST_ASSERT_EQUAL(baseline_callback_set + 1,
-		mock_nrf_modem_dect_mac_callback_set_call_count);
+			  mock_nrf_modem_dect_mac_callback_set_call_count);
 	TEST_ASSERT_EQUAL(baseline_systemmode + 1,
-		mock_nrf_modem_dect_control_systemmode_set_call_count);
+			  mock_nrf_modem_dect_control_systemmode_set_call_count);
 	TEST_ASSERT_EQUAL(baseline_configure + 1, mock_nrf_modem_dect_control_configure_call_count);
 	TEST_ASSERT_EQUAL(baseline_functional_mode + 1,
-		mock_nrf_modem_dect_control_functional_mode_set_call_count);
+			  mock_nrf_modem_dect_control_functional_mode_set_call_count);
 
 	/* Verify that NET_EVENT_DECT_ACTIVATE_DONE event was received */
 	TEST_ASSERT_TRUE_MESSAGE(
@@ -529,7 +555,7 @@ void test_dect_scan_request_band1(void)
 					       .channel_scan_time_ms = 100};
 
 	/* Setup beacon simulation parameters */
-	struct dect_scan_beacon_params beacon_params = {
+	struct test_dect_scan_beacon_params beacon_params = {
 		.channel = 1722,		      /* Channel from our scan list */
 		.transmitter_short_rd_id = 0x1234,    /* Example Short RD ID */
 		.transmitter_long_rd_id = 0x56789ABC, /* Example Long RD ID */
@@ -544,7 +570,7 @@ void test_dect_scan_request_band1(void)
 	int baseline_network_scan = mock_nrf_modem_dect_mac_network_scan_call_count;
 
 	/* Perform network scan using common test utility */
-	struct dect_scan_result scan_result;
+	struct test_dect_scan_result scan_result;
 	int result = test_dect_network_scan(test_iface, &scan_params, &beacon_params, true,
 					    &scan_result);
 
@@ -612,7 +638,7 @@ void test_dect_pt_association_request(void)
 	int baseline_association = mock_nrf_modem_dect_mac_association_call_count;
 
 	/* Perform association using common test utility */
-	struct dect_association_result assoc_result;
+	struct test_dect_association_result assoc_result;
 	int result = test_dect_association_request(test_iface,
 						   received_beacon_data.transmitter_long_rd_id,
 						   NULL, /* Use default response parameters */
@@ -942,7 +968,7 @@ void test_dect_pt_association_release(void)
 				      "Should have valid parent Long RD ID from association test");
 
 	/* Perform association release using common test utility */
-	struct dect_association_release_result release_result;
+	struct test_dect_association_release_result release_result;
 	int result = test_dect_association_release(test_iface,
 						   received_beacon_data.transmitter_long_rd_id,
 						   true, /* Simulate completion */
@@ -1009,7 +1035,7 @@ void test_dect_ft_activate(void)
 		mock_nrf_modem_dect_control_functional_mode_set_call_count;
 
 	/* Now perform activation using common test utility */
-	struct dect_activate_result activate_result;
+	struct test_dect_activate_result activate_result;
 	int result = test_dect_perform_activate(test_iface, 250, &activate_result);
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, result, "NET_REQUEST_DECT_ACTIVATE should succeed");
@@ -1057,111 +1083,6 @@ void test_dect_ft_activate(void)
 }
 
 /**
- * @brief Test DECT RSSI scan using real net_mgmt API
- *
- * Performs an RSSI scan and verifies:
- * - nrf_modem_dect_mac_rssi_scan() is called
- * - rssi_scan_ntf notification callback is received (NET_EVENT_DECT_RSSI_SCAN_RESULT)
- * - rssi_scan op callback is received (NET_EVENT_DECT_RSSI_SCAN_DONE) with success status
- */
-void test_dect_ft_rssi_scan(void)
-{
-	LOG_DBG("Testing DECT RSSI scan with NET_REQUEST_DECT_RSSI_SCAN");
-
-	/* Ensure the stack is activated before RSSI scan */
-	struct dect_activate_result activate_result;
-	int activate_ret = test_dect_perform_activate(test_iface, 250, &activate_result);
-
-	if (activate_ret != 0 || !activate_result.activate_done_received ||
-	    activate_result.activate_done_status != DECT_MAC_STATUS_OK) {
-		LOG_DBG("Activating stack before RSSI scan test");
-		/* Wait a bit for activation to complete */
-		k_sleep(K_MSEC(100));
-	}
-
-	/* Setup RSSI scan parameters */
-	struct dect_rssi_scan_params rssi_scan_params = {
-		.band = 0,
-		.frame_count_to_scan = 1,
-		.channel_count = 1,
-		.channel_list = {1657}
-	};
-
-	/* Record baseline call count (state persists between tests) */
-	int baseline_rssi_scan = mock_nrf_modem_dect_mac_rssi_scan_call_count;
-
-	/* Perform RSSI scan using common test utility */
-	struct dect_rssi_scan_result rssi_result;
-	int result = test_dect_perform_rssi_scan(test_iface, &rssi_scan_params, 500, &rssi_result);
-
-	/* Note: The request may return an error if the stack isn't fully ready,
-	 * but the async callbacks may still be triggered. Continue with verification.
-	 */
-	if (result != 0) {
-		LOG_DBG("RSSI scan request returned error %d, but continuing to verify mock calls",
-			result);
-	}
-
-	/* Verify that nrf_modem_dect_mac_rssi_scan was called */
-	TEST_ASSERT_EQUAL_MESSAGE(baseline_rssi_scan + 1,
-				  mock_nrf_modem_dect_mac_rssi_scan_call_count,
-				  "nrf_modem_dect_mac_rssi_scan should be called once");
-
-	/* Verify that NET_EVENT_DECT_RSSI_SCAN_RESULT was received */
-	TEST_ASSERT_TRUE_MESSAGE(
-		rssi_result.rssi_scan_result_received,
-		"NET_EVENT_DECT_RSSI_SCAN_RESULT should be received after rssi_scan_ntf callback");
-
-	/* Verify the content of NET_EVENT_DECT_RSSI_SCAN_RESULT data */
-	if (rssi_result.rssi_scan_result_received) {
-		struct dect_rssi_scan_result_data *rssi_data =
-			&rssi_result.rssi_scan_result_data.rssi_scan_result;
-
-		/* Verify channel matches the requested channel */
-		TEST_ASSERT_EQUAL_MESSAGE(rssi_scan_params.channel_list[0], rssi_data->channel,
-					  "RSSI scan result channel should match "
-					  "requested channel");
-
-		/* Verify busy_percentage is within valid range [0-100] */
-		TEST_ASSERT_TRUE_MESSAGE(rssi_data->busy_percentage <= 100,
-					 "RSSI scan busy_percentage should be <= 100");
-
-		/* Verify subslot counts are valid (should sum to 48 or less) */
-		uint8_t total_subslots = rssi_data->free_subslot_cnt +
-					rssi_data->possible_subslot_cnt +
-					rssi_data->busy_subslot_cnt;
-		TEST_ASSERT_TRUE_MESSAGE(total_subslots <= 48,
-					 "RSSI scan subslot counts should sum to <= 48");
-
-		/* Verify scan_suitable_percent is within valid range [0-100] */
-		TEST_ASSERT_TRUE_MESSAGE(rssi_data->scan_suitable_percent <= 100,
-					 "RSSI scan scan_suitable_percent should be <= 100");
-	}
-
-	/* Verify that NET_EVENT_DECT_RSSI_SCAN_DONE was received */
-	TEST_ASSERT_TRUE_MESSAGE(
-		rssi_result.rssi_scan_done_received,
-		"NET_EVENT_DECT_RSSI_SCAN_DONE should be received after rssi_scan op callback");
-
-	/* Verify RSSI scan was successful */
-	TEST_ASSERT_EQUAL_MESSAGE(DECT_MAC_STATUS_OK, rssi_result.rssi_scan_done_status,
-				  "DECT RSSI scan should complete with DECT_MAC_STATUS_OK");
-
-	LOG_DBG("DECT RSSI scan test completed successfully!");
-	LOG_DBG("- RSSI scan result event received: %s",
-		rssi_result.rssi_scan_result_received ? "YES" : "NO");
-	LOG_DBG("- RSSI scan done event received: %s",
-		rssi_result.rssi_scan_done_received ? "YES" : "NO");
-	LOG_DBG("- RSSI scan status: %d (expected=0 for DECT_MAC_STATUS_OK)",
-		rssi_result.rssi_scan_done_status);
-	if (rssi_result.rssi_scan_result_received) {
-		LOG_DBG("- RSSI scan result: channel=%d, busy_percentage=%d%%",
-			rssi_result.rssi_scan_result_data.rssi_scan_result.channel,
-			rssi_result.rssi_scan_result_data.rssi_scan_result.busy_percentage);
-	}
-}
-
-/**
  * @brief Test DECT stack deactivation using real net_mgmt API
  *
  * Deactivates the DECT stack and verifies NET_EVENT_DECT_DEACTIVATE_DONE event.
@@ -1177,7 +1098,7 @@ void test_dect_deactivate(void)
 		"Should have beacon data indicating previous DECT operations were successful");
 
 	/* Perform deactivation using common test utility */
-	struct dect_deactivate_result deactivate_result;
+	struct test_dect_deactivate_result deactivate_result;
 	int result = test_dect_perform_deactivate(test_iface, 250, &deactivate_result);
 
 	TEST_ASSERT_EQUAL_MESSAGE(0, result, "NET_REQUEST_DECT_DEACTIVATE should succeed");
@@ -1590,6 +1511,107 @@ void test_dect_ft_configuration(void)
 }
 
 /**
+ * @brief Test DECT RSSI scan using real net_mgmt API
+ *
+ * Performs an RSSI scan and verifies:
+ * - nrf_modem_dect_mac_rssi_scan() is called
+ * - rssi_scan_ntf notification callback is received (NET_EVENT_DECT_RSSI_SCAN_RESULT)
+ * - rssi_scan op callback is received (NET_EVENT_DECT_RSSI_SCAN_DONE) with success status
+ */
+void test_dect_ft_rssi_scan(void)
+{
+	LOG_DBG("Testing DECT RSSI scan with NET_REQUEST_DECT_RSSI_SCAN");
+
+	/* Ensure the stack is activated before RSSI scan */
+	struct test_dect_activate_result activate_result;
+	int activate_ret = test_dect_perform_activate(test_iface, 250, &activate_result);
+
+	if (activate_ret != 0 || !activate_result.activate_done_received ||
+	    activate_result.activate_done_status != DECT_MAC_STATUS_OK) {
+		LOG_DBG("Activating stack before RSSI scan test");
+		/* Wait a bit for activation to complete */
+		k_sleep(K_MSEC(100));
+	}
+
+	/* Setup RSSI scan parameters */
+	struct dect_rssi_scan_params rssi_scan_params = {
+		.band = 0, .frame_count_to_scan = 1, .channel_count = 1, .channel_list = {1657}};
+
+	/* Record baseline call count (state persists between tests) */
+	int baseline_rssi_scan = mock_nrf_modem_dect_mac_rssi_scan_call_count;
+
+	/* Perform RSSI scan using common test utility */
+	struct test_dect_rssi_scan_result rssi_result;
+	int result = test_dect_perform_rssi_scan(test_iface, &rssi_scan_params, 500, &rssi_result);
+
+	/* Note: The request may return an error if the stack isn't fully ready,
+	 * but the async callbacks may still be triggered. Continue with verification.
+	 */
+	if (result != 0) {
+		LOG_DBG("RSSI scan request returned error %d, but continuing to verify mock calls",
+			result);
+	}
+
+	/* Verify that nrf_modem_dect_mac_rssi_scan was called */
+	TEST_ASSERT_EQUAL_MESSAGE(baseline_rssi_scan + 1,
+				  mock_nrf_modem_dect_mac_rssi_scan_call_count,
+				  "nrf_modem_dect_mac_rssi_scan should be called once");
+
+	/* Verify that NET_EVENT_DECT_RSSI_SCAN_RESULT was received */
+	TEST_ASSERT_TRUE_MESSAGE(
+		rssi_result.rssi_scan_result_received,
+		"NET_EVENT_DECT_RSSI_SCAN_RESULT should be received after rssi_scan_ntf callback");
+
+	/* Verify the content of NET_EVENT_DECT_RSSI_SCAN_RESULT data */
+	if (rssi_result.rssi_scan_result_received) {
+		struct dect_rssi_scan_result_data *rssi_data =
+			&rssi_result.rssi_scan_result_data.rssi_scan_result;
+
+		/* Verify channel matches the requested channel */
+		TEST_ASSERT_EQUAL_MESSAGE(rssi_scan_params.channel_list[0], rssi_data->channel,
+					  "RSSI scan result channel should match "
+					  "requested channel");
+
+		/* Verify busy_percentage is within valid range [0-100] */
+		TEST_ASSERT_TRUE_MESSAGE(rssi_data->busy_percentage <= 100,
+					 "RSSI scan busy_percentage should be <= 100");
+
+		/* Verify subslot counts are valid (should sum to 48 or less) */
+		uint8_t total_subslots = rssi_data->free_subslot_cnt +
+					 rssi_data->possible_subslot_cnt +
+					 rssi_data->busy_subslot_cnt;
+		TEST_ASSERT_TRUE_MESSAGE(total_subslots <= 48,
+					 "RSSI scan subslot counts should sum to <= 48");
+
+		/* Verify scan_suitable_percent is within valid range [0-100] */
+		TEST_ASSERT_TRUE_MESSAGE(rssi_data->scan_suitable_percent <= 100,
+					 "RSSI scan scan_suitable_percent should be <= 100");
+	}
+
+	/* Verify that NET_EVENT_DECT_RSSI_SCAN_DONE was received */
+	TEST_ASSERT_TRUE_MESSAGE(
+		rssi_result.rssi_scan_done_received,
+		"NET_EVENT_DECT_RSSI_SCAN_DONE should be received after rssi_scan op callback");
+
+	/* Verify RSSI scan was successful */
+	TEST_ASSERT_EQUAL_MESSAGE(DECT_MAC_STATUS_OK, rssi_result.rssi_scan_done_status,
+				  "DECT RSSI scan should complete with DECT_MAC_STATUS_OK");
+
+	LOG_DBG("DECT RSSI scan test completed successfully!");
+	LOG_DBG("- RSSI scan result event received: %s",
+		rssi_result.rssi_scan_result_received ? "YES" : "NO");
+	LOG_DBG("- RSSI scan done event received: %s",
+		rssi_result.rssi_scan_done_received ? "YES" : "NO");
+	LOG_DBG("- RSSI scan status: %d (expected=0 for DECT_MAC_STATUS_OK)",
+		rssi_result.rssi_scan_done_status);
+	if (rssi_result.rssi_scan_result_received) {
+		LOG_DBG("- RSSI scan result: channel=%d, busy_percentage=%d%%",
+			rssi_result.rssi_scan_result_data.rssi_scan_result.channel,
+			rssi_result.rssi_scan_result_data.rssi_scan_result.busy_percentage);
+	}
+}
+
+/**
  * @brief Test complete DECT PT device workflow using real net_mgmt API: scan -> associate
  *
  * TODO: This test is disabled for now until all parameter structures are resolved
@@ -1598,4 +1620,267 @@ void test_dect_pt_complete_workflow(void)
 {
 	/* Simple placeholder test - verify callback structure exists */
 	TEST_ASSERT_NOT_NULL(&mock_ntf_callbacks);
+}
+
+/**
+ * @brief Test DECT FT cluster start with automatic channel selection
+ *
+ * This test verifies the complete cluster start flow:
+ * 1. Start network scan for every other channel in band 1 (odd channels: 1657, 1659, ..., 1677)
+ * 2. Verify nrf_modem mocks are called and corresponding callbacks are served
+ * 3. Then do RSSI scanning
+ * 4. Stop at first free channel (all_subslots_free && busy_percentage == 0)
+ * 5. Verify that channel is chosen and nrf_modem mock for cluster configure is called
+ */
+void test_dect_ft_cluster_start(void)
+{
+	LOG_DBG("=== Testing DECT FT cluster start with automatic channel selection ===");
+
+	/* Ensure device is in FT mode and activated */
+	/* Device should already be in FT mode from test_dect_ft_configuration */
+	/* Device should already be activated from test_dect_ft_activate */
+
+	/* Reset event tracking */
+	dect_cluster_created_received = false;
+	memset(&received_cluster_created_data, 0, sizeof(received_cluster_created_data));
+
+	/* Set flag to indicate this is a cluster creation RSSI scan at band 1 */
+	mock_cluster_creation_band1 = true;
+
+	/* Record baseline call counts */
+	int baseline_network_scan = mock_nrf_modem_dect_mac_network_scan_call_count;
+	int baseline_rssi_scan = mock_nrf_modem_dect_mac_rssi_scan_call_count;
+	int baseline_rssi_scan_stop = mock_nrf_modem_dect_mac_rssi_scan_stop_call_count;
+	int baseline_cluster_configure = mock_nrf_modem_dect_mac_cluster_configure_call_count;
+
+	/* Step 1: Request cluster start with DECT_CLUSTER_CHANNEL_ANY */
+	/* This will automatically trigger network scan for odd channels in band 1 */
+	struct dect_cluster_start_req_params cluster_start_params = {
+		.channel = DECT_CLUSTER_CHANNEL_ANY};
+
+	LOG_DBG("Requesting cluster start with DECT_CLUSTER_CHANNEL_ANY");
+	int result = net_mgmt(NET_REQUEST_DECT_CLUSTER_START, test_iface, &cluster_start_params,
+			      sizeof(cluster_start_params));
+
+	TEST_ASSERT_EQUAL_MESSAGE(0, result, "Cluster start request should succeed");
+
+	/* Wait for network scan to be initiated */
+	k_sleep(K_MSEC(50));
+
+	/* Step 2: Verify network scan was called for odd channels in band 1 */
+	TEST_ASSERT_EQUAL_MESSAGE(baseline_network_scan + 1,
+				  mock_nrf_modem_dect_mac_network_scan_call_count,
+				  "nrf_modem_dect_mac_network_scan should be called once");
+
+	LOG_DBG("Network scan initiated - simulating completion");
+
+	/* Step 3: Simulate network scan completion (no beacons found) */
+	/* During cluster start (auto_start), the scan completion callback is called but
+	 * NET_EVENT_DECT_SCAN_DONE is not sent to the application - it's an internal scan.
+	 */
+	if (mock_op_callbacks.network_scan) {
+		/* Calculate number of odd channels in band 1: 1657, 1659, 1661, ..., 1677 */
+		/* That's (1677 - 1657) / 2 + 1 = 11 channels */
+		struct nrf_modem_dect_mac_network_scan_cb_params scan_complete_params = {
+			.status = NRF_MODEM_DECT_MAC_STATUS_OK,
+			.num_scanned_channels = 11 /* Odd channels in band 1 */
+		};
+
+		LOG_DBG("Simulating network scan completion: status=OK, channels=11");
+		mock_op_callbacks.network_scan(&scan_complete_params);
+
+		/* Wait for scan completion processing */
+		k_sleep(K_MSEC(100));
+	} else {
+		TEST_FAIL_MESSAGE("Network scan operation callback should be registered");
+	}
+
+	/* Note: During auto_start (cluster start), NET_EVENT_DECT_SCAN_DONE is not sent
+	 * because the scan is internal to the cluster start process. The scan completion
+	 * callback is handled internally and triggers RSSI scan automatically.
+	 */
+
+	/* Step 4: Wait for RSSI scan to be initiated automatically */
+	k_sleep(K_MSEC(100));
+
+	/* Verify RSSI scan was called */
+	TEST_ASSERT_EQUAL_MESSAGE(
+		baseline_rssi_scan + 1, mock_nrf_modem_dect_mac_rssi_scan_call_count,
+		"nrf_modem_dect_mac_rssi_scan should be called after network scan");
+
+	LOG_DBG("RSSI scan initiated - waiting for handle_auto_start to set auto_start = true");
+
+	/* Wait for handle_auto_start to complete and set auto_start = true before
+	 * simulating the completion callback. This ensures auto_start is true when
+	 * RSSI results are processed. handle_auto_start is called asynchronously from
+	 * a message queue, so we need to wait for it to complete.
+	 */
+	k_sleep(K_MSEC(300));
+
+	LOG_DBG("Simulating completion callback to set cmd_on_going = false");
+
+	/* Step 4b: For band-based scans (cluster creation), simulate RSSI scan completion callback
+	 * first to set cmd_on_going = false, allowing the driver to process RSSI results.
+	 * This must be done before sending RSSI results. We'll also simulate it again after
+	 * rssi_scan_stop is called, as per the required order.
+	 */
+	if (mock_op_callbacks.rssi_scan) {
+		struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_complete_params = {
+			.status = NRF_MODEM_DECT_MAC_STATUS_OK};
+
+		LOG_DBG("Simulating RSSI scan completion callback (to set cmd_on_going = false)");
+		mock_op_callbacks.rssi_scan(&rssi_complete_params);
+
+		/* Wait for completion callback to be processed */
+		k_sleep(K_MSEC(100));
+	} else {
+		TEST_FAIL_MESSAGE("RSSI scan operation callback should be registered");
+	}
+
+	LOG_DBG("Simulating first free channel result");
+
+	/* Step 5: Simulate RSSI scan result with first free channel (e.g., 1657) */
+	/* The channel should have: all_subslots_free=true, busy_percentage=0, no other cluster */
+	/* This will cause RSSI scan to stop automatically */
+	/* First channel to scan - make it free */
+	uint16_t free_channel = 1657; /* First odd channel in band 1 */
+
+	if (mock_ntf_callbacks.rssi_scan_ntf) {
+
+		/* Create arrays for RSSI measurement: 48 subslots = 6 bytes */
+		/* All subslots free: free array all 0xFF, busy and possible all 0x00 */
+		static uint8_t busy_array[6] = {0, 0, 0, 0, 0, 0};     /* All subslots not busy */
+		static uint8_t possible_array[6] = {0, 0, 0, 0, 0, 0}; /* No possible subslots */
+		static uint8_t free_array[6] = {0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF}; /* All free */
+
+		struct nrf_modem_dect_mac_rssi_scan_ntf_cb_params rssi_result = {
+			.channel = free_channel,
+			.busy_percentage = 0,	   /* Free channel */
+			.rssi_meas_array_size = 6, /* 48 subslots / 8 = 6 bytes */
+			.busy = busy_array,
+			.possible = possible_array,
+			.free = free_array};
+
+		LOG_DBG("Simulating RSSI scan result: channel=%d, busy_percentage=%d%%, "
+			"all subslots free",
+			rssi_result.channel, rssi_result.busy_percentage);
+
+		mock_ntf_callbacks.rssi_scan_ntf(&rssi_result);
+
+		/* Wait for RSSI result processing and for driver to call rssi_scan_stop */
+		/* The driver should automatically stop RSSI scan when a free channel is found */
+		k_sleep(K_MSEC(200));
+
+		/* Verify RSSI scan result event was received */
+		TEST_ASSERT_TRUE_MESSAGE(
+			dect_rssi_scan_result_received,
+			"NET_EVENT_DECT_RSSI_SCAN_RESULT should be received after rssi_scan_ntf");
+
+		/* Verify the channel matches */
+		TEST_ASSERT_EQUAL_MESSAGE(
+			free_channel, received_rssi_scan_result_data.rssi_scan_result.channel,
+			"RSSI scan result channel should match simulated channel");
+	} else {
+		TEST_FAIL_MESSAGE("RSSI scan notification callback should be registered");
+	}
+
+	/* Step 5b: Verify that driver called rssi_scan_stop() after finding free channel */
+	/* The driver should automatically stop RSSI scan when a free channel is found */
+	/* Condition: no another cluster && all_subslots_free && scan_suitable_percent_ok &&
+	 * busy_percentage == 0 && (auto_start || ft_cluster_state == STARTING) && channel == 0
+	 * Wait for driver to process the result and call stop if condition is met.
+	 */
+	k_sleep(K_MSEC(200));
+
+	TEST_ASSERT_EQUAL_MESSAGE(baseline_rssi_scan_stop + 1,
+				  mock_nrf_modem_dect_mac_rssi_scan_stop_call_count,
+				  "nrf_modem_dect_mac_rssi_scan_stop should be called by driver "
+				  "after finding free channel "
+				  "(condition: no another cluster && all_subslots_free && "
+				  "scan_suitable_percent_ok && "
+				  "busy_percentage == 0 && channel == 0)");
+
+	LOG_DBG("Driver called rssi_scan_stop - proceeding with completion callbacks");
+
+	/* Step 6: Simulate RSSI scan completion */
+	/* The RSSI scan should stop automatically when a free channel is found */
+	/* But we still need to simulate the completion callback */
+	if (mock_op_callbacks.rssi_scan) {
+		struct nrf_modem_dect_mac_rssi_scan_cb_params rssi_complete_params = {
+			.status = NRF_MODEM_DECT_MAC_STATUS_OK};
+
+		LOG_DBG("Simulating RSSI scan completion: status=OK");
+		mock_op_callbacks.rssi_scan(&rssi_complete_params);
+
+		/* Wait for RSSI scan completion processing */
+		k_sleep(K_MSEC(200));
+	} else {
+		TEST_FAIL_MESSAGE("RSSI scan operation callback should be registered");
+	}
+
+	/* Verify RSSI scan done event was received */
+	TEST_ASSERT_TRUE_MESSAGE(
+		dect_rssi_scan_done_received,
+		"NET_EVENT_DECT_RSSI_SCAN_DONE should be received after RSSI scan completion");
+
+	/* Step 6b: Simulate RSSI scan stop operation complete callback */
+	if (mock_op_callbacks.rssi_scan_stop) {
+		struct nrf_modem_dect_mac_rssi_scan_stop_cb_params rssi_stop_complete_params = {
+			.status = NRF_MODEM_DECT_MAC_STATUS_OK};
+
+		LOG_DBG("Simulating RSSI scan stop completion: status=OK");
+		mock_op_callbacks.rssi_scan_stop(&rssi_stop_complete_params);
+
+		/* Wait for RSSI scan stop completion processing */
+		k_sleep(K_MSEC(100));
+	} else {
+		TEST_FAIL_MESSAGE("RSSI scan stop operation callback should be registered");
+	}
+
+	/* Step 7: Verify cluster configure was called and wait for async callback */
+	/* The mock simulates the cluster_configure async callback, which triggers the event */
+	/* Wait for cluster configure to be called and async callback to complete */
+	k_sleep(K_MSEC(300));
+
+	/* Verify cluster configure was called */
+	TEST_ASSERT_EQUAL_MESSAGE(
+		baseline_cluster_configure + 1,
+		mock_nrf_modem_dect_mac_cluster_configure_call_count,
+		"nrf_modem_dect_mac_cluster_configure should be called with chosen channel");
+
+	/* Step 8: Verify NET_EVENT_DECT_CLUSTER_CREATED_RESULT was sent with the chosen channel */
+	/* The cluster created event is sent in handle_mdm_cluster_configure_resp after the
+	 * cluster configure callback completes. Wait for the event to be processed.
+	 */
+	k_sleep(K_MSEC(200));
+
+	TEST_ASSERT_TRUE_MESSAGE(dect_cluster_created_received,
+				 "NET_EVENT_DECT_CLUSTER_CREATED_RESULT should be received after "
+				 "cluster configuration");
+	TEST_ASSERT_EQUAL_MESSAGE(free_channel, received_cluster_created_data.cluster_channel,
+				  "Cluster created event should contain the chosen channel");
+	TEST_ASSERT_EQUAL_MESSAGE(DECT_MAC_STATUS_OK, received_cluster_created_data.status,
+				  "Cluster created event should have success status");
+
+	/* Step 9: Verify network interface state after cluster is started */
+	/* Expected state: oper=DORMANT, admin=UP, carrier=ON */
+	/* "oper" will go up when 1st child association is established */
+	TEST_ASSERT_TRUE_MESSAGE(net_if_is_admin_up(test_iface),
+				 "Interface should be admin UP after cluster is started");
+	TEST_ASSERT_TRUE_MESSAGE(net_if_is_carrier_ok(test_iface),
+				 "Interface carrier should be ON after cluster is started");
+	TEST_ASSERT_TRUE_MESSAGE(net_if_is_dormant(test_iface),
+				 "Interface should be DORMANT after cluster is started");
+	TEST_ASSERT_EQUAL_MESSAGE(
+		NET_IF_OPER_DORMANT, net_if_oper_state(test_iface),
+		"Interface operational state should be DORMANT after cluster is started");
+
+	LOG_DBG("Cluster configure called - cluster start test completed successfully!");
+	LOG_DBG("- Network scan calls: %d (expected: %d)",
+		mock_nrf_modem_dect_mac_network_scan_call_count, baseline_network_scan + 1);
+	LOG_DBG("- RSSI scan calls: %d (expected: %d)",
+		mock_nrf_modem_dect_mac_rssi_scan_call_count, baseline_rssi_scan + 1);
+	LOG_DBG("- Cluster configure calls: %d (expected: %d)",
+		mock_nrf_modem_dect_mac_cluster_configure_call_count,
+		baseline_cluster_configure + 1);
 }
