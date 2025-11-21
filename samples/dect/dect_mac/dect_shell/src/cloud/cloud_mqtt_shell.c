@@ -5,13 +5,24 @@
  */
 
 #include <stdlib.h>
+#include <string.h>
 #include <zephyr/kernel.h>
 #include <net/nrf_cloud.h>
 #include <nrf_cloud_fsm.h>
 #include <zephyr/shell/shell.h>
+#include <zephyr/sys/base64.h>
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+#include <nrf_cloud_transport.h>
+#endif
 
 #if defined(CONFIG_DESH_NATIVE_TLS) && !defined(CONFIG_NRF_CLOUD_PROVISION_CERTIFICATES)
 #include "desh_native_tls.h"
+#endif
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+#include <net/l2_dect_nrp/rpc/common/dect_rpc_mqtt_transport.h>
+#include <net/l2_dect_nrp/rpc/server/dect_rpc_server.h>
+#include <nrf_rpc.h>
+#include <zephyr/net/mqtt.h>
 #endif
 #include "desh_print.h"
 
@@ -23,9 +34,21 @@ BUILD_ASSERT(!IS_ENABLED(CONFIG_NRF_CLOUD_COAP));
 extern const struct shell *desh_shell;
 extern struct k_work_q desh_common_work_q;
 
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+static void dect_rpc_err_handler(const struct nrf_rpc_err_report *report)
+{
+	desh_error("nRF RPC error %d occurred", report->code);
+}
+#endif
+
 static struct k_work_delayable cloud_reconnect_work;
 static struct k_work cloud_cmd_execute_work;
 static struct k_work shadow_update_work;
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+static struct k_work dect_rpc_process_work;
+static struct nrf_cloud_data dect_rpc_pending_data;
+static bool dect_rpc_data_pending = false;
+#endif
 
 static char shell_cmd[CLOUD_CMD_MAX_LENGTH + 1];
 static void cmd_cloud_disconnect(const struct shell *shell, size_t argc, char **argv);
@@ -52,6 +75,127 @@ static void cloud_cmd_execute_work_fn(struct k_work *work)
 }
 
 static K_WORK_DEFINE(cloud_cmd_execute_work, cloud_cmd_execute_work_fn);
+
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+/**
+ * @brief Process DECT RPC data in work queue context
+ */
+static void dect_rpc_process_work_fn(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (!dect_rpc_data_pending) {
+		return;
+	}
+
+	/* Process the RPC data */
+	if (dect_rpc_mqtt_transport_handle_rx_data(&dect_rpc_pending_data)) {
+		desh_print("DECT RPC packet received and handled");
+	} else {
+		desh_print("DECT RPC packet not handled");
+	}
+
+	/* Free the decoded buffer */
+	if (dect_rpc_pending_data.ptr) {
+		k_free((void *)dect_rpc_pending_data.ptr);
+		dect_rpc_pending_data.ptr = NULL;
+		dect_rpc_pending_data.len = 0;
+	}
+
+	dect_rpc_data_pending = false;
+}
+
+static K_WORK_DEFINE(dect_rpc_process_work, dect_rpc_process_work_fn);
+/**
+ * @brief Parse JSON with base64-encoded DECT RPC data
+ *
+ * Format: {"appId":"DECT_RPC", "data":"<base64_string>"}
+ *
+ * @param buf_in JSON string
+ * @param out_data Output structure with decoded binary data
+ * @return true if JSON contains DECT_RPC base64 data, false otherwise
+ */
+static bool cloud_shell_parse_dect_rpc_json(const char *buf_in,
+					     struct nrf_cloud_data *out_data)
+{
+	const cJSON *app_id = NULL;
+	const cJSON *data = NULL;
+	bool ret = false;
+	uint8_t *decoded_buf = NULL;
+	size_t decoded_len = 0;
+	size_t base64_len;
+	cJSON *json = NULL;
+
+	/* cJSON_Parse requires null-terminated string, but buf_in might not be null-terminated
+	 * if it comes from MQTT payload. We need to check if it's already null-terminated
+	 * or create a null-terminated copy.
+	 * For now, assume buf_in is null-terminated (nRF Cloud library should ensure this)
+	 */
+	json = cJSON_Parse(buf_in);
+	if (json == NULL) {
+		const char *error_ptr = cJSON_GetErrorPtr();
+		if (error_ptr != NULL) {
+			desh_error("DECT RPC JSON parsing error: %s", error_ptr);
+		} else {
+			desh_error("DECT RPC JSON parsing failed (null pointer)");
+		}
+		return false;
+	}
+
+	/* Check if appId is "DECT_RPC" */
+	app_id = cJSON_GetObjectItemCaseSensitive(json, NRF_CLOUD_JSON_APPID_KEY);
+	if (!cJSON_IsString(app_id) || app_id->valuestring == NULL) {
+		goto cleanup;
+	}
+
+	if (strcmp(app_id->valuestring, "DECT_RPC") != 0) {
+		goto cleanup;
+	}
+
+	/* Get base64 data field */
+	data = cJSON_GetObjectItemCaseSensitive(json, NRF_CLOUD_JSON_DATA_KEY);
+	if (!cJSON_IsString(data) || data->valuestring == NULL) {
+		goto cleanup;
+	}
+
+	base64_len = strlen(data->valuestring);
+	if (base64_len == 0) {
+		goto cleanup;
+	}
+
+	/* Calculate decoded size (base64: 4 chars = 3 bytes) */
+	decoded_len = (base64_len * 3) / 4;
+	if (decoded_len == 0) {
+		goto cleanup;
+	}
+
+	/* Allocate buffer for decoded data */
+	decoded_buf = k_malloc(decoded_len);
+	if (!decoded_buf) {
+		desh_error("Failed to allocate buffer for base64 decode");
+		goto cleanup;
+	}
+
+	/* Decode base64 to binary */
+	int err = base64_decode(decoded_buf, decoded_len, &decoded_len,
+				(const uint8_t *)data->valuestring, base64_len);
+	if (err < 0) {
+		desh_error("Base64 decode failed: %d", err);
+		k_free(decoded_buf);
+		decoded_buf = NULL;
+		goto cleanup;
+	}
+
+	/* Set output data */
+	out_data->ptr = decoded_buf;
+	out_data->len = decoded_len;
+	ret = true;
+
+cleanup:
+	cJSON_Delete(json);
+	return ret;
+}
+#endif /* CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT */
 
 static bool cloud_shell_parse_desh_cmd(const char *buf_in)
 {
@@ -157,9 +301,85 @@ static void nrf_cloud_event_handler(const struct nrf_cloud_evt *evt)
 		desh_print("nRF Cloud event: NRF_CLOUD_EVT_READY");
 		desh_print("Connection to nRF Cloud established");
 		k_work_submit_to_queue(&desh_common_work_q, &shadow_update_work);
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+			/* Check DC_RX topic and log it for debugging */
+			{
+				struct nct_dc_endpoints eps;
+				nct_dc_endpoint_get(&eps);
+				
+				if (eps.e[DC_RX].utf8 != NULL) {
+					desh_print("DECT RPC: Subscribed to topic: %.*s",
+							   eps.e[DC_RX].size,
+							   (const char *)eps.e[DC_RX].utf8);
+				}
+			}
+#endif
 		break;
 	case NRF_CLOUD_EVT_RX_DATA_GENERAL:
 		desh_print("nRF Cloud event: NRF_CLOUD_EVT_RX_DATA_GENERAL");
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+		/* First, check if it's raw binary RPC packet */
+		/* This handles /c2d topic (device subscribes to pattern /+/r which matches /c2d/r) */
+		if (dect_rpc_mqtt_transport_handle_rx_data(&evt->data)) {
+			/* Data was handled by DECT RPC transport */
+			desh_print("DECT RPC packet received and handled");
+			break;
+		}
+
+		/* If it's JSON, check if it contains base64-encoded RPC data */
+		/* REST API might wrap binary data in JSON */
+		if (((char *)evt->data.ptr)[0] == '{') {
+			struct nrf_cloud_data decoded_data;
+			char *json_str = NULL;
+
+			/* Log received JSON data for debugging */
+			desh_print("Received JSON data on /c2d topic, len: %zu", evt->data.len);
+			if (evt->data.len < 100) {
+				desh_print("JSON data: %.*s", evt->data.len, (const char *)evt->data.ptr);
+			}
+
+			/* cJSON_Parse requires null-terminated string.
+			 * Allocate a buffer and copy the data with null terminator.
+			 */
+			json_str = k_malloc(evt->data.len + 1);
+			if (!json_str) {
+				desh_error("Failed to allocate JSON buffer");
+				break;
+			}
+			memcpy(json_str, evt->data.ptr, evt->data.len);
+			json_str[evt->data.len] = '\0';
+
+			if (cloud_shell_parse_dect_rpc_json(json_str,
+							    &decoded_data)) {
+				/* Free JSON buffer after parsing */
+				k_free(json_str);
+				json_str = NULL;
+
+				/* Decoded base64 RPC data, schedule processing in work queue */
+				desh_print("DECT RPC base64 data decoded from JSON");
+				
+				/* Check if previous data is still pending */
+				if (dect_rpc_data_pending) {
+					desh_error("Previous DECT RPC data still pending, dropping");
+					k_free((void *)dect_rpc_pending_data.ptr);
+				}
+				
+				/* Store decoded data for processing in work queue */
+				dect_rpc_pending_data = decoded_data;
+				dect_rpc_data_pending = true;
+				
+				/* Schedule processing in work queue (safe context) */
+				k_work_submit_to_queue(&desh_common_work_q,
+						       &dect_rpc_process_work);
+				break;
+			} else {
+				/* JSON parsing failed, free buffer */
+				if (json_str) {
+					k_free(json_str);
+				}
+			}
+		}
+#endif
 		if (((char *)evt->data.ptr)[0] == '{') {
 			/* Check if it's a DeSh command sent from the cloud */
 			if (cloud_shell_parse_desh_cmd(evt->data.ptr)) {
@@ -250,6 +470,22 @@ static void cmd_cloud_connect(const struct shell *shell, size_t argc, char **arg
 			desh_error("nrf_cloud_init, error: %d", err);
 			return;
 		}
+
+#if defined(CONFIG_DECT_NRP_RPC_MQTT_TRANSPORT)
+		/* Initialize nRF RPC and DECT RPC server after nRF Cloud is initialized */
+		err = nrf_rpc_init(dect_rpc_err_handler);
+		if (err != 0) {
+			desh_error("nRF RPC init failed: %d", err);
+		} else {
+			err = dect_rpc_server_init();
+			if (err != 0) {
+				desh_error("DECT RPC server init failed: %d", err);
+			} else {
+				desh_print("DECT RPC server initialized");
+			}
+		}
+		desh_print("nRF RPC and DECT RPC server initialized");
+#endif
 
 		initialized = true;
 	}

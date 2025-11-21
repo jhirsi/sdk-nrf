@@ -1,0 +1,94 @@
+#
+# Copyright (c) 2025 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig DECT_NRP_RPC
+	bool "DECT NR+ over RPC [EXPERIMENTAL]"
+	depends on NET_L2_DECT_MGMT
+	depends on NRF_RPC
+	depends on NRF_RPC_CBOR
+	select EXPERIMENTAL
+	help
+	  Enables DECT NR+ net mgmt serialization over RPC
+
+if DECT_NRP_RPC
+
+choice DECT_NRP_RPC_ROLE_CHOICE
+	prompt "DECT NR+ over RPC role selection"
+	default DECT_NRP_RPC_CLIENT
+	help
+	  Selects the device role for DECT NR+ over RPC. The default role is
+	  a client role.
+
+config DECT_NRP_RPC_CLIENT
+	bool "DECT NR+ over RPC client"
+	help
+	  Enables DECT NR+ over RPC client role that uses nRF RPC library to
+	  invoke DECT NR+ net mgmt functions on the remote core.
+
+config DECT_NRP_RPC_SERVER
+	bool "DECT NR+ over RPC server"
+	depends on NET_L2_DECT_MGMT
+	help
+	  Enables DECT NR+ over RPC server role that runs the full DECT NR+
+	  stack and exposes DECT NR+ net mgmt functions using nRF RPC library
+	  to a client running on the remote core.
+
+endchoice
+
+config DECT_NRP_RPC_INITIALIZE_NRF_RPC
+	bool "Automatically initialize nRF RPC library"
+	default n
+	help
+	  Initialize nRF RPC library during the system startup. Disabling this
+	  option allow user to initialize it in a different way.
+
+choice DECT_NRP_RPC_TRANSPORT
+	prompt "DECT RPC transport selection"
+	default DECT_NRP_RPC_UART_TRANSPORT
+	depends on DECT_NRP_RPC
+	help
+	  Select the transport layer for DECT RPC communication.
+
+config DECT_NRP_RPC_UART_TRANSPORT
+	bool "UART transport"
+	depends on NRF_RPC_UART_TRANSPORT
+	help
+	  Use UART for RPC communication (local device-to-device).
+	  This is the default transport for direct communication between
+	  two nRF devices over UART.
+
+config DECT_NRP_RPC_MQTT_TRANSPORT
+	bool "MQTT transport via nRF Cloud"
+	depends on NRF_CLOUD_MQTT
+	help
+	  Use nRF Cloud MQTT for RPC communication (cloud-to-device).
+	  This enables remote control of DECT NR+ stack from nRF Cloud
+	  or any MQTT client connected to nRF Cloud.
+	  
+	  Note: This requires nRF Cloud MQTT to be initialized and connected
+	  before initializing DECT RPC. The MQTT client must be registered
+	  using dect_rpc_mqtt_transport_register_client().
+	  
+	  IMPORTANT: When using MQTT transport, you must explicitly disable
+	  the base nRF RPC transport options in your prj.conf or overlay:
+	  
+	    CONFIG_NRF_RPC_IPC_SERVICE=n
+	    CONFIG_NRF_RPC_UART_TRANSPORT=n
+	  
+	  This prevents the base NRF_RPC_TRANSPORT choice from defaulting to IPC.
+	  
+	  The MQTT transport does not use the base NRF_RPC_TRANSPORT choice,
+	  so both base transports must be disabled when using MQTT transport.
+
+endchoice
+
+module = DECT_NRP_RPC
+module-dep = LOG
+module-str = Log level for DECT NR+ RPC
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # DECT_NRP_RPC
+

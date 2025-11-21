@@ -1,0 +1,52 @@
+11-14 12:56:15.118  7699  7699 D CloudAuthService: TLSv1.2 protocol available
+11-14 12:56:15.119  7699  7699 D CloudAuthService: SSL Context created: TLSv1.2
+11-14 12:56:15.119  7699  7699 D CloudAuthService: SSL Context provider: AndroidOpenSSL
+11-14 12:56:15.119  7699  7699 D CloudAuthService: Using 1 trust manager(s)
+11-14 12:56:15.119  7699  7699 D CloudAuthService: SSL socket factory configured
+11-14 12:56:15.119  7699  7699 D CloudAuthService: Socket factory class: com.android.org.conscrypt.OpenSSLSocketFactoryImpl
+11-14 12:56:15.119  7699  7699 D CloudAuthService: Username (deviceId): 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 12:56:15.119  7699  7699 D CloudAuthService: Password (apiKey): a53b... (40 chars)
+11-14 12:56:17.249  7699  7699 D DirectShellActivity: Starting auto-connect...
+11-14 12:56:17.249  7699  7699 D DirectShellActivity: Device ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 12:56:17.249  7699  7699 D DirectShellActivity: API Key: provided (40 chars)
+11-14 12:56:17.274  7699  7699 D DirectShellActivity: Calling client.connect()...
+11-14 12:56:17.274  7699  7699 D DirectShellClient: === Starting MQTT connection ===
+11-14 12:56:17.274  7699  7699 D DirectShellClient: Device ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 12:56:17.274  7699  7699 D DirectShellClient: API Key length: 40
+11-14 12:56:17.274  7699  7699 D DirectShellClient: Broker URI: ssl://mqtt.nrfcloud.com:8883
+11-14 12:56:17.274  7699  7699 D DirectShellClient: MQTT Client ID: 50345053-3639-4cf9-80fd-240a783bb3fb_shell_1763117777274
+11-14 12:56:17.274  7699  7699 D DirectShellClient: Creating MQTT client...
+11-14 12:56:17.275  7699  7699 D DirectShellClient: MQTT client created
+11-14 12:56:17.275  7699  7699 D DirectShellClient: Creating connection options...
+11-14 12:56:17.275  7699  7699 D CloudAuthService: TLSv1.2 protocol available
+11-14 12:56:17.275  7699  7699 D CloudAuthService: SSL Context created: TLSv1.2
+11-14 12:56:17.275  7699  7699 D CloudAuthService: SSL Context provider: AndroidOpenSSL
+11-14 12:56:17.275  7699  7699 D CloudAuthService: Using 1 trust manager(s)
+11-14 12:56:17.275  7699  7699 D CloudAuthService: SSL socket factory configured
+11-14 12:56:17.275  7699  7699 D CloudAuthService: Socket factory class: com.android.org.conscrypt.OpenSSLSocketFactoryImpl
+11-14 12:56:17.275  7699  7699 D CloudAuthService: Username (deviceId): 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 12:56:17.275  7699  7699 D CloudAuthService: Password (apiKey): a53b... (40 chars)
+11-14 12:56:17.275  7699  7699 D DirectShellClient: Connection options created: cleanSession=true, keepAlive=60
+11-14 12:56:17.275  7699  7699 D DirectShellClient: Setting MQTT callback...
+11-14 12:56:17.276  7699  7699 D DirectShellClient: Connecting to MQTT broker...
+11-14 12:56:17.276  7699  7699 D DirectShellClient: Connection options - username: 50345053-3639-4cf9-80fd-240a783bb3fb, has password: true, socketFactory: true
+11-14 12:56:18.023  7699  7699 E DirectShellClient: === Connection error ===
+11-14 12:56:18.023  7699  7699 E DirectShellClient: MqttException (0) - javax.net.ssl.SSLHandshakeException: connection closed
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ExceptionHelper.createMqttException(ExceptionHelper.java:38)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ClientComms$ConnectBG.run(ClientComms.java:738)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at java.lang.Thread.run(Thread.java:1119)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: Caused by: javax.net.ssl.SSLHandshakeException: connection closed
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at com.android.org.conscrypt.SSLUtils.toSSLHandshakeException(SSLUtils.java:358)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at com.android.org.conscrypt.ConscryptEngineSocket.doHandshake(ConscryptEngineSocket.java:245)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at com.android.org.conscrypt.ConscryptEngineSocket.startHandshake(ConscryptEngineSocket.java:224)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.SSLNetworkModule.start(SSLNetworkModule.java:159)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ClientComms$ConnectBG.run(ClientComms.java:724)
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	... 1 more
+11-14 12:56:18.023  7699  7699 E DirectShellClient: Caused by: java.io.EOFException: connection closed
+11-14 12:56:18.023  7699  7699 E DirectShellClient: 	... 5 more
+11-14 12:56:18.023  7699  7699 E DirectShellClient: Error type: MqttException
+11-14 12:56:18.023  7699  7699 E DirectShellClient: Error message: MqttException
+11-14 12:56:18.023  7699  7699 E DirectShellClient: MQTT reason code: 0
+11-14 12:56:18.023  7699  7699 E DirectShellClient: MQTT cause: connection closed
+11-14 12:56:18.023  7699  7699 D DirectShellActivity: Connection result: false
+11-14 12:56:18.023  7699  7699 E DirectShellActivity: Auto-connect failed

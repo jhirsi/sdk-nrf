@@ -1,0 +1,150 @@
+11-14 12:57:24.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:24.247  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:24.642  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:24.747  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:25.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117845
+11-14 12:57:25.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:25.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:25.256  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:25.748  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:26.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117846
+11-14 12:57:26.171  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:26.171  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:26.248  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:26.716  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:27.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117847
+11-14 12:57:27.166  4957  5790 E BluetoothRemoteDevices: Remote class is UNCATEGORIZED
+11-14 12:57:27.169  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:27.169  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:27.249  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:27.767  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:28.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117848
+11-14 12:57:28.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:28.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:28.267  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:28.769  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:28.978  4957  5899 E ScanManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_SCAN_STOP, appName: com.omronhealthcare.omronconnect, scannerId: 11, reportDelayMillis=0
+11-14 12:57:29.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117849
+11-14 12:57:29.171  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:29.171  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:29.269  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:29.739  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:30.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117850
+11-14 12:57:30.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:30.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:30.269  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:30.769  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:31.000  4957  5899 E ScanManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_SCAN_START, appName: com.omronhealthcare.omronconnect, scannerId: 11, reportDelayMillis=0
+11-14 12:57:31.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117851
+11-14 12:57:31.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:31.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:31.268  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:31.770  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:32.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117852
+11-14 12:57:32.168  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:32.168  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:32.271  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:32.769  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:32.893  2105  2129 E BatteryDump: !@new_battery_dump : 4384,223,1500,1500,100,298,290,308,298,0,311,309,0,Full,NO_CHARGING,Additional,Good,USB_CDP,2,Normal,0,0,5400,0x0,0x10000,0x0,0,0,0000,0000,00000000,0,0,0,0,369,4363,10000,982,0,
+11-14 12:57:33.122  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:33.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117853
+11-14 12:57:33.169  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:33.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:33.271  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:33.789  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:34.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117854
+11-14 12:57:34.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:34.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:34.289  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:34.658  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:34.791  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:35.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117855
+11-14 12:57:35.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:35.171  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:35.291  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:35.790  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:36.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117856
+11-14 12:57:36.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:36.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:36.291  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:36.792  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:37.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117857
+11-14 12:57:37.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:37.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:37.291  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:37.792  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:37.858  3220  8046 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:38.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117858
+11-14 12:57:38.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:38.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:38.293  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:38.794  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:39.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117859
+11-14 12:57:39.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:39.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:39.293  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:39.592  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:39.681  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:39.686  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:39.737  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:40.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117860
+11-14 12:57:40.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:40.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:40.311  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:40.802  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:41.012  4957  5899 E ScanManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_SCAN_STOP, appName: com.omronhealthcare.omronconnect, scannerId: 11, reportDelayMillis=0
+11-14 12:57:41.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117861
+11-14 12:57:41.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:41.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:41.303  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:41.804  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:42.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117862
+11-14 12:57:42.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:42.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:42.304  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:42.622  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:42.805  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:42.955  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:43.034  4957  5899 E ScanManager: [GSIM LOG]: gsimLogHandler, msg: MESSAGE_SCAN_START, appName: com.omronhealthcare.omronconnect, scannerId: 11, reportDelayMillis=0
+11-14 12:57:43.068  2105  2129 E BatteryDump: !@new_battery_dump : 4383,262,1500,1500,100,298,289,306,298,0,310,308,0,Full,NO_CHARGING,Additional,Good,USB_CDP,2,Normal,0,0,5400,0x0,0x10000,0x0,0,0,0000,0000,00000000,0,0,0,0,369,4363,10000,982,0,
+11-14 12:57:43.073  3220  5342 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:43.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117863
+11-14 12:57:43.168  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:43.168  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:43.314  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:43.587  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:43.750  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:43.897  4957  5790 E BluetoothRemoteDevices: Remote class is UNCATEGORIZED
+11-14 12:57:44.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117864
+11-14 12:57:44.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:44.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:44.315  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:44.813  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:45.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117865
+11-14 12:57:45.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:45.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:45.315  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:45.814  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:46.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117866
+11-14 12:57:46.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:46.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:46.316  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:46.834  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:47.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117867
+11-14 12:57:47.171  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:47.171  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:47.330  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:47.835  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:47.922  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:48.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117868
+11-14 12:57:48.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:48.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:48.336  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:48.836  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:49.165  2196  2216 E HeatmapThread: ECT Thread time in milliseconds: 1763117869
+11-14 12:57:49.170  2196  2216 E HeatmapThread: !@ CAM New BSOH: 100
+11-14 12:57:49.170  2196  2216 E HeatmapThread: !@ CAM is Working
+11-14 12:57:49.218  3220  3253 E BatteryStatsService: Invalid uid for waking network packet: -1
+11-14 12:57:49.282  2201  2503 E HWComposer: getLuts: getLuts failed for display 4630947059332006275: UNSUPPORTED (8)
+11-14 12:57:49.334  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.
+11-14 12:57:49.834  2092  2092 E ANDR-PERF-MPCTL: ANDR-PERF-MPCTL: internal_perf_lock_acq_verification() 385: Perflock Submit request limit reached.

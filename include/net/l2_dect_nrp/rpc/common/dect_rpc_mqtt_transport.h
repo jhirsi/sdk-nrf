@@ -1,0 +1,1 @@
+/home/jani/ncs/nrf/subsys/net/l2_dect_nrp/rpc/common/dect_rpc_mqtt_transport.h

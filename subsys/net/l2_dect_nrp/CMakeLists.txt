@@ -23,3 +23,6 @@ zephyr_include_directories(include)
 zephyr_library_include_directories(
 	${ZEPHYR_BASE}/subsys/net/ip
 )
+
+# DECT RPC support
+add_subdirectory_ifdef(CONFIG_DECT_NRP_RPC rpc)

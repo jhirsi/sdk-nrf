@@ -1,0 +1,16 @@
+sample:
+  name: DECT RPC Server
+  description: |
+    Sample demonstrating DECT NR+ RPC server running on nRF9151DK.
+    The server exposes DECT NR+ net mgmt API over UART RPC.
+    Requires an external nRF9151DK running the DECT RPC client sample.
+
+common:
+  board:
+    - nrf9151dk_nrf9151
+
+test:
+  integration:
+    - nrf_rpc
+    - dect_nrp
+

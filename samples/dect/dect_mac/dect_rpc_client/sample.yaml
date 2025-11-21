@@ -1,0 +1,16 @@
+sample:
+  name: DECT RPC Client
+  description: |
+    Sample demonstrating DECT NR+ RPC client running on external nRF9151DK.
+    The client can control DECT NR+ stack on server device over UART RPC.
+    Requires another nRF9151DK running the DECT RPC server sample.
+
+common:
+  board:
+    - nrf9151dk_nrf9151
+
+test:
+  integration:
+    - nrf_rpc
+    - dect_nrp
+

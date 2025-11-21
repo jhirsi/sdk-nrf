@@ -1,0 +1,10 @@
+--------- beginning of main
+11-14 14:16:52.041 17646 17888 D DirectShellClient: === Initializing REST API client ===
+11-14 14:16:52.041 17646 17888 D DirectShellClient: Device ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 14:16:52.042 17646 17888 D DirectShellClient: API Key length: 40
+11-14 14:16:52.042 17646 17888 D DirectShellClient: REST API client initialized
+11-14 14:16:52.042 17646 17888 D DirectShellClient: === REST API client ready ===
+11-14 14:16:58.754 17646 17888 D DirectShellClient: Sending command: {"deviceId":"50345053-3639-4cf9-80fd-240a783bb3fb","message":{"appId":"DECT_SHELL","data":"dect"}}
+11-14 14:16:58.755 17646 17888 D DirectShellClient: POST https://api.nrfcloud.com/v1/messages
+11-14 14:16:59.596 17646 17888 E DirectShellClient: Failed to send command: 405 
+11-14 14:16:59.596 17646 17888 E DirectShellClient: Error response: 

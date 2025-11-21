@@ -1,0 +1,37 @@
+--------- beginning of main
+11-14 13:10:12.991 16337 16337 D DirectShellActivity: Starting auto-connect...
+11-14 13:10:12.991 16337 16337 D DirectShellActivity: Device ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 13:10:12.991 16337 16337 D DirectShellActivity: API Key: provided (40 chars)
+11-14 13:10:13.013 16337 16337 D DirectShellActivity: Calling client.connect()...
+11-14 13:10:13.013 16337 16337 D DirectShellClient: === Starting MQTT connection ===
+11-14 13:10:13.013 16337 16337 D DirectShellClient: Device ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 13:10:13.013 16337 16337 D DirectShellClient: API Key length: 40
+11-14 13:10:13.013 16337 16337 D DirectShellClient: Broker URI: ssl://mqtt.nrfcloud.com:8883
+11-14 13:10:13.013 16337 16337 D DirectShellClient: MQTT Client ID: 50345053-3639-4cf9-80fd-240a783bb3fb
+11-14 13:10:13.013 16337 16337 D DirectShellClient: Creating MQTT client...
+11-14 13:10:13.014 16337 16337 D DirectShellClient: MQTT client created
+11-14 13:10:13.014 16337 16337 D DirectShellClient: Creating connection options...
+11-14 13:10:13.014 16337 16337 D DirectShellClient: Connection options created: cleanSession=true, keepAlive=60
+11-14 13:10:13.014 16337 16337 D DirectShellClient: Setting MQTT callback...
+11-14 13:10:13.014 16337 16337 D DirectShellClient: Connecting to MQTT broker...
+11-14 13:10:13.014 16337 16337 D DirectShellClient: Connection options - username: 50345053-3639-4cf9-80fd-240a783bb3fb, has password: true, socketFactory: true
+11-14 13:10:13.800 16337 16337 E DirectShellClient: === Connection error ===
+11-14 13:10:13.800 16337 16337 E DirectShellClient: MqttException (0) - javax.net.ssl.SSLHandshakeException: connection closed
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ExceptionHelper.createMqttException(ExceptionHelper.java:38)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ClientComms$ConnectBG.run(ClientComms.java:738)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at java.lang.Thread.run(Thread.java:1119)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: Caused by: javax.net.ssl.SSLHandshakeException: connection closed
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at com.android.org.conscrypt.SSLUtils.toSSLHandshakeException(SSLUtils.java:358)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at com.android.org.conscrypt.ConscryptEngineSocket.doHandshake(ConscryptEngineSocket.java:245)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at com.android.org.conscrypt.ConscryptEngineSocket.startHandshake(ConscryptEngineSocket.java:224)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.SSLNetworkModule.start(SSLNetworkModule.java:159)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	at org.eclipse.paho.client.mqttv3.internal.ClientComms$ConnectBG.run(ClientComms.java:724)
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	... 1 more
+11-14 13:10:13.800 16337 16337 E DirectShellClient: Caused by: java.io.EOFException: connection closed
+11-14 13:10:13.800 16337 16337 E DirectShellClient: 	... 5 more
+11-14 13:10:13.800 16337 16337 E DirectShellClient: Error type: MqttException
+11-14 13:10:13.800 16337 16337 E DirectShellClient: Error message: MqttException
+11-14 13:10:13.800 16337 16337 E DirectShellClient: MQTT reason code: 0
+11-14 13:10:13.800 16337 16337 E DirectShellClient: MQTT cause: connection closed
+11-14 13:10:13.800 16337 16337 D DirectShellActivity: Connection result: false
+11-14 13:10:13.800 16337 16337 E DirectShellActivity: Auto-connect failed

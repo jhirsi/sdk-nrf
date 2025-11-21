@@ -1,0 +1,17 @@
+sample:
+  name: DECT RPC Android Shell
+  description: |
+    Android terminal/shell application for remotely controlling and monitoring
+    DECT NR+ devices via nRF Cloud MQTT RPC. Provides a command-line interface
+    for DECT RPC operations from Android devices.
+  type: application
+  tags:
+    - android
+    - csharp
+    - dect
+    - rpc
+    - mqtt
+    - nrf-cloud
+    - terminal
+    - shell
+

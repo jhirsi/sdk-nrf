@@ -46,6 +46,8 @@ module-dep = NET_LOG
 module-str = Log level for dect nr+ L2 management
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 
+rsource "rpc/Kconfig"
+
 endif # NET_L2_DECT
 
 rsource "Kconfig.conn_mgr"

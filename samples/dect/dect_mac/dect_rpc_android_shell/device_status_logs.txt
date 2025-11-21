@@ -1,0 +1,13 @@
+--------- beginning of main
+11-14 12:01:20.591 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:01:20.591 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false
+11-14 12:01:28.228 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:01:28.228 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false
+11-14 12:02:20.699 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:02:20.700 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false
+11-14 12:02:26.632 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:02:26.632 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false
+11-14 12:02:27.953 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:02:27.953 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false
+11-14 12:02:31.101 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb is offline: stateOnline=null, connectionStatus=null, no lastSeen
+11-14 12:02:31.101 11460 11489 D CloudRestService: Device 50345053-3639-4cf9-80fd-240a783bb3fb: stateOnline=null, connectionStatus=null, isOnline=false

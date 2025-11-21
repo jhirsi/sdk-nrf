@@ -1,0 +1,17 @@
+/*
+ * Copyright (c) 2025 Nordic Semiconductor
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/ {
+	chosen {
+		nordic,rpc-uart = &uart1;
+	};
+};
+
+&uart1 {
+	status = "okay";
+	hw-flow-control;
+	current-speed = <1000000>;
+};

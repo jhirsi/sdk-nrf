@@ -120,6 +120,27 @@ PT device: dect_shell with zephyr network management based shell commands (defau
    nrf9151dk:
    $ west build -p -b nrf9151dk/nrf9151/ns -- -DOVERLAY_CONFIG="overlay-nrf_cloud_mqtt.conf"
 
+MQTT with DECT RPC support
+---------------------------
+
+PT device: dect_shell with DECT RPC server over MQTT transport. This enables remote control
+of the DECT NR+ stack from nRF Cloud or any MQTT client:
+
+.. code-block:: console
+
+   nrf9151dk:
+   $ west build -p -b nrf9151dk/nrf9151/ns -- -DOVERLAY_CONFIG="overlay-nrf_cloud_mqtt.conf;overlay-nrf_cloud_mqtt_rpc.conf"
+
+.. note::
+   The DECT RPC MQTT transport overlay (``overlay-nrf_cloud_mqtt_rpc.conf``) must be used
+   together with the base MQTT overlay (``overlay-nrf_cloud_mqtt.conf``). The order matters:
+   the base MQTT overlay should come first.
+
+.. note::
+   When using DECT RPC over MQTT, the device will accept DECT RPC commands via nRF Cloud
+   MQTT messages. Use the ``cloud connect`` shell command to establish the MQTT connection
+   after the device boots.
+
 COAP
 ----
 
