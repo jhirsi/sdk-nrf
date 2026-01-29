@@ -16,6 +16,8 @@ manifest:
   # "remotes" is a list of locations where git repositories are cloned
   # and fetched from.
   remotes:
+    - name: jhirsi
+      url-base: https://github.com/jhirsi
     # nRF Connect SDK GitHub organization.
     # NCS repositories are hosted here.
     - name: ncs
@@ -65,7 +67,8 @@ manifest:
     # https://developer.nordicsemi.com/nRF_Connect_SDK/doc/latest/zephyr/guides/modules.html
     - name: zephyr
       repo-path: sdk-zephyr
-      revision: 608dbfd6068ad550045faafb29a48563e83e4013
+      remote: jhirsi
+      revision: zephyr_desh_mdm_mac_dev_ncs_main_3_jun_v2
       import:
         # In addition to the zephyr repository itself, NCS also
         # imports the contents of zephyr/west.yml at the above
