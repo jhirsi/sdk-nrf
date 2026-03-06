@@ -31,6 +31,10 @@ The following abbreviations from the DECT NR+ MAC specification (`ETSI TS 103 63
 * PT: Portable Termination point
 * BR: Border Router that connects the DECT NR network to the Internet
 
+.. note::
+   For using this sample as a **channel access testing** tool in line with ETSI EN 301 406-2
+   (DECT-2020 NR Part 2), see :ref:`dect_shell_channel_access_testing`.
+
 Main command structure:
 
   .. code-block:: console
