@@ -763,6 +763,9 @@ CoAP
    nrf9151dk:
    $ west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
 
+   thingy91x:
+   $ west build -p -b thingy91x/nrf9151/ns -- -DPM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual" -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
+
 .. note::
    System time is retrieved by using NTP.
    For the CA certificate, only the nRF Cloud CoAP CA certificate needs to be stored on the device with CoAP.
