@@ -11,10 +11,15 @@ common:
     - nrf9151dk/nrf9151/ns
   platform_allow:
     - nrf9151dk/nrf9151/ns
+    - thingy91x/nrf9151/ns
 tests:
   sample.dect.dect_shell: {}
   sample.dect.dect_shell.ft_sink:
     extra_args: FILE_SUFFIX=sm
+  sample.dect.dect_shell.ft_sink_thingy91x:
+    integration_platforms:
+      - thingy91x/nrf9151/ns
+    extra_args: FILE_SUFFIX=sm PM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual"
   sample.dect.dect_shell.iperf3_tx:
     extra_args: EXTRA_CONF_FILE="iperf3-common.conf;iperf3-tx.conf"
   sample.dect.dect_shell.iperf3_rx:
