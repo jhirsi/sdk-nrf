@@ -660,17 +660,17 @@ FT/Sink: Border Router
 
 This section describes how to build the DeSh sample to have Internet connection through Border Router, which is a cellular modem running on external 9151DK.
 
-LTE with `Serial Modem <ncs-serial-modem_>`_ running on external nRF9151 DK
----------------------------------------------------------------------------
+LTE with `Serial Modem <ncs-serial-modem_>`_
+--------------------------------------------
 
 * `Serial Modem <ncs-serial-modem_>`_ :
 
   .. note::
-     Change the current speed of uart2 to 1000000 (in the :file:`overlay-external-mcu.overlay` file) to reflect the DECT side speed where current speed of uart1 is 1000000.
+     Serial Modem supports versions ``v1.0.0`` and ``696ca4525b423f8157f81b974525c2cd6c51cd3d``.
 
   .. code-block:: console
 
-     west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="overlay-ppp.conf;overlay-cmux.conf" -DEXTRA_DTC_OVERLAY_FILE=overlay-external-mcu.overlay -Dapp_SNIPPET=nrf91-modem-trace-uart
+     west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="overlay-ppp.conf;overlay-cmux.conf" -DEXTRA_DTC_OVERLAY_FILE="overlay-external-mcu.overlay"
 
 * DeSh with FT/Sink configuration using Zephyr's cellular modem feature:
 
@@ -679,9 +679,11 @@ LTE with `Serial Modem <ncs-serial-modem_>`_ running on external nRF9151 DK
      nrf/samples/dect/dect_shell:
      west build -p -b nrf9151dk/nrf9151/ns -- -DFILE_SUFFIX=sm
 
-* Wiring as in the DeSh :file:`boards/nrf9151dk_nrf9151_ns_sm.overlay` and `Serial Modem <ncs-serial-modem_>`_ :file:`ncs-serial-modem/app/overlay-external-mcu.overlay` files:
+     west build -p -b thingy91x/nrf9151/ns -- -DPM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual" -DFILE_SUFFIX=sm
+     
+* Wiring as in the DeSh board overlay and `Serial Modem <ncs-serial-modem_>`_ :file:`ncs-serial-modem/app/overlay-external-mcu.overlay` files:
 
-  .. table:: Wire the DKs together as shown.
+  .. table:: Wire the boards together as shown.
 
      +------------------+-----------------+
      | Serial  Modem    | DECT NR+ Sink   |
@@ -689,13 +691,13 @@ LTE with `Serial Modem <ncs-serial-modem_>`_ running on external nRF9151 DK
      | nRF9151 DK       | nRF9151 DK      |
      |                  |                 |
      +==================+=================+
-     | **P0.10** (TX)   | **P0.10** (RX)  |
+     | **P0.02** (TX)   | **P0.10** (RX)  |
      +------------------+-----------------+
-     | **P0.11** (RX)   | **P0.11** (TX)  |
+     | **P0.03** (RX)   | **P0.11** (TX)  |
      +------------------+-----------------+
-     | **P0.12** (RTS)  | **P0.12** (CTS) |
+     | **P0.06** (RTS)  | **P0.12** (CTS) |
      +------------------+-----------------+
-     | **P0.13** (CTS)  | **P0.13** (RTS) |
+     | **P0.07** (CTS)  | **P0.13** (RTS) |
      +------------------+-----------------+
      | **P0.30** (RI)   | **P0.30** (RING)|
      +------------------+-----------------+
@@ -704,8 +706,31 @@ LTE with `Serial Modem <ncs-serial-modem_>`_ running on external nRF9151 DK
      | GND              | GND             |
      +------------------+-----------------+
 
-.. note::
-   Change VDD (nPM VOUT1) from 1.8V to 3.3V using the `Board Configurator app`_ in both DKs.
+  .. table:: Thingy:91 X wiring with Serial Modem.
+
+     +------------------+-------------------+
+     | Serial Modem     | DECT NR+ Sink     |
+     +------------------+-------------------+
+     | nRF9151 DK       | Thingy:91 X       |
+     |                  |                   |
+     +==================+===================+
+     | **P0.02** (TX)   | **P0.21** (RX)    |
+     +------------------+-------------------+
+     | **P0.03** (RX)   | **P0.22** (TX)    |
+     +------------------+-------------------+
+     | **P0.06** (RTS)  | **P0.23** (CTS)   |
+     +------------------+-------------------+
+     | **P0.07** (CTS)  | **P0.24** (RTS)   |
+     +------------------+-------------------+
+     | **P0.30** (RI)   | **P0.25** (RING)  |
+     +------------------+-------------------+
+     | **P0.31** (DTR)  | **P0.19** (DTR)   |
+     +------------------+-------------------+
+     | GND              | GND               |
+     +------------------+-------------------+
+
+  .. note::
+     On Thingy:91 X, using ``P0.19`` for DTR might require cutting SB9.
 
 iperf3 support
 ==============
@@ -770,6 +795,7 @@ CoAP
    System time is retrieved by using NTP.
    For the CA certificate, only the nRF Cloud CoAP CA certificate needs to be stored on the device with CoAP.
    Do not store the Amazon root CA certificate on the device with CoAP due to crypto limitations for handling RSA certificates.
+   Add ``-DFILE_SUFFIX=sm`` to enable FT/Sink Border Router over Serial Modem support.
 
 Dependencies
 ************
