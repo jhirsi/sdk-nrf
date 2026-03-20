@@ -1,0 +1,23 @@
+%% DECT NR+ RPC – Client & Server (control + data path)
+%% Client net_if L2 is DECT_RPC; logical name is Kconfig (default ``rpc-dect``).
+%% Open https://mermaid.live and paste this to render. Export as PNG or SVG.
+
+flowchart LR
+    subgraph CLIENT["CLIENT"]
+        A[App]
+        B[net_if dect_rpc]
+        C[RPC client]
+        A <--> B <--> C
+    end
+
+    UART[UART\nRPC+HDLC]
+
+    subgraph SERVER["SERVER"]
+        D[RPC server]
+        E[net_if dect0]
+        F[l2_dect]
+        G[Modem]
+        D --> E --> F --> G
+    end
+
+    C <--> UART <--> D

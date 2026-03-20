@@ -495,10 +495,12 @@ struct dect_sink_status_evt {
 
  /** @cond INTERNAL_HIDDEN */
 
+#if defined(CONFIG_NET_L2_DECT) && defined(CONFIG_NET_MGMT_EVENT_INFO_DEFAULT_DATA_SIZE)
 BUILD_ASSERT(CONFIG_NET_MGMT_EVENT_INFO_DEFAULT_DATA_SIZE >=
 		     (DECT_L2_MAX_NEIGHBOR_LIST_ITEM_COUNT * sizeof(uint32_t) + sizeof(uint8_t) +
 		      sizeof(int)),
 	     "CONFIG_NET_MGMT_EVENT_INFO_DEFAULT_DATA_SIZE too small");
+#endif
 
 /**
  * INTERNAL_HIDDEN @endcond
@@ -966,7 +968,13 @@ struct dect_status_info {
 	/** Associated children */
 	uint8_t child_count;
 	struct dect_association_data
-		child_associations[CONFIG_DECT_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT];
+		child_associations[
+#if defined(CONFIG_DECT_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT)
+		CONFIG_DECT_CLUSTER_MAX_CHILD_ASSOCIATION_COUNT
+#else
+		1
+#endif
+];
 
 	/** Border gateway and sink info */
 	struct net_if *br_net_iface;
@@ -1144,6 +1152,7 @@ struct dect_net_ipv6_prefix_config {
 };
 
 /** @brief DECT NR+ L2 context. */
+#if defined(CONFIG_NET_L2_DECT)
 struct dect_net_l2_context {
 	/** L2 flags. */
 	enum net_l2_flags flags;
@@ -1163,12 +1172,15 @@ struct dect_net_l2_context {
 	bool global_ipv6_addr_set;
 	struct in6_addr global_ipv6_addr;
 };
+#endif
 
 #define DECT_L2 DECT
 NET_L2_DECLARE_PUBLIC(DECT_L2);
 
 /** L2 context type to be used with NET_L2_GET_CTX_TYPE. */
+#if defined(CONFIG_NET_L2_DECT)
 #define DECT_L2_CTX_TYPE struct dect_net_l2_context
+#endif
 
 /** @brief Calls from driver to L2. */
 
@@ -1228,6 +1240,64 @@ void dect_net_l2_association_removed(struct net_if *iface, uint32_t long_rd_id,
  */
 void dect_net_l2_parent_ipv6_config_changed(struct net_if *iface, uint32_t parent_long_rd_id,
 					    struct dect_net_ipv6_prefix_config *ipv6_prefix_config);
+
+#if defined(CONFIG_DECT_NR_RPC_SERVER)
+/**
+ * @brief Optional RPC forward callback for received packets.
+ *
+ * When set, dect_net_l2_recv() calls this for every received IPv6 packet before
+ * processing. Used by DECT NR+ RPC server to forward packets to the RPC client.
+ * The callback must not take ownership of @p pkt; copy payload if needed.
+ * L2 releases @p pkt after the callback returns.
+ *
+ * @param iface DECT network interface.
+ * @param pkt   Received packet (do not unref in the callback).
+ */
+typedef void (*dect_net_l2_rpc_forward_cb_t)(struct net_if *iface, struct net_pkt *pkt);
+
+/**
+ * @brief Register callback for forwarding received packets over RPC.
+ *
+ * Only one callback can be registered. Pass NULL to clear.
+ *
+ * @param cb Callback to call for each received packet, or NULL to unregister.
+ */
+void dect_net_l2_rpc_forward_register(dect_net_l2_rpc_forward_cb_t cb);
+
+/**
+ * @brief Optional callback when link state (carrier/dormant) may have changed.
+ *
+ * When set, called from L2 whenever net_if_dormant_on/off or net_if_carrier_on/off
+ * would be applied to the DECT iface. Used by DECT NR+ RPC server to push
+ * carrier and dormant state to the client so the client iface mirrors the server.
+ *
+ * @param iface DECT network interface.
+ */
+typedef void (*dect_net_l2_link_state_cb_t)(struct net_if *iface);
+
+/**
+ * @brief Register callback for link state change notification.
+ *
+ * Only one callback can be registered. Pass NULL to clear.
+ *
+ * @param cb Callback to call when link state changes, or NULL to unregister.
+ */
+void dect_net_l2_link_state_register(dect_net_l2_link_state_cb_t cb);
+
+/**
+ * @brief Set whether the RPC client (ext-MCU) is considered connected.
+ *
+ * Use case is either RPC or PPP bridge, not both. When RPC server is enabled
+ * and the client is connected (e.g. after RPC init): received packets are
+ * handled only in the RPC client (forwarded via RPC; not passed to local stack).
+ * When the client is not connected: packets are handled locally in the RPC
+ * server networking stack. Call from RPC server when client session is
+ * established or lost (e.g. after successful RPC init / first command).
+ *
+ * @param connected true if the RPC client is connected, false otherwise.
+ */
+void dect_net_l2_rpc_client_set_connected(bool connected);
+#endif /* CONFIG_DECT_NR_RPC_SERVER */
 
 /**
  * @}

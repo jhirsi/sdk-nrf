@@ -1,0 +1,152 @@
+#
+# Copyright (c) 2026 Nordic Semiconductor ASA
+#
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+#
+
+menuconfig DECT_NR_RPC
+	bool "DECT NR+ over RPC [EXPERIMENTAL]"
+	select NRF_RPC
+	select NRF_RPC_CBOR
+	select EXPERIMENTAL
+	help
+	  Enables DECT NR+ networking interface over nRF RPC. Client exposes a
+	  Zephyr net_if that forwards raw IPv6 to/from a server running the
+	  full DECT stack and modem. Transport is UART between the two devices.
+
+if DECT_NR_RPC
+
+config DECT_NR_RPC_UART_TRANSPORT
+	bool "Use UART transport for DECT RPC"
+	depends on NRF_RPC_UART_TRANSPORT
+	default y
+	help
+	  Use UART to communicate between DECT NR+ RPC client and server (e.g. two
+	  nRF9151 DKs).
+
+choice DECT_NR_RPC_ROLE_CHOICE
+	prompt "DECT NR+ over RPC role"
+	default DECT_NR_RPC_SERVER if NET_L2_DECT
+	default DECT_NR_RPC_CLIENT
+	help
+	  Client: net_if on this core, no DECT NR+ modem. Server: runs l2_dect
+	  and DECT NR+ modem, forwards packets to/from client.
+
+config DECT_NR_RPC_CLIENT
+	bool "DECT NR+ over RPC client"
+	help
+	  Enables DECT NR+ RPC client. Application sees a DECT NR+ net_if;
+	  send/recv go over DECT NR+ RPC.
+
+config DECT_NR_RPC_SERVER
+	bool "DECT NR+ over RPC server"
+	depends on NET_L2_DECT
+	help
+	  Enables DECT NR+ RPC server. Receives raw IPv6 from client and injects into
+	  DECT NR+ L2 send path; forwards DECT NR+ receive traffic to client.
+
+endchoice
+
+config DECT_NR_RPC_NET_IF
+	bool "DECT NR+ over RPC network interface"
+	default y
+	help
+	  Client: enables IF_SEND/IF_RECEIVE decoders and creates the Zephyr DECT NR+
+	  network interface. Server: enables the RPC bridge (IF_SEND,
+	  IF_GET_ADDRS, IF_STATUS, PING, shell, forwarding) in dect_rpc_if.c.
+	  This must be enabled on both client and server for a working link.
+
+config DECT_NR_RPC_SHELL
+	bool "DECT L2 shell over RPC (server)"
+	depends on DECT_NR_RPC_SERVER
+	select DECT_L2_SHELL_LIB
+	select DECT_L2_SHELL_RPC
+	help
+	  Run DECT L2 shell commands remotely over RPC. Client sends subcmd and
+	  args; server runs the same L2 shell and returns captured output. If
+	  the server's local shell is in use, RPC responds with BUSY (server
+	  shell always wins). Requires CONFIG_DECT_L2_SHELL_LIB on the server.
+
+config DECT_NR_RPC_SERVER_SHELL_RPC_INIT
+	bool "Shell command dect_rpc_init on server (when RPC not auto-init)"
+	depends on DECT_NR_RPC_SERVER && SHELL
+	depends on !NRF_RPC_INIT
+	default y
+	help
+	  Register shell command dect_rpc_init so the user can initialize RPC
+	  when the client is connected over UART (avoids boot timeout when no client).
+
+if DECT_NR_RPC_CLIENT
+
+config DECT_NR_RPC_CLIENT_SHELL
+	bool "DECT NR+ RPC shell on client (dect status, dect run ...)"
+	depends on SHELL
+	help
+	  Expose shell commands "dect status" and "dect run <subcmd> [args...]"
+	  to request DECT status or run DECT L2 shell commands on the server
+	  over RPC. Requires CONFIG_SHELL=y.
+
+endif # DECT_NR_RPC_CLIENT
+
+if DECT_NR_RPC_NET_IF && DECT_NR_RPC_CLIENT
+
+# Zephyr ``net iface`` passes ``sizeof(ifname) - 1`` (i.e. LEN) into net_if_get_name(), which
+# rejects names where ``strlen >= len``. An N-character name therefore needs LEN > N (default
+# ``rpc-dect`` is 8 chars ⇒ set LEN default to 9).
+config NET_INTERFACE_NAME_LEN
+	default 9
+	depends on NET_INTERFACE_NAME
+
+config DECT_NR_RPC_CLIENT_IFACE_NAME
+	string "DECT NR+ RPC client interface logical name"
+	default "rpc-dect"
+	help
+	  Logical name passed to net_if_set_name() when CONFIG_NET_INTERFACE_NAME
+	  is enabled.
+
+config DECT_NR_RPC_AUTO_SYNC
+	bool "Auto-sync addresses a few seconds after RPC init"
+	default y
+	help
+	  Run one address sync from server shortly after DECT NR+ RPC init completes.
+	  Delay is set by DECT_NR_RPC_AUTO_SYNC_DELAY_SEC. "dect sync" remains
+	  available for manual sync.
+
+config DECT_NR_RPC_AUTO_SYNC_DELAY_SEC
+	int "Delay (seconds) after DECT NR+ RPC init before auto-sync"
+	depends on DECT_NR_RPC_AUTO_SYNC
+	default 3
+	help
+	  Seconds to wait after DECT NR+ RPC init before running the first address sync.
+
+config DECT_NR_RPC_ADDR_SYNC_INTERVAL_SEC
+	int "Periodic address sync interval (seconds)"
+	default 10
+	help
+	  Interval at which the client syncs IPv6 addresses and prefixes
+	  from the server so the client net_if mirrors the server DECT NR+ iface.
+	  Set to 0 to disable periodic sync.
+
+endif # DECT_NR_RPC_NET_IF && DECT_NR_RPC_CLIENT
+
+if DECT_NR_RPC_SERVER
+
+config DECT_NR_RPC_SERVER_EVT_PACING_MS
+	int "Milliseconds to pause after each DECT NR+ server-to-client RPC event"
+	range 0 500
+	default 20 if NRF_RPC_UART_RELIABLE
+	default 0
+	help
+	  Pause after DECT NR+ RPC server-originated DECT NR+ RPC events.
+	  Applies after DECT NR+ IF_LINK_STATE and DECT NR+ IF_ADDRS_CHANGED.
+	  After DECT NR+ IF_RECEIVE: only when CONFIG_NRF_RPC_UART_RELIABLE (default
+	  20 ms for HDLC ACK breathing room). When reliable is off, DECT NR+ IF_RECEIVE is not
+	  paced here (bulk traffic); default 0 disables pacing.
+
+endif # DECT_NR_RPC_SERVER
+
+module=NET_DECT_RPC
+module-str=DECT NR+ RPC
+source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
+endif # DECT_NR_RPC
