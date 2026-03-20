@@ -1,0 +1,25 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+
+sample:
+  name: DECT NR+ RPC client
+common:
+  tags:
+    - ci_build
+    - sysbuild
+    - ci_samples_dect
+  sysbuild: true
+  build_only: true
+  integration_platforms:
+    - nrf9151dk/nrf9151/ns
+  platform_allow:
+    - nrf9151dk/nrf9151/ns
+
+tests:
+  sample.dect.dect_rpc_client: {}
+  sample.dect.dect_rpc_client.rpc_uart_reliable:
+    extra_args: EXTRA_CONF_FILE=rpc-uart-reliable.conf
+  sample.dect.dect_rpc_client.iperf3_tx:
+    extra_args: EXTRA_CONF_FILE="iperf3-common.conf;iperf3-tx.conf"
+  sample.dect.dect_rpc_client.iperf3_rx:
+    extra_args: EXTRA_CONF_FILE="iperf3-common.conf;iperf3-rx.conf"

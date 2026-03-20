@@ -1,0 +1,22 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+
+sample:
+  name: DECT NR+ RPC server
+
+common:
+  tags:
+    - ci_build
+    - sysbuild
+    - ci_samples_dect
+  sysbuild: true
+  build_only: true
+  integration_platforms:
+    - nrf9151dk/nrf9151/ns
+  platform_allow:
+    - nrf9151dk/nrf9151/ns
+
+tests:
+  sample.dect.dect_rpc_server: {}
+  sample.dect.dect_rpc_server.rpc_uart_reliable:
+    extra_args: EXTRA_CONF_FILE=rpc-uart-reliable.conf
