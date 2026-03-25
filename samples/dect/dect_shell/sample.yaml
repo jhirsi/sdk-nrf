@@ -14,6 +14,8 @@ common:
     - thingy91x/nrf9151/ns
 tests:
   sample.dect.dect_shell: {}
+  sample.dect.dect_shell.mdns_discover:
+    extra_args: EXTRA_CONF_FILE=mdns-discover.conf
   sample.dect.dect_shell.ft_sink:
     extra_args: FILE_SUFFIX=sm
   sample.dect.dect_shell.ft_sink_thingy91x:

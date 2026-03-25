@@ -38,3 +38,5 @@ target_sources_ifdef(CONFIG_SAMPLE_DESH_NATIVE_TLS app PRIVATE src/native_tls/de
 target_sources_ifdef(CONFIG_SAMPLE_DESH_NATIVE_TLS app PRIVATE src/native_tls/desh_native_tls.c)
 target_sources_ifdef(CONFIG_SAMPLE_DESH_DECT_ICMP_PING app PRIVATE src/ping/icmp_ping.c)
 target_sources_ifdef(CONFIG_SAMPLE_DESH_DECT_ICMP_PING app PRIVATE src/ping/icmp_ping_shell.c)
+target_sources_ifdef(CONFIG_DECT_SHELL_MDNS_DNS_SD_ADVERTISE app PRIVATE src/mdns/dns_sd_listen.c)
+target_sources_ifdef(CONFIG_DECT_SHELL_MDNS_DISCOVER app PRIVATE src/mdns/dect_discover_shell.c)
