@@ -25,6 +25,14 @@ DeSh enables testing of the DECT NR+ networking stack in the |NCS| with DECT NR+
 
 The subsections list the DeSh features, show shell command examples, and describe their usage.
 
+The default :file:`prj.conf` enables the Zephyr **mDNS / DNS-SD** stack (resolver and responder)
+and sets ``CONFIG_NET_SOCKETS_SERVICE_THREAD_PRIO`` above the DECT modem RX thread so the DNS
+socket service can drain multicast traffic under load.
+
+The **sample** options ``CONFIG_DECT_SHELL_MDNS_DNS_SD_ADVERTISE`` and ``CONFIG_DECT_SHELL_MDNS_DISCOVER`` default to off. Build with :file:`mdns-discover.conf` to enable DNS-SD advertisement on dect0 (stub UDP bind), the ``dect discover`` shell command, and extra DNS/RX pool tuning recommended for browse-heavy mDNS (``west build ... -- -DEXTRA_CONF_FILE=mdns-discover.conf``). Implementation lives under :file:`src/mdns/` in the sample tree.
+
+That fragment is meant to layer on the default :file:`prj.conf`, which sets ``CONFIG_NET_NATIVE=y`` and ``CONFIG_NET_IPV6=y`` (IPv4 off). In Zephyr, ``CONFIG_NET_NATIVE_IPV6`` then defaults to enabled whenever IPv6 is on, so the usual DeSh + :file:`mdns-discover.conf` profile has native IPv6. The fragment also enables ``CONFIG_MDNS_RESPONDER_DNS_SD_MULTIPLE_AAAA``, which depends on ``CONFIG_NET_NATIVE_IPV6`` in the stack Kconfig—if you merge a custom configuration that turns off native IPv6, drop or unset that option.
+
 The following abbreviations from the DECT NR+ MAC specification (`ETSI TS 103 636-4`_) are used in the examples:
 
 * FT: Fixed Termination point
@@ -72,6 +80,7 @@ Main command structure:
        disconnect
        rx
        tx
+       discover (mdns-discover.conf)
      hostname
        read
        write
@@ -118,6 +127,37 @@ To set and read the hostname of the DECT NR+ device, use the following commands:
 
      desh:~$ hostname write dect-ft-device
      desh:~$ hostname read
+
+Discover DECT NR+ peers (mDNS)
+==============================
+
+DeSh command ``dect discover``.
+
+The **mDNS stack** is already enabled in the default :file:`prj.conf`. To use this command,
+enable the sample options by building with :file:`mdns-discover.conf`.
+
+Use this command to list peers that advertise the DNS-SD service ``_dect-nr._udp`` on the DECT NR+ network.
+When ``CONFIG_NET_L2_DECT_ULA`` has configured an on-link ULA prefix on ``dect0``, the table includes a **ula (on-link)** column: the same /96 layout the L2 stack uses (common /64 from the ULA prefix, 32-bit long RD id from the mDNS address, last 32 bits of IID from the link-local AAAA), so you can ping or connect over ULA even though mDNS answers are often link-local.
+
+* Usage example:
+
+  .. code-block:: console
+
+      desh:~$ dect discover
+
+      dect discover: mDNS PTR _dect-nr._udp, then AAAA
+      ula (on-link): from L2 ULA /96 + long_rd + LL tail ("-" if unavailable)
+      discovery host: dect-nr+-device.local
+      (PTR browse may take up to ~8 s per service.)
+      _dect-nr._udp.local
+      PTR pass done, 2 host(s) — resolving AAAA
+      AAAA 2 host(s):
+      # | host                     | kind | ipv6 (mDNS)                     | ula (on-link)                   | long_rd_id
+      ----------------------------------------------------------------------------------------------------------------------
+      1 | dect-nr+pt1.local        | LL   | fe80::e64c:7945:1c99:a829       | fd12:3456:789a:bbcc:0000:0000:1c99:a829 | 479832105 (0x1c99a829)
+      2 | dect-nr+pt2.local        | LL   | fe80::e64c:7945:dd71:19fe       | fd12:3456:789a:bbdd:0000:0000:dd71:19fe | 3715176958 (0xdd7119fe)
+
+      dect discover: finished (2 host(s))
 
 Application settings
 ====================

@@ -40,6 +40,43 @@ config SAMPLE_DESH_CLOUD_COAP
 	help
 	  CoAP connection to nRF Cloud.
 
+config DECT_SHELL_MDNS_DNS_SD_ADVERTISE
+	bool "Advertise _dect-nr._udp on dect0 (DNS-SD stub socket)"
+	default n
+	depends on MDNS_RESPONDER_DNS_SD
+	help
+	  When enabled, the sample binds a UDP socket on the DECT interface and registers
+	  an mDNS DNS-SD record for _dect-nr._udp so peers and tools (for example avahi-browse)
+	  can discover this device. Zephyr only treats the service as valid when the advertised
+	  port is bound; datagrams on that port are discarded. The instance name follows
+	  net_hostname_get() (hostname shell / settings), truncated per DNS-SD label rules.
+	  Disable to save resources when you do not need to be discoverable via DNS-SD.
+	  For a turnkey mDNS/DNS-SD build, use mdns-discover.conf in the sample.
+	  Tune DECT_MDM_NRF_RX_MSGQ_SIZE / DECT_MDM_NRF_RX_EVENT_POOL_COUNT if you see
+	  RX queue or event-pool exhaustion under mDNS bursts.
+
+if DECT_SHELL_MDNS_DNS_SD_ADVERTISE
+
+config DECT_SHELL_MDNS_DNS_SD_PORT
+	int "UDP port for mDNS DNS-SD stub socket"
+	default 4700
+	range 1 65535
+	help
+	  UDP port bound on dect0 for DNS-SD port-in-use checks. Must match the port pointer
+	  in the registered dns_sd_rec.
+
+endif # DECT_SHELL_MDNS_DNS_SD_ADVERTISE
+
+config DECT_SHELL_MDNS_DISCOVER
+	bool "desh: dect discover (mDNS DNS-SD browse on DECT)"
+	depends on MDNS_RESOLVER
+	default n
+	help
+	  Enables the ``dect discover`` shell command: PTR browse for _dect-nr._udp on
+	  the mesh, then AAAA resolution per host. Requires the mDNS
+	  resolver. Enable together with mDNS/DNS-SD stack options (see mdns-discover.conf)
+	  when you need peer discovery on the mesh.
+
 config SAMPLE_DESH_L2_SHELL
 	bool "DECT NR+ Shell for nRF91 Modem MAC"
 	default y
