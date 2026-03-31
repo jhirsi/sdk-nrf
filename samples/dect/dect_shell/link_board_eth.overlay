@@ -1,0 +1,16 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * Phytec link_board_eth (ENC424J600). Upstream Zephyr driver does not apply
+ * zephyr,random-mac-address from devicetree; use local-mac-address for a stable LAA.
+ * W5500 builds use :file:`w5500-static-mac.overlay` (fixed MAC, default) or
+ * :file:`w5500.overlay` (random MAC).
+ */
+
+&enc424j600_link_board_eth {
+	local-mac-address = [f6 ce 36 03 42 0c];
+};

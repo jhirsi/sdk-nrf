@@ -526,11 +526,11 @@ SYS_INIT(dect_net_l2_ipv6_pt_nd_proxy_unicast_intercept_init, APPLICATION, 1);
 
 #endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT */
 
-static int dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_ctx *icmp_ctx,
-						 struct net_pkt *pkt,
-						 struct net_icmp_ip_hdr *ip_hdr,
-						 struct net_icmp_hdr *icmp_hdr,
-						 void *user_data)
+static enum net_verdict dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_ctx *icmp_ctx,
+							      struct net_pkt *pkt,
+							      struct net_icmp_ip_hdr *ip_hdr,
+							      struct net_icmp_hdr *icmp_hdr,
+							      void *user_data)
 {
 	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ns_access, struct net_icmpv6_ns_hdr);
 	struct net_icmpv6_ns_hdr *ns_hdr;
@@ -542,20 +542,17 @@ static int dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_ctx *icmp_ctx
 	ARG_UNUSED(user_data);
 
 	/*
-	 * Return 0 (not negative) for every "not my NS" early exit so the
-	 * dispatch loop continues to Zephyr's own NS handler.  The loop in
-	 * net_icmp_call_ipv6_handlers exits on ret < 0; returning -ENOENT
-	 * here would prevent Zephyr's handler from running and break normal
-	 * NS processing (DAD, NUD for the sink's own addresses, etc.).
+	 * Return NET_CONTINUE for every "not my NS" early exit so the
+	 * dispatch loop continues to Zephyr's own NS handler.
 	 */
 	rx = net_pkt_iface(pkt);
 	if (rx == NULL || net_if_l2(rx) != &NET_L2_GET_NAME(ETHERNET)) {
-		return 0;
+		return NET_CONTINUE;
 	}
 
 	ns_hdr = (struct net_icmpv6_ns_hdr *)net_pkt_get_data(pkt, &ns_access);
 	if (ns_hdr == NULL) {
-		return 0;
+		return NET_CONTINUE;
 	}
 
 	net_ipv6_addr_copy_raw(tgt.s6_addr, ns_hdr->tgt);
@@ -564,7 +561,7 @@ static int dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_ctx *icmp_ctx
 					(const struct net_in6_addr *)&ip_hdr->ipv6->src,
 					"icmp");
 
-	return 0;
+	return NET_CONTINUE;
 }
 
 static int dect_net_l2_ipv6_pt_nd_proxy_ns_sys_init(void)

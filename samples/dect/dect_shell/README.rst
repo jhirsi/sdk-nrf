@@ -695,10 +695,17 @@ Building
 
 See :ref:`cmake_options` for instructions on how to provide CMake options, for example to use a configuration overlay.
 
+.. _dect_shell_ft_sink_border_router:
+
 FT/Sink: Border Router
 ======================
 
-This section describes how to build the DeSh sample to have Internet connection through Border Router, which is a cellular modem running on external 9151DK.
+This section describes how to build the DeSh sample for Internet access through a Border Router (BR) sink:
+
+* LTE — cellular backhaul using `Serial Modem <ncs-serial-modem_>`_ on an external nRF9151 DK (FT/Sink build with ``FILE_SUFFIX=sm``).
+* Ethernet — wired backhaul using a Zephyr W5500 shield on the same nRF9151 DK that runs the DECT NR+ sink (:ref:`arceli_eth_w5500` or :ref:`seeed_w5500`).
+
+Both paths enable :kconfig:option:`CONFIG_NET_L2_DECT_BR` style border-router behavior; choose one backhaul per build (see notes under each variant).
 
 LTE with `Serial Modem <ncs-serial-modem_>`_
 --------------------------------------------
@@ -772,6 +779,122 @@ LTE with `Serial Modem <ncs-serial-modem_>`_
   .. note::
      On Thingy:91 X, using ``P0.19`` for DTR might require cutting SB9.
 
+Ethernet with W5500 shield (Arceli)
+-----------------------------------
+
+Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet.
+The sample adds :file:`eth_common.conf` and :file:`eth_w5500.conf` (Kconfig) and an Arceli tuning overlay: default :file:`w5500-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
+The pinout and SPI node come from the Zephyr shield devicetree: :file:`zephyr/boards/shields/arceli_eth_w5500/arceli_eth_w5500.overlay`.
+
+.. note::
+   Arduino **D8** (reset) and **D9** (interrupt) are shared with **BUTTON1** and **BUTTON2** on the nRF9151 DK.
+   Thus, DK library is disabled in the Ethernet Kconfig overlays to avoid conflicts with Arceli shield.
+
+* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace):
+
+  .. code-block:: console
+
+     nrf/samples/dect/dect_shell:
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+
+   * Edit ``local-mac-address`` in :file:`w5500-static-mac.overlay` so each board on the same LAN has a unique MAC.
+
+   * For a **random** Ethernet MAC each boot (``zephyr,random-mac-address``), use :file:`w5500.overlay` instead:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500.overlay
+
+   * To also obtain an IPv6 address via DHCPv6 (in addition to SLAAC), append
+     :file:`eth_dhcpv6_client.conf` to the configuration file list.  The DHCPv6
+     client starts automatically when the Ethernet interface comes up, but only
+     if SLAAC has not already provided a prefix:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_dhcpv6_client.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+
+   * Wiring as in the Arceli ETH W5500 shield overlay. Connect the RJ45 port to your LAN (router/switch).
+
+  .. table:: nRF9151 DK + Arceli ETH W5500 (Arduino header).
+
+      +-----------------------------+------------------------------------------+
+      | W5500 / shield signal       | nRF9151 DK (Arduino / GPIO)              |
+      +=============================+==========================================+
+      | **SCS**                      | **D10** (**P0.10**)                     |
+      +-----------------------------+------------------------------------------+
+      | **MOSI**                    | **D11** (**P0.11**)                      |
+      +-----------------------------+------------------------------------------+
+      | **MISO**                    | **D12** (**P0.12**)                      |
+      +-----------------------------+------------------------------------------+
+      | **SCK/CLK**                 | **D13** (**P0.13**)                      |
+      +-----------------------------+------------------------------------------+
+      | **INT**                     | **D9** (**P0.09**)                       |
+      +-----------------------------+------------------------------------------+
+      | **RESET**                   | **D8** (**P0.08**)                       |
+      +-----------------------------+------------------------------------------+
+      | **3.3V**                    | Arduino **3.3V** or DK **VDD** (3.3 V)   |
+      +-----------------------------+------------------------------------------+
+      | **GND**                     | **GND**                                  |
+      +-----------------------------+------------------------------------------+
+
+Ethernet with W5500 shield (Seeed / Wiznet mapping)
+-------------------------------------------------
+
+WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn your DK!
+
+Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
+Merge :file:`eth_common.conf` and :file:`eth_w5500.conf`.
+Devicetree comes from :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
+plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
+
+.. note::
+   The sample :file:`w5500.overlay` is Arceli-specific (targets ``&eth_w5500_arceli_eth_w5500``).
+   For ``seeed_w5500``, use :file:`w5500-seeed-static-mac.overlay` or :file:`w5500-seeed.overlay` (targets ``&eth_w5500``).
+
+* From the sample directory (copy-paste each line):
+
+  .. code-block:: console
+
+     cd nrf/samples/dect/dect_shell
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+   * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
+
+   * For a **random** Ethernet MAC each boot, use :file:`w5500-seeed.overlay` instead:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+
+Ethernet with ENC424J600 shield (Phytec link_board_eth)
+-------------------------------------------------------
+
+Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet
+via the Zephyr ``link_board_eth`` shield.
+
+The sample adds :file:`eth_common.conf` and :file:`eth_link_board_eth.conf` (Kconfig).
+Pin mapping and SPI node come from the Zephyr shield devicetree:
+:file:`zephyr/boards/shields/link_board_eth/link_board_eth.overlay`.
+
+* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace):
+
+  .. code-block:: console
+
+     nrf/samples/dect/dect_shell:
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf"
+
+  * To also obtain an IPv6 address via DHCPv6 (in addition to SLAAC), append
+    :file:`eth_dhcpv6_client.conf`:
+
+    .. code-block:: console
+
+       west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf;eth_dhcpv6_client.conf"
+
+  * Before attaching the shield to DK, set VDD (nPM VOUT1) to 3.3V.
+  * Connect the shield, make sure that shield pins are not connected to any other pins on the DK and attach it to DK, then connect the RJ45 port to your LAN (router/switch).
+
+
 iperf3 support
 ==============
 
@@ -836,6 +959,7 @@ CoAP
    For the CA certificate, only the nRF Cloud CoAP CA certificate needs to be stored on the device with CoAP.
    Do not store the Amazon root CA certificate on the device with CoAP due to crypto limitations for handling RSA certificates.
    Add ``-DFILE_SUFFIX=sm`` to enable FT/Sink Border Router over Serial Modem support.
+   For Border Router over Ethernet instead, use the **Ethernet with W5500 shield** build (see :ref:`dect_shell_ft_sink_border_router`; do not mix with ``FILE_SUFFIX=sm``).
 
 Dependencies
 ************
