@@ -58,7 +58,7 @@ config NET_L2_DECT_BR_IPV6_SINK_ROUTE96
 
 if NET_L2_DECT_BR && NET_L2_ETHERNET
 
-config NET_L2_DECT_BR_IPV6_ETH_PT_PROXY
+config NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT
 	bool "IPv6 PT globals on Ethernet for LAN neighbor discovery (BR)"
 	default y
 	depends on NET_IPV6_NBR_CACHE
@@ -71,7 +71,164 @@ config NET_L2_DECT_BR_IPV6_ETH_PT_PROXY
 	  When CONFIG_NET_IPV6_MLD is enabled, also join the solicited-node multicast
 	  group for each PT GUA so those NS are received on Ethernet.
 
-endif # NET_L2_DECT_BR
+	  Solicited Neighbor Advertisement replies for those NS are controlled separately
+	  by NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS (enabled by default).
+
+config NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS
+	bool "Answer Neighbor Solicitation for PT globals on Ethernet (ND proxy NS)"
+	default y
+	depends on NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT
+	help
+	  When a LAN router or host sends Neighbor Solicitation for a PT global
+	  address published on the Ethernet interface (neighbor entry pointing at
+	  this device's Ethernet MAC), respond with a solicited Neighbor
+	  Advertisement on behalf of the PT. Without this, the router may delete
+	  the ND cache entry and drop return traffic toward the PT on DECT.
+
+	  Enabled by default when NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT is enabled.
+	  Disable to suppress ND proxy NS handling while keeping static neighbor and
+	  MLD join behavior from the parent option.
+
+config NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT
+	bool "Intercept unicast NS for PT GUA before IPv6 forwarding (Huawei NUD)"
+	default y
+	depends on NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS
+	select NET_PKT_FILTER
+	select NET_PKT_FILTER_IPV6_HOOK
+	help
+	  Upstream routers (notably Huawei) often send Neighbor Solicitation
+	  with a unicast IPv6 destination equal to the PT global address (NUD),
+	  not only to the solicited-node multicast group.
+
+	  With CONFIG_NET_ROUTING, Zephyr forwards such packets to the DECT
+	  interface before the ND proxy NS ICMP handler runs on Ethernet, so no
+	  solicited NA is sent on the LAN and the router's neighbor cache entry
+	  for the PT expires.
+
+	  When enabled, an IPv6 packet-filter rule on receive matches those NS
+	  on the Ethernet interface, schedules the same deferred ND proxy NA as
+	  the ICMP handler, and drops the packet so it is not forwarded to DECT.
+
+config NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_PRIME
+	bool "Prime upstream router ND cache by sending NS-from-PT on Ethernet"
+	default y
+	depends on NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT
+	help
+	  Unsolicited Neighbor Advertisement (NET_L2_DECT_BR_UNSOLICITED_NA) is only
+	  honored by RFC 4861 receivers that already have a Neighbor Cache entry for
+	  the target. A cold upstream router whose entry for a PT global address has
+	  expired (or never existed) silently drops the advertisement, and packets
+	  returning from the internet to the PT are dropped at the router.
+
+	  When enabled, for each PT global address published on Ethernet the sink
+	  sends one Neighbor Solicitation with source = the PT global address,
+	  target = the default router's address, destination = the default router's
+	  address (unicast), and SLLAO = this device's Ethernet MAC. Per RFC 4861
+	  7.2.3 the receiver creates or refreshes a Neighbor Cache entry for the
+	  source address from the SLLAO, installing (PT GUA -> sink MAC) so the
+	  upstream router can forward return traffic for the PT to this device.
+
+	  The Solicitation is sent once, on add, right after the neighbor entry is
+	  published and the solicited-node group is joined. No-op when no default
+	  router is known. Refresh after that point is reactive: the upstream
+	  router's NUD probes are answered by the unicast NS intercept ND proxy
+	  (NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT).
+
+config NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NA_UNICAST_REFRESH
+	bool "Refresh upstream router ND cache by sending unicast NA-from-PT"
+	default y
+	depends on NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT
+	depends on NET_L2_DECT_BR_UNSOLICITED_NA
+	help
+	  In addition to the multicast unsolicited Neighbor Advertisement sent by
+	  NET_L2_DECT_BR_UNSOLICITED_NA (to ff02::1), also send a unicast NA addressed
+	  to the upstream default router for each PT global address. Both forms only
+	  update an existing Neighbor Cache entry per RFC 4861 7.2.5, but a unicast
+	  NA targeting the router specifically is less likely to be rate limited or
+	  dropped on shared LAN segments, and it pairs naturally with the proactive
+	  NS-from-PT priming above to keep the router's entry REACHABLE.
+
+	  No effect when no default router is known (sink falls back to multicast
+	  only). Sent once on add, alongside the initial NS prime and unsolicited
+	  NA burst.
+
+config NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE
+	bool "Install /N route on upstream Ethernet iface via default router LL"
+	default y
+	depends on !MODEM_CELLULAR
+	help
+	  When the sink learns the upstream RA prefix and the default router,
+	  install a static /N route on the upstream Ethernet interface for the
+	  RA-learned prefix with nexthop = the default router's link-local
+	  address. The router's link-local is already REACHABLE in the
+	  neighbor cache from the RA's SLLAO, so forwarded packets destined
+	  to any address inside the upstream prefix (e.g. the router GUA
+	  <prefix>::1) hit a pre-resolved nexthop on the very first packet
+	  instead of falling through to direct neighbor discovery on the
+	  upstream iface. On flaky link layers (e.g. SPI-attached W5500) the
+	  first NS for direct ND is occasionally lost, dropping the first
+	  forwarded packet; this route eliminates that class of first-packet
+	  drop.
+
+	  Disable this option (set =n) to revert to the default Zephyr
+	  behavior where in-prefix destinations are resolved via direct ND on
+	  the upstream iface. Useful for A/B testing against routers whose
+	  ND / SAVI semantics may interact poorly with a sink-installed
+	  on-link route.
+
+config NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS
+	int "Pacing delay (ms) between consecutive PT ND proxy sends on Ethernet"
+	default 10
+	range 0 100
+	help
+	  When a PT is added or refreshed, the sink emits up to three Ethernet
+	  frames in immediate succession on the uplink: NS prime, unicast NA,
+	  multicast NA. On low-end SPI-attached MAC/PHY combos (e.g. WIZnet
+	  W5500) bursting three frames within a few ms occasionally trips the
+	  driver's per-frame TX-completion-IRQ timeout (10 ms in the upstream
+	  Zephyr w5500 driver) and the second or third frame fails with -EIO,
+	  surfacing as <wrn> net_if: iface N pkt 0x... send failure status -5.
+
+	  This option inserts a short sleep between consecutive sends so the
+	  driver has time to deliver the previous TX-complete IRQ and release
+	  its TX socket before the next SEND command is issued. 10 ms matches
+	  the upstream driver's per-frame timeout and is a safe default; 0
+	  disables the pacing entirely (still yields the worker thread).
+
+config NET_L2_DECT_BR_UNSOLICITED_NA
+	bool "Send unsolicited Neighbor Advertisements on Ethernet sink uplink"
+	default y
+	depends on NET_NATIVE_IPV6 && NET_IPV6_ND && NET_IPV6_NBR_CACHE
+	depends on !MODEM_CELLULAR
+	help
+	  When the sink border router uses Ethernet as the uplink (not cellular PPP),
+	  send RFC 4861 unsolicited Neighbor Advertisements (IPv6 dst ff02::1, one NA
+	  per usable unicast address on the uplink, src = that address) after a
+	  delayed post-up work item runs and again when a global address is added on
+	  that interface.
+
+	  This helps LAN routers and hosts refresh neighbor cache entries after boot,
+	  which is especially relevant when the Ethernet MAC can change between resets
+	  (for example zephyr,random-mac-address): otherwise peers may keep stale
+	  IPv6-to-MAC mappings until ND probes occur.
+
+	  When NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT is enabled, also sends one unsolicited
+	  NA per PT global address learned on DECT, once at the moment the PT GUA is
+	  installed as a neighbor (i.e. on PT association, once the upstream RA prefix
+	  is known). The frame has src = target = PT GUA so it mimics the PT and is
+	  accepted by receivers that validate src == target (e.g. Windows); the
+	  link-layer option carries this device's Ethernet MAC, which is the mapping
+	  LAN peers record for the PT GUA.
+
+	  Note: NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NA_UNICAST_REFRESH (unicast NA-from-PT
+	  toward the upstream router) depends on this option and is silently disabled
+	  when this is turned off.
+
+	  Disable to suppress extra multicast ND traffic if your uplink MAC is stable and
+	  discovery already behaves correctly. Note that this also turns off the PT
+	  ND-proxy unicast NA refresh as described above.
+
+endif # NET_L2_DECT_BR && NET_L2_ETHERNET
 
 module=NET_L2_DECT_BR
 module-str=DECT NR+ L2 Border Router / Sink
