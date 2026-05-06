@@ -31,6 +31,14 @@
 #include "route.h"
 #include "ipv6.h"
 
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+#include "icmpv6.h" /* NET_ICMPV6_NA_FLAG_OVERRIDE */
+#endif
+
+#if defined(CONFIG_NET_DHCPV6)
+#include <zephyr/net/dhcpv6.h>
+#endif
+
 #include <net/dect/dect_utils.h>
 
 #include "dect_net_l2_internal.h"
@@ -46,11 +54,22 @@ static struct net_if *iface_for_prefix;
 static struct net_if *iface_for_dect;
 
 struct in6_addr sink_prefix_addr;
-static bool sink_prefix_addr_set;
+static atomic_t sink_prefix_addr_set;
 /** Bytes of on-DECT prefix: 8 (/64) or 12 (/96 with transmitter long RD after delegated /64). */
 static uint8_t sink_dect_prefix_len_bytes;
 
 static struct in6_addr ipv6_router_addr;
+
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE)
+/* Tracks the static /N route the sink installs on the upstream Ethernet iface
+ * for the RA-learned prefix, pointed at the default router's LL nexthop.
+ * Gated by Kconfig (default y, depends on !MODEM_CELLULAR): the LTE iface
+ * is a point-to-point link with its own routing setup and no L2 neighbor
+ * discovery on the upstream side, so the on-link fallback that motivates
+ * this route does not apply there.
+ */
+static struct net_route_entry *eth_upstream_prefix_route;
+#endif
 
 /**
  * After learning delegated /64 from uplink, set DECT netiface prefix to that /64 plus
@@ -78,7 +97,7 @@ static void sink_apply_learned_delegated_prefix(const struct in6_addr *delegated
 		memset(&sink_prefix_addr.s6_addr[8], 0, 8);
 		sink_dect_prefix_len_bytes = DECT_NET_L2_SINK_IPV6_PREFIX_LEN_BYTES;
 	}
-	sink_prefix_addr_set = true;
+	atomic_set(&sink_prefix_addr_set, 1);
 }
 
 void dect_net_l2_sink_reapply_prefix_for_tx_rd(struct net_if *dect_iface)
@@ -86,7 +105,8 @@ void dect_net_l2_sink_reapply_prefix_for_tx_rd(struct net_if *dect_iface)
 	struct dect_net_ipv6_prefix_config new_prefix;
 	struct in6_addr delegated_ra64;
 
-	if (dect_iface == NULL || dect_iface != iface_for_dect || !sink_prefix_addr_set) {
+	if (dect_iface == NULL || dect_iface != iface_for_dect ||
+	    !atomic_get(&sink_prefix_addr_set)) {
 		return;
 	}
 
@@ -99,10 +119,83 @@ void dect_net_l2_sink_reapply_prefix_for_tx_rd(struct net_if *dect_iface)
 
 static void sink_clear_prefix(void)
 {
-	sink_prefix_addr_set = false;
+	atomic_set(&sink_prefix_addr_set, 0);
 	sink_dect_prefix_len_bytes = 0;
 	memset(&sink_prefix_addr, 0, sizeof(sink_prefix_addr));
 }
+
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE)
+/* Install/refresh a static route on the upstream Ethernet iface for the
+ * RA-learned prefix, with nexthop = default router's link-local address.
+ *
+ * Without this route, ipv6_route_packet()'s route-table lookup misses on
+ * destinations inside the upstream prefix and the forwarding path falls back
+ * to direct neighbor discovery for each such dst on eth0. On the first
+ * packet (e.g. PT pinging the router GUA prefix::1) the NS/NA round-trip
+ * costs an RTT and is occasionally lost on flaky drivers, so the first
+ * forwarded packet is dropped. With this route present, all in-prefix
+ * destinations are forwarded via the router LL which is already REACHABLE
+ * in the nbr cache (Zephyr installed it from the RA's SLLAO), so first
+ * packets go out immediately. Mirrors the /N route the sink installs on the
+ * DECT iface for each PT child.
+ */
+static void sink_install_eth_upstream_prefix_route(void)
+{
+	struct net_if_router *router;
+	struct in6_addr upstream_prefix;
+	struct in6_addr router_addr;
+
+	if (iface_for_prefix == NULL || !atomic_get(&sink_prefix_addr_set)) {
+		return;
+	}
+
+	/* Source the router LL live from Zephyr's router list rather than the
+	 * cached ipv6_router_addr static, so we are robust to the case where
+	 * NET_EVENT_IPV6_ROUTER_ADD fired before iface_for_prefix was set
+	 * (handler returns early on the iface mismatch and never assigns the
+	 * cached static; Zephyr does not re-fire ROUTER_ADD on RA renewal).
+	 */
+	router = net_if_ipv6_router_find_default(iface_for_prefix, NULL);
+	if (router == NULL) {
+		LOG_WRN("SINK: no default router found for iface %p", iface_for_prefix);
+		return;
+	}
+	net_ipv6_addr_copy_raw(router_addr.s6_addr, router->address.in6_addr.s6_addr);
+
+	memset(&upstream_prefix, 0, sizeof(upstream_prefix));
+	memcpy(upstream_prefix.s6_addr, sink_prefix_addr.s6_addr,
+	       DECT_NET_L2_SINK_IPV6_PREFIX_LEN_BYTES);
+
+	if (eth_upstream_prefix_route != NULL) {
+		(void)net_route_del(eth_upstream_prefix_route);
+		eth_upstream_prefix_route = NULL;
+	}
+
+	eth_upstream_prefix_route = net_route_add(iface_for_prefix,
+		&upstream_prefix,
+		DECT_NET_L2_SINK_IPV6_PREFIX_LEN_BYTES * 8U,
+		&router_addr,
+		NET_IPV6_ND_INFINITE_LIFETIME,
+		NET_ROUTE_PREFERENCE_HIGH);
+	if (eth_upstream_prefix_route == NULL) {
+		LOG_ERR("SINK: failed to install upstream /%u route via router LL",
+			(unsigned int)DECT_NET_L2_SINK_IPV6_PREFIX_LEN_BYTES * 8U);
+	} else {
+		LOG_INF("SINK: upstream /%u route installed via router LL %s",
+			(unsigned int)DECT_NET_L2_SINK_IPV6_PREFIX_LEN_BYTES * 8U,
+			net_sprint_ipv6_addr(&router_addr));
+	}
+}
+
+static void sink_remove_eth_upstream_prefix_route(void)
+{
+	if (eth_upstream_prefix_route != NULL) {
+		(void)net_route_del(eth_upstream_prefix_route);
+		eth_upstream_prefix_route = NULL;
+		LOG_INF("SINK: upstream prefix route removed");
+	}
+}
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE */
 
 #if defined(CONFIG_MODEM_CELLULAR)
 const struct device *modem = DEVICE_DT_GET(DT_ALIAS(modem));
@@ -111,6 +204,16 @@ static struct k_work_delayable lte_ipv6_router_nbr_deleted_work;
 
 #endif
 static struct k_work_delayable dect_sink_rs_work;
+#if defined(CONFIG_NET_DHCPV6)
+/* Delay DHCPv6 start so IPv6 link-local DAD completes before the first Solicit. */
+#define SINK_DHCPV6_START_DELAY_MS 5000
+static struct k_work_delayable sink_dhcpv6_start_work;
+#endif
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+/** After ADDR_ADD, wait so IPv6 addr state and related events can propagate before NA. */
+#define SINK_ETH_UNSOL_NA_ADDR_ADD_DELAY_MS 100
+static struct k_work_delayable sink_eth_unsol_na_work;
+#endif
 static struct net_mgmt_event_callback dect_net_l2_net_mgmt_ipv6_event_cb;
 
 static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callback *cb,
@@ -163,6 +266,9 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 					      NET_IPV6_ADDR_LEN),
 				iface_for_prefix);
 
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE)
+			sink_remove_eth_upstream_prefix_route();
+#endif
 			sink_clear_prefix();
 			dect_net_l2_sink_ipv6_config_changed(
 				iface_for_dect,
@@ -203,7 +309,7 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				continue;
 			}
 
-			if (sink_prefix_addr_set) {
+			if (atomic_get(&sink_prefix_addr_set)) {
 				if (net_ipv6_is_prefix(
 					ipv6_addr->s6_addr,
 					sink_prefix_addr.s6_addr,
@@ -226,21 +332,30 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				net_addr_ntop(AF_INET6, router_addr, ipv6_addr_str,
 					      NET_IPV6_ADDR_LEN),
 				iface_for_prefix);
-		} else if (sink_prefix_addr_set == false) {
-			struct dect_sink_status_evt sink_status_data = {
-				.sink_status = DECT_SINK_STATUS_CONNECTED,
-				.br_iface = iface_for_prefix,
-			};
-			struct dect_net_ipv6_prefix_config new_prefix;
+		} else {
+			if (!atomic_get(&sink_prefix_addr_set)) {
+				struct dect_sink_status_evt sink_status_data = {
+					.sink_status = DECT_SINK_STATUS_CONNECTED,
+					.br_iface = iface_for_prefix,
+				};
+				struct dect_net_ipv6_prefix_config new_prefix;
 
-			sink_apply_learned_delegated_prefix(&delegated_ra64);
-			new_prefix.prefix = sink_prefix_addr;
-			new_prefix.prefix_len = sink_dect_prefix_len_bytes;
+				sink_apply_learned_delegated_prefix(&delegated_ra64);
+				new_prefix.prefix = sink_prefix_addr;
+				new_prefix.prefix_len = sink_dect_prefix_len_bytes;
 
-			dect_net_l2_sink_ipv6_config_changed(
-				iface_for_dect,
-				&new_prefix);
-			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
+				dect_net_l2_sink_ipv6_config_changed(
+					iface_for_dect,
+					&new_prefix);
+				dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
+			}
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE)
+			/* sink_prefix_addr is valid now; install /N route via router LL
+			 * so first-packet forwarding to in-prefix dsts never falls back
+			 * to direct ND on eth0.
+			 */
+			sink_install_eth_upstream_prefix_route();
+#endif
 		}
 		break;
 	}
@@ -254,7 +369,7 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 		/* This is the trick: we get the 8 bytes as a prefix for
 		 * dect nr+ network usage from 1st added public address.
 		 */
-		if (sink_prefix_addr_set == false && net_ipv6_is_global_addr(ipv6_addr)) {
+		if (!atomic_get(&sink_prefix_addr_set) && net_ipv6_is_global_addr(ipv6_addr)) {
 			struct dect_sink_status_evt sink_status_data = {
 				.sink_status = DECT_SINK_STATUS_CONNECTED,
 				.br_iface = iface_for_prefix,
@@ -277,7 +392,25 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 				&new_prefix);
 
 			dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
+
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_UPSTREAM_PREFIX_ROUTE)
+			/* Also try to install the upstream /N route here in case
+			 * NET_EVENT_IPV6_ROUTER_ADD was dropped at the handler
+			 * entry guard before iface_for_prefix was initialized.
+			 * Helper short-circuits if no default router is known yet.
+			 */
+			sink_install_eth_upstream_prefix_route();
+#endif
 		}
+
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+		/* Other ifaces return at handler entry; non-NULL iface is iface_for_prefix. */
+		if (iface && net_if_is_up(iface) &&
+		    net_ipv6_is_global_addr((struct net_in6_addr *)ipv6_addr)) {
+			(void)k_work_reschedule(&sink_eth_unsol_na_work,
+					       K_MSEC(SINK_ETH_UNSOL_NA_ADDR_ADD_DELAY_MS));
+		}
+#endif
 		break;
 	}
 	case NET_EVENT_IPV6_ADDR_DEL: {
@@ -287,7 +420,7 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 		LOG_DBG("NET_EVENT_IPV6_ADDR_DEL: iface %p, addr %s", iface,
 			net_addr_ntop(AF_INET6, ipv6_addr, ipv6_addr_str, NET_IPV6_ADDR_LEN));
 
-		if (sink_prefix_addr_set == true &&
+		if (atomic_get(&sink_prefix_addr_set) &&
 		    net_ipv6_is_prefix(ipv6_addr->s6_addr, sink_prefix_addr.s6_addr, 64)) {
 			struct dect_sink_status_evt sink_status_data = {
 				.sink_status = DECT_SINK_STATUS_DISCONNECTED,
@@ -346,6 +479,23 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 		LOG_DBG("NET_EVENT_IPV6_ROUTE_DEL: iface %p", iface);
 		break;
 
+#if defined(CONFIG_NET_DHCPV6)
+	case NET_EVENT_IPV6_DAD_SUCCEED: {
+		struct net_event_ipv6_addr *evt = (struct net_event_ipv6_addr *)cb->info;
+
+		/* Start DHCPv6 only once the link-local address has passed DAD —
+		 * that is the source address DHCPv6 needs for its exchanges.
+		 */
+		if (evt && net_ipv6_is_ll_addr((struct net_in6_addr *)&evt->addr)) {
+			LOG_DBG("NET_EVENT_IPV6_DAD_SUCCEED: link-local DAD done on iface %p, "
+				"scheduling DHCPv6 start", iface);
+			k_work_reschedule(&sink_dhcpv6_start_work,
+					  K_MSEC(SINK_DHCPV6_START_DELAY_MS));
+		}
+		break;
+	}
+#endif
+
 	default:
 		LOG_WRN("Unknown event %llu", mgmt_event);
 		break;
@@ -354,7 +504,7 @@ static void dect_net_l2_net_mgmt_ipv6_event_handler(struct net_mgmt_event_callba
 
 bool dect_net_l2_sink_ipv6_prefix_get(struct dect_net_l2_sink_ipv6_prefix *prefix_out)
 {
-	if (sink_prefix_addr_set == false || iface_for_prefix == NULL) {
+	if (!atomic_get(&sink_prefix_addr_set) || iface_for_prefix == NULL) {
 		return false;
 	}
 	prefix_out->len = sink_dect_prefix_len_bytes;
@@ -401,6 +551,16 @@ static void dect_net_l2_sink_net_if_mgmt_event_handler(struct net_mgmt_event_cal
 		LOG_WRN("NET_EVENT_IF_DOWN: Sink networking iface (%p) is down", iface_for_prefix);
 		dect_mgmt_sink_status_evt(iface_for_dect, sink_status_data);
 		sink_clear_prefix();
+
+#if defined(CONFIG_NET_DHCPV6)
+		(void)k_work_cancel_delayable(&sink_dhcpv6_start_work);
+		net_dhcpv6_stop(iface);
+		LOG_INF("DHCPv6 client stopped on iface %p", iface);
+#endif
+
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+		(void)k_work_cancel_delayable(&sink_eth_unsol_na_work);
+#endif
 
 		/* Update our addressing */
 		dect_net_l2_sink_ipv6_config_changed(
@@ -456,20 +616,302 @@ static void dect_net_l2_sink_lte_ipv6_nbr_router_deleted_worker(struct k_work *w
 }
 #endif
 
-static void dect_net_l2_sink_rs_work_handler(struct k_work *work)
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+/**
+ * Send RFC 4861 unsolicited Neighbor Advertisements (dst ff02::1) for each usable
+ * unicast IPv6 on the sink uplink so routers/LAN peers refresh IPv6-to-MAC state.
+ */
+static void sink_eth_send_unsolicited_na(struct net_if *iface)
 {
-	if (iface_for_prefix && net_if_is_up(iface_for_prefix) && !sink_prefix_addr_set) {
-		LOG_INF("SINK: RS work: starting RS for iface %p", iface_for_prefix);
-		net_if_start_rs(iface_for_prefix);
+	struct net_if_ipv6 *ipv6;
+	struct net_in6_addr allnodes;
+
+	if (iface == NULL || !net_if_is_up(iface)) {
+		return;
+	}
+
+	if (net_if_flag_is_set(iface, NET_IF_IPV6_NO_ND)) {
+		return;
+	}
+
+	ipv6 = iface->config.ip.ipv6;
+	if (ipv6 == NULL) {
+		return;
+	}
+
+	net_ipv6_addr_create_ll_allnodes_mcast(&allnodes);
+
+	ARRAY_FOR_EACH(ipv6->unicast, i)
+	{
+		struct net_if_addr *ifa = &ipv6->unicast[i];
+		const struct net_in6_addr *addr = &ifa->address.in6_addr;
+
+		if (!ifa->is_used || ifa->address.family != AF_INET6) {
+			continue;
+		}
+
+		if (ifa->addr_state == NET_ADDR_TENTATIVE) {
+			continue;
+		}
+
+		if (net_ipv6_is_addr_unspecified(addr) || net_ipv6_is_addr_mcast(addr)) {
+			continue;
+		}
+
+		if (net_ipv6_send_na(iface, addr, &allnodes, addr,
+				     NET_ICMPV6_NA_FLAG_OVERRIDE) < 0) {
+			LOG_WRN("SINK: unsolicited NA failed for %s",
+				net_sprint_ipv6_addr(addr));
+		} else {
+			LOG_INF("SINK: unsolicited NA sent for %s (iface %d)",
+				net_sprint_ipv6_addr(addr),
+				net_if_get_by_iface(iface));
+		}
 	}
 }
 
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_PRIME)
+void dect_net_l2_sink_eth_pt_nd_proxy_ns_prime(const struct in6_addr *pt_global,
+					    const char *ctx)
+{
+	const struct net_in6_addr *src = (const struct net_in6_addr *)pt_global;
+	struct net_if_router *router;
+	struct net_in6_addr router_addr;
+	bool router_known;
+	const char *ctx_tag = (ctx != NULL) ? ctx : "?";
+	int ret;
+
+	if (iface_for_prefix == NULL || !net_if_is_up(iface_for_prefix)) {
+		return;
+	}
+
+	if (net_if_flag_is_set(iface_for_prefix, NET_IF_IPV6_NO_ND)) {
+		return;
+	}
+
+	if (pt_global == NULL || net_ipv6_is_addr_unspecified(src) ||
+	    net_ipv6_is_addr_mcast(src) || !net_ipv6_is_global_addr(src)) {
+		return;
+	}
+
+	router = net_if_ipv6_router_find_default(iface_for_prefix, NULL);
+	router_known = (router != NULL);
+	if (router_known) {
+		net_ipv6_addr_copy_raw(router_addr.s6_addr,
+				       router->address.in6_addr.s6_addr);
+	}
+
+	/*
+	 * NS-from-PT prime, RFC 4861 7.2.1/7.2.2 address resolution form:
+	 * src = PT GUA, target = router_addr, dst = router_addr (unicast),
+	 * SLLAO = this device's Ethernet MAC (is_my_address = false).
+	 *
+	 * RFC 4861 7.2.3 has the receiver create or refresh a Neighbor Cache
+	 * entry for the source address using the SLLAO. That installs the
+	 * (PT GUA -> sink MAC) mapping in the upstream router's NCE so it
+	 * can forward return traffic for the PT to this device.
+	 *
+	 * Compatible with every router stack tested so far (Asus / Asuswrt-
+	 * Merlin, Huawei, plain Linux).
+	 */
+	if (router_known) {
+		ret = net_ipv6_send_ns(iface_for_prefix, NULL, src,
+				       &router_addr,
+				       (const struct net_in6_addr *)&router_addr,
+				       false);
+		if (ret < 0) {
+			LOG_WRN("SINK: PT ND proxy NS prime (target=router, %s) "
+				"failed for %s (ret=%d)",
+				ctx_tag, net_sprint_ipv6_addr(src), ret);
+		} else {
+			LOG_INF("SINK: PT ND proxy NS prime (target=router, %s) "
+				"for %s -> %s (iface %d)",
+				ctx_tag, net_sprint_ipv6_addr(src),
+				net_sprint_ipv6_addr(&router_addr),
+				net_if_get_by_iface(iface_for_prefix));
+		}
+	}
+}
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_PRIME */
+
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NA_UNICAST_REFRESH)
+void dect_net_l2_sink_eth_pt_nd_proxy_na_unicast(const struct in6_addr *pt_global,
+					      const char *ctx)
+{
+	const struct net_in6_addr *tgt = (const struct net_in6_addr *)pt_global;
+	struct net_if_router *router;
+	struct net_in6_addr router_addr;
+	const char *ctx_tag = (ctx != NULL) ? ctx : "?";
+
+	if (iface_for_prefix == NULL || !net_if_is_up(iface_for_prefix)) {
+		return;
+	}
+
+	if (net_if_flag_is_set(iface_for_prefix, NET_IF_IPV6_NO_ND)) {
+		return;
+	}
+
+	if (pt_global == NULL || net_ipv6_is_addr_unspecified(tgt) ||
+	    net_ipv6_is_addr_mcast(tgt) || !net_ipv6_is_global_addr(tgt)) {
+		return;
+	}
+
+	router = net_if_ipv6_router_find_default(iface_for_prefix, NULL);
+	if (router == NULL) {
+		return;
+	}
+
+	net_ipv6_addr_copy_raw(router_addr.s6_addr, router->address.in6_addr.s6_addr);
+
+	/*
+	 * Source = PT GUA so the NA looks like it really came from the PT.
+	 * RFC 4861 7.2.4: src = target on a solicited NA; we send unsolicited
+	 * here (SOLICITED flag clear) but keep the same src convention so
+	 * receivers that validate src==tgt accept it. TLLAO carried by the
+	 * helper is the Ethernet interface's own MAC, which is the mapping
+	 * we want the router to record for the PT GUA.
+	 */
+	if (net_ipv6_send_na(iface_for_prefix, tgt, &router_addr, tgt,
+			     NET_ICMPV6_NA_FLAG_OVERRIDE) < 0) {
+		LOG_WRN("SINK: PT ND proxy unicast NA (%s) failed for %s",
+			ctx_tag, net_sprint_ipv6_addr(tgt));
+	} else {
+		LOG_INF("SINK: PT ND proxy unicast NA (%s) for %s -> %s (iface %d)",
+			ctx_tag,
+			net_sprint_ipv6_addr(tgt),
+			net_sprint_ipv6_addr(&router_addr),
+			net_if_get_by_iface(iface_for_prefix));
+	}
+}
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NA_UNICAST_REFRESH */
+
+#if defined(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
+void dect_net_l2_sink_eth_unsol_na_pt_nd_proxy(const struct in6_addr *pt_global)
+{
+	const struct net_in6_addr *tgt = (const struct net_in6_addr *)pt_global;
+	struct net_in6_addr allnodes;
+
+	if (iface_for_prefix == NULL || !net_if_is_up(iface_for_prefix)) {
+		return;
+	}
+
+	if (net_if_flag_is_set(iface_for_prefix, NET_IF_IPV6_NO_ND)) {
+		return;
+	}
+
+	if (pt_global == NULL || net_ipv6_is_addr_unspecified(tgt) ||
+	    net_ipv6_is_addr_mcast(tgt) || !net_ipv6_is_global_addr(tgt)) {
+		return;
+	}
+
+	net_ipv6_addr_create_ll_allnodes_mcast(&allnodes);
+
+	/*
+	 * RFC 4861 §4.4 / §7.2.6 unsolicited NA, ND-proxy variant:
+	 *   src    = PT GUA  (mimic the PT; src==tgt avoids "src!=tgt malformed"
+	 *                     rejection on Windows and other strict stacks, same
+	 *                     reasoning as the solicited NA reply and the unicast
+	 *                     NA refresh)
+	 *   dst    = all-nodes ff02::1
+	 *   target = PT GUA
+	 *   flags  = O=1, S=0, R=0  (Override so existing NCEs refresh; Solicited
+	 *                            MUST be 0 to avoid confusing receivers' NUD;
+	 *                            PT is a host so Router=0)
+	 *   TLLAO  = sink Ethernet MAC (set automatically inside net_ipv6_send_na
+	 *            from net_if_get_link_addr(iface)) — this is the (PT GUA ->
+	 *            sink MAC) mapping we want LAN peers to record.
+	 */
+	if (net_ipv6_send_na(iface_for_prefix, tgt, &allnodes, tgt,
+			     NET_ICMPV6_NA_FLAG_OVERRIDE) < 0) {
+		LOG_WRN("SINK: PT ND proxy unsolicited NA failed for %s",
+			net_sprint_ipv6_addr(tgt));
+	} else {
+		LOG_INF("SINK: PT ND proxy unsolicited NA for %s (iface %d)",
+			net_sprint_ipv6_addr(tgt),
+			net_if_get_by_iface(iface_for_prefix));
+	}
+}
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT */
+
+static void sink_eth_unsol_na_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (iface_for_prefix == NULL || !net_if_is_up(iface_for_prefix)) {
+		return;
+	}
+
+	LOG_INF("SINK: unsolicited NA work for iface %p", iface_for_prefix);
+	sink_eth_send_unsolicited_na(iface_for_prefix);
+}
+#endif /* CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA */
+
+#if defined(CONFIG_NET_DHCPV6)
+static void sink_dhcpv6_start_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (!iface_for_prefix || !net_if_is_up(iface_for_prefix)) {
+		return;
+	}
+
+	if (atomic_get(&sink_prefix_addr_set)) {
+		LOG_INF("DHCPv6 client: prefix already set, skipping start");
+		return;
+	}
+
+	struct net_dhcpv6_params dhcpv6_params = {
+		.request_addr = true,
+		.request_prefix = false,
+	};
+
+	net_dhcpv6_start(iface_for_prefix, &dhcpv6_params);
+	LOG_INF("DHCPv6 client started on iface %p", iface_for_prefix);
+}
+#endif
+
+static void dect_net_l2_sink_rs_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	if (iface_for_prefix && net_if_is_up(iface_for_prefix) &&
+	    !atomic_get(&sink_prefix_addr_set)) {
+		LOG_INF("SINK: RS work: starting RS for iface %p", iface_for_prefix);
+#if CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS > 0
+		k_msleep(CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS);
+#endif
+		net_if_start_rs(iface_for_prefix);
+	}
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+	if (iface_for_prefix && net_if_is_up(iface_for_prefix)) {
+		if (atomic_get(&sink_prefix_addr_set)) {
+			LOG_INF("SINK: RS work: prefix set, schedule unsolicited NA work "
+				"for iface %p", iface_for_prefix);
+			(void)k_work_reschedule(&sink_eth_unsol_na_work, K_NO_WAIT);
+		} else {
+			LOG_INF("SINK: RS work: no prefix set, schedule unsolicited NA work "
+				"for iface %p", iface_for_prefix);
+			(void)k_work_reschedule(&sink_eth_unsol_na_work, K_SECONDS(20));
+		}
+	}
+#endif
+}
+
 #define NET_IF_EVENT_MASK (NET_EVENT_IF_UP | NET_EVENT_IF_DOWN)
-#define IPV6_LAYER_EVENT_MASK                                                                      \
-	(NET_EVENT_IPV6_PREFIX_ADD | NET_EVENT_IPV6_PREFIX_DEL | NET_EVENT_IPV6_ADDR_ADD |         \
-	 NET_EVENT_IPV6_ADDR_DEL | NET_EVENT_IPV6_ROUTER_ADD | NET_EVENT_IPV6_ROUTER_DEL |         \
-	NET_EVENT_IPV6_NBR_DEL | NET_EVENT_IPV6_NBR_ADD | NET_EVENT_IPV6_ROUTE_ADD |               \
-	 NET_EVENT_IPV6_ROUTE_DEL)
+
+#if defined(CONFIG_NET_DHCPV6)
+#define IPV6_LAYER_EVENT_MASK_DHCPV6 (NET_EVENT_IPV6_DAD_SUCCEED)
+#else
+#define IPV6_LAYER_EVENT_MASK_DHCPV6 0
+#endif
+
+#define IPV6_LAYER_EVENT_MASK							\
+	(NET_EVENT_IPV6_PREFIX_ADD | NET_EVENT_IPV6_PREFIX_DEL |		\
+	 NET_EVENT_IPV6_ADDR_ADD | NET_EVENT_IPV6_ADDR_DEL |			\
+	 NET_EVENT_IPV6_ROUTER_ADD | NET_EVENT_IPV6_ROUTER_DEL |		\
+	 NET_EVENT_IPV6_NBR_ADD | NET_EVENT_IPV6_NBR_DEL |			\
+	 NET_EVENT_IPV6_ROUTE_ADD | NET_EVENT_IPV6_ROUTE_DEL |			\
+	 IPV6_LAYER_EVENT_MASK_DHCPV6)
 
 static int dect_net_l2_sink_init(void)
 {
@@ -517,6 +959,12 @@ static int dect_net_l2_sink_init(void)
 			      dect_net_l2_sink_lte_ipv6_nbr_router_deleted_worker);
 #endif
 	k_work_init_delayable(&dect_sink_rs_work, dect_net_l2_sink_rs_work_handler);
+#if defined(CONFIG_NET_DHCPV6)
+	k_work_init_delayable(&sink_dhcpv6_start_work, sink_dhcpv6_start_work_handler);
+#endif
+#if defined(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+	k_work_init_delayable(&sink_eth_unsol_na_work, sink_eth_unsol_na_work_handler);
+#endif
 
 	return 0;
 }

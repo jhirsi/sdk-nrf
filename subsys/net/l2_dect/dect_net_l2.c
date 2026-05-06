@@ -1061,6 +1061,30 @@ void dect_net_l2_sink_ipv6_config_changed(struct net_if *iface,
 			}
 		}
 	}
-
 	k_mutex_unlock(&associations_mutex);
+}
+
+bool dect_net_l2_child_global_ipv6_match(const struct in6_addr *addr)
+{
+	bool match = false;
+
+	if (addr == NULL) {
+		return false;
+	}
+
+	k_mutex_lock(&associations_mutex, K_FOREVER);
+	for (int i = 0; i < ARRAY_SIZE(child_associations); i++) {
+		if (!child_associations[i].in_use ||
+		    !child_associations[i].global_ipv6_addr_set) {
+			continue;
+		}
+
+		if (net_ipv6_addr_cmp(&child_associations[i].global_ipv6_addr, addr)) {
+			match = true;
+			break;
+		}
+	}
+	k_mutex_unlock(&associations_mutex);
+
+	return match;
 }

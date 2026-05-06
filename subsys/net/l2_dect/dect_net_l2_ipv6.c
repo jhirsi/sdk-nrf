@@ -6,22 +6,35 @@
 
 #include <string.h>
 
+#include <zephyr/kernel.h>
 #include <zephyr/net/net_core.h>
 #include <zephyr/net/net_if.h>
 #include <zephyr/net/net_ip.h>
 #include <zephyr/sys/byteorder.h>
 #include <zephyr/sys/util.h>
+#include <zephyr/init.h>
 
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 #include <zephyr/net/ethernet.h>
 #endif
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY) && IS_ENABLED(CONFIG_NET_IPV6_MLD)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT) && IS_ENABLED(CONFIG_NET_IPV6_MLD)
 #include <zephyr/net/mld.h>
+#endif
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS)
+#include <zephyr/net/icmp.h>
+#endif
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT)
+#include <zephyr/net/net_pkt_filter.h>
 #endif
 
 #include "ipv6.h"
+#include "nbr.h"
 #if defined(CONFIG_NET_L2_DECT_BR_IPV6_SINK_ROUTE96)
 #include "route.h"
+#endif
+
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS)
+#define ICMPV6_NS_TYPE 135
 #endif
 
 #include <net/dect/dect_net_l2.h>
@@ -128,21 +141,27 @@ static void dect_net_l2_ipv6_sink_route96_add(struct net_if *dect_iface,
 }
 #endif /* CONFIG_NET_L2_DECT_BR_IPV6_SINK_ROUTE96 */
 
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 static struct net_if *dect_net_l2_ipv6_eth_iface_first(void)
 {
 	return net_if_get_first_by_type(&NET_L2_GET_NAME(ETHERNET));
 }
 
 /*
- * Publish PT global address on Ethernet for LAN neighbor discovery: IPv6 neighbor
- * (PT GUA -> this FT's Ethernet MAC) and, when MLD is enabled, join the
- * solicited-node group so NS to that GUA are received on eth.
+ * Publish a PT global address on Ethernet for LAN neighbor discovery.
+ *
+ * No static neighbor entry is installed for the PT GUA on eth: that would
+ * shadow the DECT /96 route in net_route_get_info() (nbr lookup precedes
+ * route table) and self-loop forwarded traffic on eth0. PT membership is
+ * resolved in the NS handler via dect_net_l2_child_global_ipv6_match()
+ * instead.
+ *
+ * MLD join of the PT GUA's solicited-node group is required so router NS
+ * (address resolution / NUD) are actually delivered to the ND proxy handler.
  */
-static void dect_net_l2_ipv6_pt_eth_proxy_add(const struct in6_addr *pt_global)
+static void dect_net_l2_ipv6_pt_eth_nd_proxy_add(const struct in6_addr *pt_global)
 {
 	struct net_if *eth;
-	struct net_linkaddr *eth_mac;
 	const struct net_in6_addr *pt = (const struct net_in6_addr *)pt_global;
 
 	if (!net_ipv6_is_global_addr(pt)) {
@@ -155,16 +174,8 @@ static void dect_net_l2_ipv6_pt_eth_proxy_add(const struct in6_addr *pt_global)
 		return;
 	}
 
-	eth_mac = net_if_get_link_addr(eth);
-	if (!net_ipv6_nbr_add(eth, pt, eth_mac, false, NET_IPV6_NBR_STATE_REACHABLE)) {
-		LOG_ERR("(%s): cannot add PT %s as nbr on eth (FT LL %s)", __func__,
-			net_sprint_ipv6_addr(pt),
-			net_sprint_ll_addr(eth_mac->addr, eth_mac->len));
-		return;
-	}
-
-	LOG_DBG("(%s): PT %s on eth as nbr with FT MAC %s", __func__,
-		net_sprint_ipv6_addr(pt), net_sprint_ll_addr(eth_mac->addr, eth_mac->len));
+	LOG_DBG("(%s): publishing PT %s on eth (ND proxy via DECT association table)",
+		__func__, net_sprint_ipv6_addr(pt));
 
 #if defined(CONFIG_NET_IPV6_MLD)
 	{
@@ -183,9 +194,42 @@ static void dect_net_l2_ipv6_pt_eth_proxy_add(const struct in6_addr *pt_global)
 		}
 	}
 #endif
+
+	/*
+	 * Ordering is intentional and important for the cold-start case:
+	 *
+	 *   1. NS prime       — creates the Neighbor Cache entry on the
+	 *                       upstream router (RFC 4861 7.2.3). Without an
+	 *                       entry the subsequent NAs are silently dropped
+	 *                       per RFC 4861 7.2.5, so this MUST run first.
+	 *   2. Unicast NA     — refreshes the just-created entry to REACHABLE
+	 *                       on the router specifically; survives LAN
+	 *                       multicast filtering.
+	 *   3. Multicast NA   — informs the rest of the LAN (PCs, secondary
+	 *                       routers, etc.) about the PT->sink_MAC mapping;
+	 *                       only useful for peers that already had an
+	 *                       entry, but harmless otherwise.
+	 */
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_PRIME)
+	dect_net_l2_sink_eth_pt_nd_proxy_ns_prime(pt_global, "initial");
+	if (CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS > 0) {
+		k_msleep(CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS);
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NA_UNICAST_REFRESH)
+	dect_net_l2_sink_eth_pt_nd_proxy_na_unicast(pt_global, "initial");
+	if (CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS > 0) {
+		k_msleep(CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS);
+	}
+#endif
+
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_UNSOLICITED_NA)
+	dect_net_l2_sink_eth_unsol_na_pt_nd_proxy(pt_global);
+#endif
 }
 
-static void dect_net_l2_ipv6_pt_eth_proxy_remove(const struct in6_addr *pt_global)
+static void dect_net_l2_ipv6_pt_eth_nd_proxy_remove(const struct in6_addr *pt_global)
 {
 	struct net_if *eth;
 	const struct net_in6_addr *pt = (const struct net_in6_addr *)pt_global;
@@ -212,18 +256,329 @@ static void dect_net_l2_ipv6_pt_eth_proxy_remove(const struct in6_addr *pt_globa
 		}
 	}
 #endif
+}
 
-	{
-		struct net_in6_addr rm_addr;
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT */
 
-		net_ipv6_addr_copy_raw(rm_addr.s6_addr, pt->s6_addr);
-		if (!net_ipv6_nbr_rm(eth, &rm_addr)) {
-			LOG_DBG("(%s): no eth nbr for %s to remove (ok if missing)", __func__,
-				net_sprint_ipv6_addr(pt));
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS)
+
+/*
+ * ND proxy NS handler: when the upstream router sends Neighbor Solicitation for
+ * a PT's GUA (either initial address resolution or NUD), the sink must
+ * respond with a solicited NA on behalf of the PT. Without this, the router
+ * never gets a reply, its ND cache entry for the PT is deleted, and return
+ * traffic from the internet to the PT is dropped at the router.
+ *
+ * Membership test: the NS target must match the global IPv6 address of an
+ * associated DECT child (dect_net_l2_child_global_ipv6_match). The earlier
+ * implementation used a static neighbor entry on eth0 pointing at the sink's
+ * own MAC and inspected the neighbor cache here, but that entry collided
+ * with Zephyr's forwarding lookup (net_route_get_info / net_route_packet
+ * walk the neighbor cache by destination address before consulting the
+ * route table, and with iface=NULL the lower-slot entry "wins") and caused
+ * forwarded return traffic to be re-emitted on eth0 with dst MAC = sink's
+ * own MAC instead of being routed onto the DECT interface.
+ */
+static struct net_icmp_ctx dect_pt_nd_proxy_ns_ctx;
+
+/*
+ * Deferred ND proxy NA send.
+ *
+ * With NET_TC_RX_COUNT=0 the NS handler runs in the W5500 driver thread.
+ * Sending the NA inline self-blocks that thread on tx_sem (which the same
+ * thread must post from the SENDOK IR): -5, NA dropped, router NCE for
+ * the PT goes FAILED. Defer the TX to sysworkq.
+ *
+ * Queue depth 8; overflow is benign — the next router NS retry refills it.
+ */
+#define DECT_PT_ND_PROXY_NA_QUEUE_DEPTH 8
+
+struct dect_pt_nd_proxy_na_req {
+	bool in_use;
+	struct net_if *iface;
+	struct net_in6_addr src;    /* = NS target = PT GUA. */
+	struct net_in6_addr na_dst; /* = NS source (router) or all-nodes (DAD). */
+};
+
+static struct dect_pt_nd_proxy_na_req dect_pt_nd_proxy_na_queue[DECT_PT_ND_PROXY_NA_QUEUE_DEPTH];
+static struct k_spinlock dect_pt_nd_proxy_na_lock;
+
+static void dect_pt_nd_proxy_na_work_handler(struct k_work *work);
+static K_WORK_DEFINE(dect_pt_nd_proxy_na_work, dect_pt_nd_proxy_na_work_handler);
+
+static int dect_pt_nd_proxy_na_enqueue(struct net_if *iface,
+				    const struct net_in6_addr *src,
+				    const struct net_in6_addr *na_dst)
+{
+	k_spinlock_key_t key;
+
+	key = k_spin_lock(&dect_pt_nd_proxy_na_lock);
+	for (int i = 0; i < ARRAY_SIZE(dect_pt_nd_proxy_na_queue); i++) {
+		struct dect_pt_nd_proxy_na_req *r = &dect_pt_nd_proxy_na_queue[i];
+
+		if (!r->in_use) {
+			r->iface = iface;
+			r->src = *src;
+			r->na_dst = *na_dst;
+			r->in_use = true;
+			k_spin_unlock(&dect_pt_nd_proxy_na_lock, key);
+			return 0;
+		}
+	}
+	k_spin_unlock(&dect_pt_nd_proxy_na_lock, key);
+	return -ENOSPC;
+}
+
+static void dect_pt_nd_proxy_na_work_handler(struct k_work *work)
+{
+	ARG_UNUSED(work);
+
+	for (int i = 0; i < ARRAY_SIZE(dect_pt_nd_proxy_na_queue); i++) {
+		struct net_if *iface = NULL;
+		struct net_in6_addr src;
+		struct net_in6_addr na_dst;
+		k_spinlock_key_t key;
+		bool valid = false;
+		int ret;
+
+		key = k_spin_lock(&dect_pt_nd_proxy_na_lock);
+		if (dect_pt_nd_proxy_na_queue[i].in_use) {
+			iface = dect_pt_nd_proxy_na_queue[i].iface;
+			src = dect_pt_nd_proxy_na_queue[i].src;
+			na_dst = dect_pt_nd_proxy_na_queue[i].na_dst;
+			dect_pt_nd_proxy_na_queue[i].in_use = false;
+			valid = true;
+		}
+		k_spin_unlock(&dect_pt_nd_proxy_na_lock, key);
+
+		if (!valid) {
+			continue;
+		}
+
+		/*
+		 * Pace before each TX: we run shortly after a W5500 RX up-call
+		 * and the driver thread is still draining SPI/IR. Issuing the
+		 * TX immediately pushes SENDOK past the driver's 10 ms tx_sem
+		 * timeout (-5, NA dropped). Same gap the periodic worker uses
+		 * between successive TXes.
+		 */
+		if (CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS > 0) {
+			k_msleep(CONFIG_NET_L2_DECT_BR_IPV6_ETH_TX_PACING_MS);
+		}
+
+		/*
+		 * RFC 4861 7.2.4: solicited NA source = NS target (= PT GUA),
+		 * TLLAO = this iface's MAC. Don't use the sink's own GUA as
+		 * source even though it sits on the same /64 — Windows and
+		 * some other stacks reject a solicited NA whose source !=
+		 * target as malformed and refuse to update their NCE, leaving
+		 * the PT unreachable from the LAN.
+		 */
+		ret = net_ipv6_send_na(iface, &src, &na_dst, &src,
+				       NET_ICMPV6_NA_FLAG_SOLICITED |
+				       NET_ICMPV6_NA_FLAG_OVERRIDE);
+		if (ret < 0) {
+			LOG_WRN("SINK: ND proxy solicited NA failed for PT %s (ret=%d)",
+				net_sprint_ipv6_addr(&src), ret);
+		} else {
+			LOG_INF("SINK: ND proxy solicited NA sent for PT %s -> %s",
+				net_sprint_ipv6_addr(&src),
+				net_sprint_ipv6_addr(&na_dst));
 		}
 	}
 }
-#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY */
+
+/*
+ * Schedule a solicited ND proxy NA for a PT GUA. Returns true when the NS was
+ * accepted (NA queued). Used from the ICMP handler and from the unicast-intercept
+ * packet filter.
+ */
+static bool dect_pt_nd_proxy_ns_schedule(struct net_if *rx, const struct net_in6_addr *tgt,
+				      const struct net_in6_addr *ns_src, const char *via)
+{
+	struct net_in6_addr na_dst;
+	int qret;
+
+	if (!net_ipv6_is_global_addr(tgt)) {
+		return false;
+	}
+
+	if (!dect_net_l2_child_global_ipv6_match((const struct in6_addr *)tgt)) {
+		return false;
+	}
+
+	LOG_INF("SINK: solicited NS for PT %s from %s, scheduling ND proxy NA (%s)",
+		net_sprint_ipv6_addr(tgt), net_sprint_ipv6_addr(ns_src), via);
+
+	if (net_ipv6_is_addr_unspecified(ns_src)) {
+		net_ipv6_addr_create_ll_allnodes_mcast(&na_dst);
+	} else {
+		na_dst = *ns_src;
+	}
+
+	qret = dect_pt_nd_proxy_na_enqueue(rx, tgt, &na_dst);
+	if (qret < 0) {
+		LOG_WRN("SINK: ND proxy NA enqueue full for PT %s (depth=%d), dropping",
+			net_sprint_ipv6_addr(tgt),
+			(int)ARRAY_SIZE(dect_pt_nd_proxy_na_queue));
+		return false;
+	}
+
+	(void)k_work_submit(&dect_pt_nd_proxy_na_work);
+	return true;
+}
+
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT)
+
+static bool dect_pt_nd_proxy_ns_parse(struct net_pkt *pkt, struct net_in6_addr *tgt_out)
+{
+	struct net_ipv6_hdr *hdr = NET_IPV6_HDR(pkt);
+	struct net_pkt_cursor backup;
+	struct net_icmp_hdr icmp_hdr;
+	uint32_t reserved;
+
+	if (hdr->nexthdr != IPPROTO_ICMPV6) {
+		return false;
+	}
+
+	net_pkt_cursor_init(pkt);
+	net_pkt_cursor_backup(pkt, &backup);
+
+	if (net_pkt_skip(pkt, sizeof(struct net_ipv6_hdr)) != 0) {
+		goto restore;
+	}
+
+	if (net_pkt_read(pkt, &icmp_hdr, sizeof(icmp_hdr)) < 0) {
+		goto restore;
+	}
+
+	if (icmp_hdr.type != ICMPV6_NS_TYPE) {
+		goto restore;
+	}
+
+	if (net_pkt_read(pkt, &reserved, sizeof(reserved)) < 0) {
+		goto restore;
+	}
+
+	if (net_pkt_read(pkt, tgt_out->s6_addr, sizeof(tgt_out->s6_addr)) < 0) {
+		goto restore;
+	}
+
+	net_pkt_cursor_restore(pkt, &backup);
+	return true;
+
+restore:
+	net_pkt_cursor_restore(pkt, &backup);
+	return false;
+}
+
+static bool dect_pt_nd_proxy_unicast_ns_npf_test(struct npf_test *test, struct net_pkt *pkt)
+{
+	struct net_if *rx;
+	struct net_ipv6_hdr *hdr;
+	struct net_in6_addr tgt;
+
+	ARG_UNUSED(test);
+
+	rx = net_pkt_iface(pkt);
+	if (rx == NULL || net_if_l2(rx) != &NET_L2_GET_NAME(ETHERNET)) {
+		return false;
+	}
+
+	hdr = NET_IPV6_HDR(pkt);
+	if (net_ipv6_is_addr_mcast_raw(hdr->dst)) {
+		return false;
+	}
+
+	if (!dect_pt_nd_proxy_ns_parse(pkt, &tgt)) {
+		return false;
+	}
+
+	return dect_pt_nd_proxy_ns_schedule(rx, &tgt,
+					 (const struct net_in6_addr *)&hdr->src,
+					 "unicast intercept");
+}
+
+static struct npf_test dect_pt_nd_proxy_unicast_ns_npf_test_inst = {
+	.fn = dect_pt_nd_proxy_unicast_ns_npf_test,
+};
+
+static struct npf_rule dect_pt_nd_proxy_unicast_ns_intercept = {
+	.result = NET_DROP,
+	.nb_tests = 1,
+	.tests = { &dect_pt_nd_proxy_unicast_ns_npf_test_inst },
+};
+
+static int dect_net_l2_ipv6_pt_nd_proxy_unicast_intercept_init(void)
+{
+	/*
+	 * Steal rule first; npf_default_ok must terminate the list — with only
+	 * the intercept rule installed, evaluate() drops every non-matching IPv6
+	 * packet (RA, RS, etc.) and the sink never acquires a prefix.
+	 */
+	npf_insert_ipv6_recv_rule(&dect_pt_nd_proxy_unicast_ns_intercept);
+	npf_append_ipv6_recv_rule(&npf_default_ok);
+	LOG_INF("PT ND proxy unicast NS intercept rule registered on IPv6 recv");
+	return 0;
+}
+
+SYS_INIT(dect_net_l2_ipv6_pt_nd_proxy_unicast_intercept_init, APPLICATION, 1);
+
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS_UNICAST_INTERCEPT */
+
+static int dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_ctx *icmp_ctx,
+						 struct net_pkt *pkt,
+						 struct net_icmp_ip_hdr *ip_hdr,
+						 struct net_icmp_hdr *icmp_hdr,
+						 void *user_data)
+{
+	NET_PKT_DATA_ACCESS_CONTIGUOUS_DEFINE(ns_access, struct net_icmpv6_ns_hdr);
+	struct net_icmpv6_ns_hdr *ns_hdr;
+	struct net_if *rx;
+	struct net_in6_addr tgt;
+
+	ARG_UNUSED(icmp_ctx);
+	ARG_UNUSED(icmp_hdr);
+	ARG_UNUSED(user_data);
+
+	/*
+	 * Return 0 (not negative) for every "not my NS" early exit so the
+	 * dispatch loop continues to Zephyr's own NS handler.  The loop in
+	 * net_icmp_call_ipv6_handlers exits on ret < 0; returning -ENOENT
+	 * here would prevent Zephyr's handler from running and break normal
+	 * NS processing (DAD, NUD for the sink's own addresses, etc.).
+	 */
+	rx = net_pkt_iface(pkt);
+	if (rx == NULL || net_if_l2(rx) != &NET_L2_GET_NAME(ETHERNET)) {
+		return 0;
+	}
+
+	ns_hdr = (struct net_icmpv6_ns_hdr *)net_pkt_get_data(pkt, &ns_access);
+	if (ns_hdr == NULL) {
+		return 0;
+	}
+
+	net_ipv6_addr_copy_raw(tgt.s6_addr, ns_hdr->tgt);
+
+	(void)dect_pt_nd_proxy_ns_schedule(rx, &tgt,
+					(const struct net_in6_addr *)&ip_hdr->ipv6->src,
+					"icmp");
+
+	return 0;
+}
+
+static int dect_net_l2_ipv6_pt_nd_proxy_ns_sys_init(void)
+{
+	int ret;
+
+	ret = net_icmp_init_ctx(&dect_pt_nd_proxy_ns_ctx, NET_AF_INET6, ICMPV6_NS_TYPE, 0,
+				dect_net_l2_ipv6_pt_nd_proxy_ns_handler);
+	LOG_INF("PT ND proxy NS handler registered (ret=%d)", ret);
+	return 0;
+}
+SYS_INIT(dect_net_l2_ipv6_pt_nd_proxy_ns_sys_init, APPLICATION, 0);
+
+#endif /* CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT_NS */
 
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
 static void dect_net_l2_ipv6_util_global_nbr_add(
@@ -261,12 +616,12 @@ static void dect_net_l2_ipv6_util_global_nbr_add(
 					(__func__), net_sprint_ipv6_addr(&nbr_addr),
 					net_sprint_ll_addr(net_if_get_link_addr(iface)->addr, 8));
 
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 				{
 					struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
 
 					if ((l2_ctx->device_type & DECT_DEVICE_TYPE_FT) != 0) {
-						dect_net_l2_ipv6_pt_eth_proxy_add(&nbr_addr);
+						dect_net_l2_ipv6_pt_eth_nd_proxy_add(&nbr_addr);
 					}
 				}
 #endif
@@ -328,12 +683,12 @@ static void dect_net_l2_ipv6_util_nbr_remove(struct net_if *iface,
 		ass_list_item->local_ipv6_addr_set = false;
 	}
 	if (ass_list_item->global_ipv6_addr_set) {
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 		{
 			struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
 
 			if ((l2_ctx->device_type & DECT_DEVICE_TYPE_FT) != 0) {
-				dect_net_l2_ipv6_pt_eth_proxy_remove(
+				dect_net_l2_ipv6_pt_eth_nd_proxy_remove(
 					&ass_list_item->global_ipv6_addr);
 			}
 		}
@@ -550,12 +905,12 @@ void dect_net_l2_ipv6_addressing_parent_changed_handle(
 
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
 		if (list_item->global_ipv6_addr_set) {
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 			{
 				struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
 
 				if ((l2_ctx->device_type & DECT_DEVICE_TYPE_FT) != 0) {
-					dect_net_l2_ipv6_pt_eth_proxy_remove(
+					dect_net_l2_ipv6_pt_eth_nd_proxy_remove(
 						&list_item->global_ipv6_addr);
 				}
 			}
@@ -712,12 +1067,12 @@ void dect_net_l2_ipv6_global_addressing_child_removed_handle(
 	}
 #if defined(CONFIG_NET_IPV6_NBR_CACHE)
 	if (ass_list_item->global_ipv6_addr_set) {
-#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_PT_PROXY)
+#if IS_ENABLED(CONFIG_NET_L2_DECT_BR_IPV6_ETH_ND_PROXY_PT)
 		{
 			struct dect_net_l2_context *l2_ctx = net_if_l2_data(iface);
 
 			if ((l2_ctx->device_type & DECT_DEVICE_TYPE_FT) != 0) {
-				dect_net_l2_ipv6_pt_eth_proxy_remove(
+				dect_net_l2_ipv6_pt_eth_nd_proxy_remove(
 					&ass_list_item->global_ipv6_addr);
 			}
 		}
