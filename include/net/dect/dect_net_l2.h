@@ -792,6 +792,11 @@ struct dect_settings_cluster {
 	 *  channel reselection automatically.
 	 */
 	uint8_t channel_loaded_percent;
+
+	/** RACH configuration: response window length used in the cluster's RACH
+	 *  configuration broadcast. Range: 0-15.
+	 */
+	uint8_t rach_conf_resp_win_length;
 };
 
 /** @brief Network beacon settings. */
