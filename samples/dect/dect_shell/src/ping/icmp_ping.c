@@ -267,6 +267,7 @@ void icmp_ping_cmd_defaults_set(struct icmp_ping_shell_cmd_argv *ping_args)
 	ping_args->interval = ICMP_PARAM_INTERVAL_DEFAULT;
 	ping_args->timeout = ICMP_PARAM_TIMEOUT_DEFAULT;
 	ping_args->len = ICMP_PARAM_LENGTH_DEFAULT;
+	ping_args->mtu = ICMP_DEFAULT_LINK_MTU;
 
 	ping_args->ping_iface = net_if_get_by_index(
 		net_if_get_by_name(CONFIG_DECT_MDM_DEVICE_NAME));
@@ -315,7 +316,7 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 
 	if (!ping_args->force_ipv6 && ping_args->len > ipv4_max_payload_len) {
 		desh_warn("Payload size exceeds the link limits: MTU %d - headers %d = %d ",
-			  ping_args->force_ipv6, (ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN),
+			  ping_args->mtu, (ICMP_IPV4_HDR_LEN + ICMP_HDR_LEN),
 			  ipv4_max_payload_len);
 		/* Execute ping anyway */
 	}
@@ -385,7 +386,7 @@ static bool icmp_ping_current_conn_info_set(struct icmp_ping_shell_cmd_argv *pin
 
 	if (ping_argv->src->ai_family == AF_INET6 && ping_argv->len > ipv6_max_payload_len) {
 		desh_warn("Payload size exceeds the link limits: MTU %d - headers %d = %d ",
-			  ping_argv->mtu, (ICMP_IPV4_HDR_LEN - ICMP_HDR_LEN), ipv6_max_payload_len);
+			  ping_argv->mtu, (ICMP_IPV6_HDR_LEN + ICMP_HDR_LEN), ipv6_max_payload_len);
 		/* Continue still: */
 	}
 	ping_argv->conn_info_read_uptime = k_uptime_get();
