@@ -10,7 +10,7 @@
  * Build:
  *   west build -b nrf9151dk/nrf9151/ns -- \
  *     -DSHIELD=seeed_w5500 \
- *     -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" \
+ *     -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" \
  *     -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
  *
  * MAC below is locally administered unicast (U/L bit set). Replace all six octets
