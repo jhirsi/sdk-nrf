@@ -33,6 +33,18 @@ config DECT_MDM_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
 	help
 	  Enable TX window based flow ctrl on unacked mdm TX DLC data requests.
 
+config DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION
+	bool "Release association on DLC discard timer expiry"
+	depends on DECT_MDM_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
+	default y
+	help
+	  When a DLC data TX response returns
+	  NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED, release the
+	  association toward the unreachable peer with cause
+	  NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY. Disable to keep
+	  the association alive across transient link losses and let upper
+	  layers decide; the status is still logged either way.
+
 config DECT_MDM_NRF_CTRL_THREAD_STACK_SIZE
 	int "Driver's internal ctrl thread stack size"
 	default 3072

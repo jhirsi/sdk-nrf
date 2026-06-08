@@ -751,6 +751,7 @@ enum dect_settings_cmd_params_write_scope {
 	DECT_SETTINGS_WRITE_SCOPE_ASSOCIATION = 0x0400,
 	DECT_SETTINGS_WRITE_SCOPE_NETWORK_JOIN = 0x0800,
 	DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION = 0x1000,
+	DECT_SETTINGS_WRITE_SCOPE_DLC = 0x2000,
 };
 
 /** @brief Settings command parameters. */
@@ -893,6 +894,18 @@ struct dect_settings_security_conf {
 	uint8_t cipher_key[DECT_CIPHER_KEY_LENGTH];
 };
 
+/** @brief DLC (Data Link Control) settings. */
+struct dect_settings_dlc {
+	/** Release association when a DLC TX response returns
+	 *  DLC_DISCARD_TIMER_EXPIRED. true = release peer with cause
+	 *  BAD_RADIO_QUALITY (driver default, set via Kconfig
+	 *  DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION); false = keep
+	 *  the association alive across transient link losses and let upper
+	 *  layers decide.
+	 */
+	bool discard_timer_release_assoc;
+};
+
 /** @brief DECT NR+ Settings. */
 struct dect_settings {
 	/** Command params. */
@@ -936,6 +949,9 @@ struct dect_settings {
 
 	/** Security configuration. */
 	struct dect_settings_security_conf sec_conf;
+
+	/** DLC (Data Link Control) settings. */
+	struct dect_settings_dlc dlc;
 };
 
 /** @brief Association data. */
