@@ -2660,7 +2660,8 @@ static void handle_mdm_dlc_data_resp(struct dect_mdm_common_op_event_msgq_item *
 			"transaction id %u",
 			evt_data->long_rd_id, tmp_str, evt_data->status,
 			evt_data->acked_data[0].transaction_id);
-		if (evt_data->status == NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED) {
+		if (evt_data->status == NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED &&
+		    dect_mdm_settings_ref_get()->net_mgmt_common.dlc.discard_timer_release_assoc) {
 			LOG_ERR("DLC discard timer expired, "
 				"releasing association with long rd id %u",
 				evt_data->long_rd_id);

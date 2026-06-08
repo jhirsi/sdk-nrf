@@ -229,6 +229,14 @@ static const char dect_shell_sett_sec_conf_usage_str[] =
 	"                                     Example: 0123456789abcdef0123456789abcdef\n"
 	"      --sec_cipher_key <key>,        Set cipher key (hex string). Length 16.\n"
 	"                                     Example: 0123456789abcdef0123456789abcdef\n";
+static const char dect_shell_sett_dlc_usage_str[] =
+	"DLC settings\n"
+	"      --dlc_discard_release_assoc <on/off>,\n"
+	"                                     On DLC TX response DLC_DISCARD_TIMER_EXPIRED:\n"
+	"                                     \"on\" release the association toward the\n"
+	"                                     unreachable peer (cause BAD_RADIO_QUALITY);\n"
+	"                                     \"off\" keep it alive across transient losses.\n"
+	"                                     Default: on (from Kconfig)\n";
 
 /* The following do not have short options: */
 enum {
@@ -257,6 +265,7 @@ enum {
 	DECT_SHELL_SETT_CMD_SEC_MODE,
 	DECT_SHELL_SETT_CMD_SEC_INTEG_KEY,
 	DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY,
+	DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC,
 };
 
 /* Specifying the expected options (both long and short): */
@@ -302,6 +311,8 @@ static struct sys_getopt_option long_options_sett_cmd[] = {
 	{"sec_mode", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_MODE},
 	{"sec_integ_key", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_INTEG_KEY},
 	{"sec_cipher_key", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY},
+	{"dlc_discard_release_assoc", sys_getopt_required_argument, 0,
+	 DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC},
 	{0, 0, 0, 0}};
 
 	static const char dect_shell_cluster_reconfig_usage_str[] =
@@ -1913,6 +1924,8 @@ dect_common_utils_settings_write_scope_to_string(enum dect_settings_cmd_params_w
 		return "network_join";
 	case DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION:
 		return "security_configuration";
+	case DECT_SETTINGS_WRITE_SCOPE_DLC:
+		return "dlc";
 	default:
 		return "Unknown";
 	}
@@ -2094,6 +2107,10 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 					    sec_key_str);
 		}
 	}
+
+	dect_l2_shell_print("  DLC:");
+	dect_l2_shell_print("   Release assoc on discard timer expiry: %s",
+			    dect_sett->dlc.discard_timer_release_assoc ? "on" : "off");
 }
 
 static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, char **argv)
@@ -2500,6 +2517,20 @@ static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, cha
 				DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION;
 			break;
 		}
+		case DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC: {
+			if (!strcmp(sys_getopt_optarg, "on")) {
+				newsettings.dlc.discard_timer_release_assoc = true;
+			} else if (!strcmp(sys_getopt_optarg, "off")) {
+				newsettings.dlc.discard_timer_release_assoc = false;
+			} else {
+				dect_l2_shell_error(
+					"Invalid dlc_discard_release_assoc value: %s",
+					sys_getopt_optarg);
+				return;
+			}
+			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DLC;
+			break;
+		}
 
 		case 'h':
 			goto show_usage;
@@ -2525,10 +2556,19 @@ static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, cha
 	ret = net_mgmt(NET_REQUEST_DECT_SETTINGS_WRITE, context.iface, &newsettings,
 		       sizeof(newsettings));
 	if (ret) {
-		dect_l2_shell_error(
-			"Cannot write new settings: %d, there was a failure on scope: %s", ret,
-			dect_common_utils_settings_write_scope_to_string(
-				newsettings.cmd_params.failure_scope_bitmap_out));
+		if (newsettings.cmd_params.failure_scope_bitmap_out) {
+			dect_l2_shell_error(
+				"Cannot write new settings: %d "
+				"(failure scope bitmap: 0x%04x = %s)",
+				ret, newsettings.cmd_params.failure_scope_bitmap_out,
+				dect_common_utils_settings_write_scope_to_string(
+					newsettings.cmd_params.failure_scope_bitmap_out));
+		} else {
+			dect_l2_shell_error(
+				"Cannot write new settings: %d "
+				"(request rejected, requested scope bitmap: 0x%04x)",
+				ret, newsettings.cmd_params.write_scope_bitmap);
+		}
 	} else {
 		dect_l2_shell_print("Settings updated.");
 	}
@@ -2545,6 +2585,7 @@ show_usage:
 	dect_l2_shell_print("%s", dect_shell_sett_cluster_usage_str2);
 	dect_l2_shell_print("%s", dect_shell_sett_network_beacon_usage_str);
 	dect_l2_shell_print("%s", dect_shell_sett_sec_conf_usage_str);
+	dect_l2_shell_print("%s", dect_shell_sett_dlc_usage_str);
 }
 
 static void dect_shell_cluster_start_cmd_impl(const struct shell *shell, size_t argc, char **argv)

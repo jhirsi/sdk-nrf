@@ -62,6 +62,11 @@ static const struct dect_settings_security_conf security_configuration_data = {
 		       0x21, 0x21, 0x21},
 };
 
+static const struct dect_settings_dlc dlc_data = {
+	.discard_timer_release_assoc =
+		IS_ENABLED(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION),
+};
+
 static const struct dect_settings common_settings_data = {
 	.region = DECT_SETTINGS_REGION_EU,
 	.identities.network_id = DECT_DEFAULT_NW_ID,
@@ -80,6 +85,7 @@ static const struct dect_settings common_settings_data = {
 	.nw_beacon = nw_beacon_data,
 	.association = association_data,
 	.sec_conf = security_configuration_data,
+	.dlc = dlc_data,
 };
 
 static const struct dect_mdm_settings settings_data_defaults = {
@@ -278,6 +284,10 @@ dect_mdm_settings_write(struct dect_mdm_settings *dect_sett_in)
 		memcpy(current_sett->sec_conf.cipher_key, new_sett->sec_conf.cipher_key,
 		       sizeof(current_sett->sec_conf.cipher_key));
 		return_status.reactivate = true;
+	}
+	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_DLC) {
+		current_sett->dlc.discard_timer_release_assoc =
+			new_sett->dlc.discard_timer_release_assoc;
 	}
 
 	return_status.status =
