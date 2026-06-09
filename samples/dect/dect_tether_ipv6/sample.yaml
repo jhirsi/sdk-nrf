@@ -30,3 +30,5 @@ tests:
     extra_args: EXTRA_CONF_FILE=pt.conf;mdns-common.conf;mdns.conf
   sample.dect.dect_tether_ipv6.pt_arceli_w5500_mdns:
     extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE=pt.conf;eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf;mdns_forward.conf DTC_OVERLAY_FILE=w5500-static-mac.overlay
+  sample.dect.dect_tether_ipv6.pt_arceli_w5500_dect_rx_pool:
+    extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dect_rx_pool.conf;dlc_resilient.conf" DTC_OVERLAY_FILE=w5500-static-mac.overlay

@@ -486,6 +486,9 @@ Optional files in this sample directory (append in this order after :file:`eth_c
 :file:`eth_unsol_na.conf`
   Periodic unsolicited **Neighbor Advertisements** on ``eth0`` (optional ND-table aid).
 
+:file:`dect_rx_pool.conf`
+  Enables a **DECT-private RX net_pkt / net_buf pool** (see :ref:`dect_tether_ipv6_dect_rx_pool`) so eth0 RX bursts cannot starve dect0 RX.
+
 Example — Ethernet tether + W5500 (from the sample directory):
 
 .. code-block:: console
@@ -596,6 +599,32 @@ Pin mapping and SPI node come from the Zephyr shield devicetree :file:`zephyr/bo
 
 * Before attaching the shield to the DK, set VDD (nPM VOUT1) to 3.3 V.
 * Connect the shield so shield pins are not shorted to other DK connections, attach it, then connect the RJ45 port to your LAN (router/switch).
+
+.. _dect_tether_ipv6_dect_rx_pool:
+
+DECT-private RX pool (:file:`dect_rx_pool.conf`)
+================================================
+
+Under sustained bidirectional load (PC → DECT uplink + downstream return traffic), eth0 RX bursts allocate from the global Zephyr pools (``CONFIG_NET_PKT_RX_COUNT`` / ``CONFIG_NET_BUF_RX_COUNT``) and can **starve dect0 RX**, surfacing as ``RX packet allocation failed in ISR`` drops, followed by ``nrf_modem_dect_dlc_data_tx returned NRF_ENOMEM`` on the TX side and ``eth_w5500: TX semaphore timeout`` on the sink.
+
+Append :file:`dect_rx_pool.conf` **last** in ``EXTRA_CONF_FILE`` to enable ``CONFIG_DECT_MDM_RX_PRIVATE_POOL`` — a DECT-only ``net_pkt`` slab and ``net_buf`` pool isolated from the global RX pools:
+
+.. code-block:: console
+
+   cd nrf/samples/dect/dect_tether_ipv6
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION=y`` already set by the overlay):
+
+.. code-block:: console
+
+   uart:~$ dect_mdm rx_pool
+   DECT private RX pool:
+   Address         Total   Free    MaxUsed Name
+   0x...           35      35      8       dect_mdm_rx_pkts (slab)
+   0x...           50      50      8       dect_mdm_rx_bufs (bufs, 128 B)
+
+Bump ``PRIVATE_PKT_COUNT`` first if ``MaxUsed == Total`` under sustained traffic; raise ``PRIVATE_BUF_COUNT`` only if max-MTU downstream frames also become common (each consumes ``ceil(1500 / BUF_SIZE)`` fragments).
 
 mDNS / DNS-SD
 =============
