@@ -932,6 +932,32 @@ Pin mapping and SPI node come from the Zephyr shield devicetree:
   * Before attaching the shield to DK, set VDD (nPM VOUT1) to 3.3V.
   * Connect the shield, make sure that shield pins are not connected to any other pins on the DK and attach it to DK, then connect the RJ45 port to your LAN (router/switch).
 
+.. _dect_shell_dect_rx_pool:
+
+DECT-private RX pool (:file:`dect_rx_pool.conf`)
+------------------------------------------------
+
+When the DeSh sink (FT with BR) forwards heavy DECT uplink traffic to Ethernet, eth0 RX bursts allocate from the global Zephyr pools (``CONFIG_NET_PKT_RX_COUNT`` / ``CONFIG_NET_BUF_RX_COUNT``) and can **starve dect0 RX**, surfacing as ``RX packet allocation failed in ISR`` drops and follow-on ``nrf_modem_dect_dlc_data_tx returned NRF_ENOMEM`` warnings.
+
+Append :file:`dect_rx_pool.conf` **last** in ``EXTRA_CONF_FILE`` to enable ``CONFIG_DECT_MDM_RX_PRIVATE_POOL`` — a DECT-only ``net_pkt`` slab and ``net_buf`` pool isolated from the global RX pools. Example with the Seeed W5500 shield:
+
+.. code-block:: console
+
+   cd nrf/samples/dect/dect_shell
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION=y`` already set by the overlay):
+
+.. code-block:: console
+
+   desh:~$ dect_mdm rx_pool
+   DECT private RX pool:
+   Address         Total   Free    MaxUsed Name
+   0x...           20      20      8       dect_mdm_rx_pkts (slab)
+   0x...           40      40      8       dect_mdm_rx_bufs (bufs, 256 B)
+
+Bump ``PRIVATE_PKT_COUNT`` first if ``MaxUsed == Total`` under sustained traffic; raise ``PRIVATE_BUF_COUNT`` if max-MTU uplink frames are dominant (each consumes ``ceil(1500 / BUF_SIZE)`` fragments).
+
 
 iperf3 support
 ==============
