@@ -33,11 +33,45 @@ config NET_L2_DECT_BR
 	default y if NET_L2_ETHERNET || MODEM_CELLULAR
 	select NET_ROUTING if NET_IPV6 && NET_ROUTE
 	help
-	  Enable Border Router (BR) support.
-	  Serial Modem running with a LTE connection in the connected nRF9151 DK accessed
-	  through PPP by using MODEM_CELLULAR feature (preferred option),
-	  or Ethernet based NET_L2_ETHERNET mode can be used as a border router.
-	  If MODEM_CELLULAR is selected, then BR has only one sink and vice versa.
+	  Fixed Terminal (FT) could act also as a DECT border router: it obtains an IPv6 delegated
+	  prefix on a "sink" uplink and extends connectivity to Portable Terminals (PTs)
+	  on DECT. The sink may be cellular (PPP / MODEM_CELLULAR) or Ethernet
+	  (NET_L2_ETHERNET). Only one sink type is used at a time.
+	  When NET_IPV6 and NET_ROUTE are enabled, selects IPv6 routing support needed
+	  for forwarding between the sink and DECT.
+
+config NET_L2_DECT_BR_IPV6_SINK_ROUTE96
+	bool "IPv6 /96 connected route on DECT NR+ Sink"
+	default y
+	depends on NET_L2_DECT_BR && NET_ROUTE && NET_IPV6_NBR_CACHE
+	help
+	  Some deployments use a /96-long delegated prefix on the DECT interface
+	  (PT addresses live under that /96). This option installs a high-preference
+	  /96 connected route and a matching neighbor entry on the DECT interface so
+	  locally originated or forwarded packets destined to PTs are sent out DECT
+	  instead of matching only a shorter prefix on the sink uplink.
+
+	  Sink-agnostic: the route is installed on the DECT interface and keyed only
+	  on the /96 DECT prefix, so it applies to both Ethernet and cellular (PPP)
+	  sinks. Requires NET_ROUTE and IPv6 neighbor cache support. Turn off if you
+	  supply your own routes or use a flat /64-only DECT prefix layout.
+
+if NET_L2_DECT_BR && NET_L2_ETHERNET
+
+config NET_L2_DECT_BR_IPV6_ETH_PT_PROXY
+	bool "IPv6 PT globals on Ethernet for LAN neighbor discovery (BR)"
+	default y
+	depends on NET_IPV6_NBR_CACHE
+	help
+	  PTs are on DECT only, but LAN hosts and routers see the BR on Ethernet. For
+	  each PT global IPv6 address learned on DECT, add an IPv6 neighbor entry on the
+	  first Ethernet interface mapping that address to this device's Ethernet MAC,
+	  so neighbor solicitation for a PT GUA on the LAN is answered locally.
+
+	  When CONFIG_NET_IPV6_MLD is enabled, also join the solicited-node multicast
+	  group for each PT GUA so those NS are received on Ethernet.
+
+endif # NET_L2_DECT_BR
 
 module=NET_L2_DECT_BR
 module-str=DECT NR+ L2 Border Router / Sink
@@ -50,6 +84,7 @@ source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
 module=NET_L2_DECT_MGMT
 module-str=DECT NR+ L2 management
 source "${ZEPHYR_BASE}/subsys/logging/Kconfig.template.log_config"
+
 
 endif # NET_L2_DECT
 
