@@ -625,6 +625,42 @@ Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_T
    0x...           50      50      8       dect_mdm_rx_bufs (bufs, 128 B)
 
 Bump ``PRIVATE_PKT_COUNT`` first if ``MaxUsed == Total`` under sustained traffic; raise ``PRIVATE_BUF_COUNT`` only if max-MTU downstream frames also become common (each consumes ``ceil(1500 / BUF_SIZE)`` fragments).
+* ``CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME=21`` — ``LIFETIME_1_5_S``: applied to the PT's ``flow_config[0]`` at association (the PT->FT direction). In the typical tether topology the PT sources data toward the internet, so **PT->FT is the heavy uplink**. 1.5 s is generous enough to absorb several DLC retransmission rounds across short outages without dropping queued payload, but small enough that a fundamentally broken link surfaces in seconds rather than the ~minute the 60 s default would impose. For latency-sensitive workloads where stale SDUs are useless, drop the value at runtime to e.g. ``=4`` (10 ms) or ``=6`` (30 ms). The FT counterpart in :ref:`dect_shell <dect_shell_dlc_resilient>` uses a slightly more tolerant ``=23`` (2.5 s) on its return path.
+
+.. _dect_tether_ipv6_dlc_resilient:
+
+Loss-resilient DLC profile (:file:`dlc_resilient.conf`)
+=======================================================
+
+The modem's stock DLC defaults — ``LIFETIME_60_S`` and "release association on DLC discard" — are not a great match for a tether deployment: stale SDUs can sit in the TX queue for up to 60 s, and a single discard-timer expiry tears down the association and forces a full PT reconnect. The :file:`dlc_resilient.conf` overlay replaces them with a loss-resilient profile:
+
+* ``CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME=21`` — ``LIFETIME_1_5_S``: applied to the PT's ``flow_config[0]`` at association (the PT->FT direction). In the typical tether topology the PT sources data toward the internet, so **PT->FT is the heavy uplink**. 1.5 s is generous enough to absorb several DLC retransmission rounds across short outages without dropping queued payload, but small enough that a fundamentally broken link surfaces in seconds rather than the ~minute the 60 s default would impose. For latency-sensitive workloads where stale SDUs are useless, drop the value at runtime to e.g. ``=4`` (10 ms) or ``=6`` (30 ms). The FT counterpart in :ref:`dect_shell <dect_shell_dlc_resilient>` uses a slightly more tolerant ``=23`` (2.5 s) on its return path.
+* ``CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION=n`` — DLC-discard expiry no longer releases the association, so bursty loss does not cause link flaps and PT-side reconnect storms.
+
+Append :file:`dlc_resilient.conf` **last** in ``EXTRA_CONF_FILE``:
+
+.. code-block:: console
+
+   cd nrf/samples/dect/dect_tether_ipv6
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+The overlay is composable with :file:`dect_rx_pool.conf` (append both, in any order):
+
+.. code-block:: console
+
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+Both knobs are also tunable at runtime via the DECT L2 shell, no rebuild required:
+
+.. code-block:: console
+
+   uart:~$ dect sett --dlc_sdu_lifetime 21
+   uart:~$ dect sett --dlc_discard_release_assoc off
+   uart:~$ dect sett --read
+
+The ``--read`` output annotates which TX flow the lifetime applies to — ``PT->FT`` here (``PT`` role applies it to ``flow_config[0]`` at association). The FT-side **return path (FT->PT)** is controlled independently by the matching :file:`dlc_resilient.conf` in :ref:`dect_shell <dect_shell_dlc_resilient>`; pick each side's value for its own traffic profile.
+
+Valid ``--dlc_sdu_lifetime`` values are ``1..31`` (0.5 ms .. 60 s, see ``enum dect_dlc_sdu_lifetime`` / ``nrf_modem_dect_dlc_sdu_lifetime``) or ``255`` for ``INFINITY``. Use ``31`` (60 s) to revert to the default at runtime.
 
 mDNS / DNS-SD
 =============

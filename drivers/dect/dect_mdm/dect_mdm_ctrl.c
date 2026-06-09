@@ -550,12 +550,13 @@ static void dect_mdm_ctrl_trigger_association(void)
 	LOG_INF("  transmitter id (long RD ID)....................%u (0x%08x)", parent_long_rd_id,
 		parent_long_rd_id);
 
+	struct dect_mdm_settings *set_ptr = dect_mdm_settings_ref_get();
 	struct nrf_modem_dect_mac_tx_flow_config flow_config[1] = {{
 		.flow_id = 1,
 		.dlc_service_type = NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
-		.dlc_sdu_lifetime = NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
+		.dlc_sdu_lifetime = (enum nrf_modem_dect_dlc_sdu_lifetime)
+			set_ptr->net_mgmt_common.dlc.sdu_lifetime,
 	}};
-	struct dect_mdm_settings *set_ptr = dect_mdm_settings_ref_get();
 	struct nrf_modem_dect_mac_association_params params = {
 		.long_rd_id = parent_long_rd_id,
 		.network_id = network_id,
@@ -1777,10 +1778,16 @@ static void handle_mdm_rssi_complete(struct dect_mdm_common_op_event_msgq_item *
 			},
 		.default_tx_flow_config = {
 			{
+				/* Default user-data flow: lifetime tracks
+				 * dect_settings_dlc.sdu_lifetime (boot default
+				 * from CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME,
+				 * runtime via "dect sett --dlc_sdu_lifetime").
+				 */
 				.dlc_service_type =
 				NRF_MODEM_DECT_DLC_SERVICE_TYPE_3,
 				.dlc_sdu_lifetime =
-				NRF_MODEM_DECT_DLC_SDU_LIFETIME_60_S,
+				(enum nrf_modem_dect_dlc_sdu_lifetime)
+					set_ptr->net_mgmt_common.dlc.sdu_lifetime,
 			},
 			{
 				.dlc_service_type =
@@ -2656,7 +2663,7 @@ static void handle_mdm_dlc_data_resp(struct dect_mdm_common_op_event_msgq_item *
 
 	if (evt_data->status != NRF_MODEM_DECT_MAC_STATUS_OK) {
 		dect_mdm_utils_modem_mac_err_to_string(evt_data->status, tmp_str, sizeof(tmp_str));
-		LOG_ERR("DLC data TX response failed to rd id %u with err %s (%d), "
+		LOG_WRN("DLC data TX response failed to rd id %u with err %s (%d), "
 			"transaction id %u",
 			evt_data->long_rd_id, tmp_str, evt_data->status,
 			evt_data->acked_data[0].transaction_id);

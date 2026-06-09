@@ -65,6 +65,7 @@ static const struct dect_settings_security_conf security_configuration_data = {
 static const struct dect_settings_dlc dlc_data = {
 	.discard_timer_release_assoc =
 		IS_ENABLED(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION),
+	.sdu_lifetime = CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME,
 };
 
 static const struct dect_settings common_settings_data = {
@@ -178,6 +179,16 @@ static uint16_t dect_mdm_settings_write_validate(const struct dect_settings *set
 		    settings_in->cluster.max_beacon_tx_power_dbm, settings_in->band_nbr) == false) {
 		failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_CLUSTER;
 	}
+	if (((settings_in->cmd_params.write_scope_bitmap & DECT_SETTINGS_WRITE_SCOPE_DLC) ||
+	     (settings_in->cmd_params.write_scope_bitmap == DECT_SETTINGS_WRITE_SCOPE_ALL))) {
+		uint32_t lt = (uint32_t)settings_in->dlc.sdu_lifetime;
+
+		/* Valid: 1..31 fixed durations, 255 = INFINITY. */
+		if (!((lt >= DECT_DLC_SDU_LIFETIME_0_5_MS && lt <= DECT_DLC_SDU_LIFETIME_60_S) ||
+		      lt == DECT_DLC_SDU_LIFETIME_INFINITY)) {
+			failure_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DLC;
+		}
+	}
 	return failure_scope_bitmap;
 }
 
@@ -288,6 +299,7 @@ dect_mdm_settings_write(struct dect_mdm_settings *dect_sett_in)
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_DLC) {
 		current_sett->dlc.discard_timer_release_assoc =
 			new_sett->dlc.discard_timer_release_assoc;
+		current_sett->dlc.sdu_lifetime = new_sett->dlc.sdu_lifetime;
 	}
 
 	return_status.status =
