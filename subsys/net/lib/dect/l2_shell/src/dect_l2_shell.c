@@ -236,7 +236,12 @@ static const char dect_shell_sett_dlc_usage_str[] =
 	"                                     \"on\" release the association toward the\n"
 	"                                     unreachable peer (cause BAD_RADIO_QUALITY);\n"
 	"                                     \"off\" keep it alive across transient losses.\n"
-	"                                     Default: on (from Kconfig)\n";
+	"                                     Default: on (from Kconfig).\n"
+	"      --dlc_sdu_lifetime <n>,        DLC SDU discard-timer (lifetime) for PT->FT\n"
+	"                                     data flow. enum dect_dlc_sdu_lifetime value:\n"
+	"                                     1..31 = 0.5 ms..60 s (e.g. 31 = 60 s),\n"
+	"                                     255 = infinity.\n"
+	"                                     Default: 31 = 60 s (from Kconfig).\n";
 
 /* The following do not have short options: */
 enum {
@@ -266,6 +271,7 @@ enum {
 	DECT_SHELL_SETT_CMD_SEC_INTEG_KEY,
 	DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY,
 	DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC,
+	DECT_SHELL_SETT_CMD_DLC_SDU_LIFETIME,
 };
 
 /* Specifying the expected options (both long and short): */
@@ -313,6 +319,8 @@ static struct sys_getopt_option long_options_sett_cmd[] = {
 	{"sec_cipher_key", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY},
 	{"dlc_discard_release_assoc", sys_getopt_required_argument, 0,
 	 DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC},
+	{"dlc_sdu_lifetime", sys_getopt_required_argument, 0,
+	 DECT_SHELL_SETT_CMD_DLC_SDU_LIFETIME},
 	{0, 0, 0, 0}};
 
 	static const char dect_shell_cluster_reconfig_usage_str[] =
@@ -1931,6 +1939,50 @@ dect_common_utils_settings_write_scope_to_string(enum dect_settings_cmd_params_w
 	}
 }
 
+/* Returns the encoded duration of the DLC TX_SDU_discard_timer as defined in
+ * ETSI TS 103 636-5, clause 5.3.3.2 Table 5.3.3.2-2 (mirrored by
+ * enum dect_dlc_sdu_lifetime / nrf_modem_dect_dlc_sdu_lifetime).
+ */
+static const char *
+dect_common_utils_settings_dlc_sdu_lifetime_to_string(enum dect_dlc_sdu_lifetime lt)
+{
+	switch (lt) {
+	case DECT_DLC_SDU_LIFETIME_0_5_MS:	return "0.5 ms";
+	case DECT_DLC_SDU_LIFETIME_1_MS:	return "1 ms";
+	case DECT_DLC_SDU_LIFETIME_5_MS:	return "5 ms";
+	case DECT_DLC_SDU_LIFETIME_10_MS:	return "10 ms";
+	case DECT_DLC_SDU_LIFETIME_20_MS:	return "20 ms";
+	case DECT_DLC_SDU_LIFETIME_30_MS:	return "30 ms";
+	case DECT_DLC_SDU_LIFETIME_40_MS:	return "40 ms";
+	case DECT_DLC_SDU_LIFETIME_50_MS:	return "50 ms";
+	case DECT_DLC_SDU_LIFETIME_60_MS:	return "60 ms";
+	case DECT_DLC_SDU_LIFETIME_70_MS:	return "70 ms";
+	case DECT_DLC_SDU_LIFETIME_80_MS:	return "80 ms";
+	case DECT_DLC_SDU_LIFETIME_90_MS:	return "90 ms";
+	case DECT_DLC_SDU_LIFETIME_100_MS:	return "100 ms";
+	case DECT_DLC_SDU_LIFETIME_150_MS:	return "150 ms";
+	case DECT_DLC_SDU_LIFETIME_200_MS:	return "200 ms";
+	case DECT_DLC_SDU_LIFETIME_250_MS:	return "250 ms";
+	case DECT_DLC_SDU_LIFETIME_300_MS:	return "300 ms";
+	case DECT_DLC_SDU_LIFETIME_500_MS:	return "500 ms";
+	case DECT_DLC_SDU_LIFETIME_750_MS:	return "750 ms";
+	case DECT_DLC_SDU_LIFETIME_1_S:		return "1 s";
+	case DECT_DLC_SDU_LIFETIME_1_5_S:	return "1.5 s";
+	case DECT_DLC_SDU_LIFETIME_2_S:		return "2 s";
+	case DECT_DLC_SDU_LIFETIME_2_5_S:	return "2.5 s";
+	case DECT_DLC_SDU_LIFETIME_3_S:		return "3 s";
+	case DECT_DLC_SDU_LIFETIME_4_S:		return "4 s";
+	case DECT_DLC_SDU_LIFETIME_5_S:		return "5 s";
+	case DECT_DLC_SDU_LIFETIME_6_S:		return "6 s";
+	case DECT_DLC_SDU_LIFETIME_8_S:		return "8 s";
+	case DECT_DLC_SDU_LIFETIME_16_S:	return "16 s";
+	case DECT_DLC_SDU_LIFETIME_32_S:	return "32 s";
+	case DECT_DLC_SDU_LIFETIME_60_S:	return "60 s";
+	case DECT_DLC_SDU_LIFETIME_INFINITY:	return "infinity";
+	default:				return "reserved";
+	}
+}
+
 static int
 dect_common_utils_settings_mac_pdu_nw_beacon_period_in_ms(enum dect_nw_beacon_period period)
 {
@@ -2111,6 +2163,23 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 	dect_l2_shell_print("  DLC:");
 	dect_l2_shell_print("   Release assoc on discard timer expiry: %s",
 			    dect_sett->dlc.discard_timer_release_assoc ? "on" : "off");
+	{
+		/* The same setting drives the local node's default user-data
+		 * TX flow on both roles - direction differs:
+		 *   PT: applied at association (flow_config[0])
+		 *   FT: advertised at cluster start (default_tx_flow_config[0])
+		 */
+		const char *dir = (dect_sett->device_type & DECT_DEVICE_TYPE_FT)
+					  ? "FT->PT"
+					  : "PT->FT";
+
+		dect_l2_shell_print(
+				    "   SDU lifetime (%s data flow):       %s (raw=%u)",
+				    dir,
+				    dect_common_utils_settings_dlc_sdu_lifetime_to_string(
+					    dect_sett->dlc.sdu_lifetime),
+				    (unsigned int)dect_sett->dlc.sdu_lifetime);
+	}
 }
 
 static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, char **argv)
@@ -2528,6 +2597,22 @@ static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, cha
 					sys_getopt_optarg);
 				return;
 			}
+			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DLC;
+			break;
+		}
+		case DECT_SHELL_SETT_CMD_DLC_SDU_LIFETIME: {
+			tmp_value = shell_strtoul(sys_getopt_optarg, 10, &ret);
+			if (ret ||
+			    !((tmp_value >= DECT_DLC_SDU_LIFETIME_0_5_MS &&
+			       tmp_value <= DECT_DLC_SDU_LIFETIME_60_S) ||
+			      tmp_value == DECT_DLC_SDU_LIFETIME_INFINITY)) {
+				dect_l2_shell_error(
+					"Invalid dlc_sdu_lifetime value: %s "
+					"(valid: 1..31 or 255)",
+					sys_getopt_optarg);
+				return;
+			}
+			newsettings.dlc.sdu_lifetime = (enum dect_dlc_sdu_lifetime)tmp_value;
 			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DLC;
 			break;
 		}

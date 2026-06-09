@@ -958,6 +958,41 @@ Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_T
 
 Bump ``PRIVATE_PKT_COUNT`` first if ``MaxUsed == Total`` under sustained traffic; raise ``PRIVATE_BUF_COUNT`` if max-MTU uplink frames are dominant (each consumes ``ceil(1500 / BUF_SIZE)`` fragments).
 
+.. _dect_shell_dlc_resilient:
+
+Loss-resilient DLC profile (:file:`dlc_resilient.conf`)
+-------------------------------------------------------
+
+The modem's stock DLC defaults — ``LIFETIME_60_S`` and "release association on DLC discard" — are not a great match for a tether/sink deployment: stale SDUs can sit in the TX queue for up to 60 s, and a single discard-timer expiry tears down associations with child PTs and forces a reconnect storm. The :file:`dlc_resilient.conf` overlay replaces them with a loss-resilient profile:
+
+* ``CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME=23`` — ``LIFETIME_2_5_S``: applied to the FT's ``default_tx_flow_config[0]`` advertised at cluster start (the FT->PT direction). In the typical tether topology the PT sources data toward the internet, so **PT->FT is the heavy uplink** and **FT->PT mostly carries small TCP ACKs and control back to the PT**. 2.5 s (slightly more tolerant than the 1.5 s used on the PT side) is intentional: dropping a return-path ACK forces TCP to retransmit on the already-saturated uplink, which hurts throughput more than an ACK that's delivered late. For latency-sensitive workloads where stale SDUs are useless, drop the value at runtime to e.g. ``=4`` (10 ms) or ``=8`` (50 ms). The PT counterpart in :ref:`dect_tether_ipv6 <dect_tether_ipv6_dlc_resilient>` uses ``=21`` (1.5 s); the two sides do **not** need to use the same value.
+* ``CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION=n`` — a DLC-discard timer expiry no longer tears down associations, so bursty loss does not cause PT-reconnect storms.
+
+Append :file:`dlc_resilient.conf` **last** in ``EXTRA_CONF_FILE``. Example with the Arceli W5500 ethernet sink:
+
+.. code-block:: console
+
+   cd nrf/samples/dect/dect_shell
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+
+Composable with :file:`dect_rx_pool.conf` (append both, in any order):
+
+.. code-block:: console
+
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+
+Both knobs are also tunable at runtime via the DECT L2 shell, no rebuild required:
+
+.. code-block:: console
+
+   desh:~$ dect sett --dlc_sdu_lifetime 23
+   desh:~$ dect sett --dlc_discard_release_assoc off
+   desh:~$ dect sett --read
+
+The ``--read`` output annotates which TX flow the lifetime applies to — ``FT->PT`` here (``FT`` role advertises it in ``default_tx_flow_config[0]`` at cluster start). The matching PT-side overlay in :ref:`dect_tether_ipv6 <dect_tether_ipv6_dlc_resilient>` controls the **return path (PT->FT)** independently; pick each side's value for its own traffic profile.
+
+Valid ``--dlc_sdu_lifetime`` values are ``1..31`` (0.5 ms .. 60 s, see ``enum dect_dlc_sdu_lifetime`` / ``nrf_modem_dect_dlc_sdu_lifetime``) or ``255`` for ``INFINITY``. Use ``31`` (60 s) to revert to the default at runtime.
+
 
 iperf3 support
 ==============

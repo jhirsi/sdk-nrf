@@ -45,6 +45,17 @@ config DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION
 	  the association alive across transient link losses and let upper
 	  layers decide; the status is still logged either way.
 
+config DECT_MDM_NRF_DLC_SDU_LIFETIME
+	int "DLC SDU discard-timer (lifetime) for PT->FT data flow"
+	range 1 255
+	default 31
+	help
+	  Initial default for the DLC SDU discard-timer used on the PT->FT data
+	  flow at association. Holds an enum nrf_modem_dect_dlc_sdu_lifetime
+	  value: 1..31 for fixed durations (0.5 ms..60 s, e.g. 31 = 60 s),
+	  255 for INFINITY. Other values in 32..254 are invalid and rejected
+	  at runtime.
+
 config DECT_MDM_NRF_CTRL_THREAD_STACK_SIZE
 	int "Driver's internal ctrl thread stack size"
 	default 3072
