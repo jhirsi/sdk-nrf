@@ -734,7 +734,7 @@ LTE with `Serial Modem <ncs-serial-modem_>`_
 
      west build -p -b thingy91x/nrf9151/ns -- -DPM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual" -DFILE_SUFFIX=sm
      
-* Wiring as in the DeSh board overlay and `Serial Modem <ncs-serial-modem_>`_ :file:`ncs-serial-modem/app/overlay-external-mcu.overlay` files:
+* Wiring as in the DeSh board overlay and `Serial Modem <ncs-serial-modem_>`_ :file:`ns-serial-modem/app/overlay-external-mcu.overlay` files:
 
   .. table:: Wire the boards together as shown.
 
@@ -863,7 +863,8 @@ Ethernet with W5500 shield (Seeed / Wiznet mapping)
 WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn your DK!
 
 Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
-Merge :file:`eth_common.conf` and :file:`eth_w5500.conf` for Ethernet sink without mDNS. For mDNS, append :file:`mdns-common.conf` and :file:`eth_mdns.conf` in that order (add :file:`mdns-discover.conf` before :file:`eth_mdns.conf` for ``dect discover``).
+Merge :file:`eth_common.conf`, :file:`eth_w5500.conf` and :file:`eth_w5500_seeed.conf` for Ethernet sink without mDNS. For mDNS, append :file:`mdns-common.conf` and :file:`eth_mdns.conf` in that order (add :file:`mdns-discover.conf` before :file:`eth_mdns.conf` for ``dect discover``).
+The Seeed shield (Rev 1.01) leaves the W5500 INTn disconnected, so :file:`eth_w5500_seeed.conf` enables :kconfig:option:`CONFIG_ETH_W5500_POLL_MODE` to service the driver over SPI instead of the interrupt line.
 Devicetree comes from :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
 plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
 
@@ -876,13 +877,13 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
   .. code-block:: console
 
      cd nrf/samples/dect/dect_shell
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * With mDNS on dect0 and eth0:
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -890,13 +891,13 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
      With mDNS:
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
 Ethernet with ENC424J600 shield (Phytec link_board_eth)
 -------------------------------------------------------
@@ -944,7 +945,7 @@ Append :file:`dect_rx_pool.conf` **last** in ``EXTRA_CONF_FILE`` to enable ``CON
 .. code-block:: console
 
    cd nrf/samples/dect/dect_shell
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION=y`` already set by the overlay):
 
