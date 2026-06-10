@@ -36,16 +36,18 @@ tests:
   sample.dect.dect_shell.arceli_eth_w5500_random_mac:
     extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" DTC_OVERLAY_FILE=w5500.overlay
   sample.dect.dect_shell.seeed_eth_w5500:
-    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" DTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" DTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
   sample.dect.dect_shell.seeed_eth_w5500_random_mac:
-    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" DTC_OVERLAY_FILE=w5500-seeed.overlay
+    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" DTC_OVERLAY_FILE=w5500-seeed.overlay
   sample.dect.dect_shell.link_board_eth:
     extra_args: SHIELD=link_board_eth EXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf" DTC_OVERLAY_FILE=link_board_eth.overlay
   sample.dect.dect_shell.arceli_eth_w5500_mdns:
     extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" DTC_OVERLAY_FILE=w5500-static-mac.overlay
   sample.dect.dect_shell.seeed_eth_w5500_mdns:
-    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" DTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;mdns-common.conf;eth_mdns.conf" DTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
   sample.dect.dect_shell.link_board_eth_mdns:
     extra_args: SHIELD=link_board_eth EXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf;mdns-common.conf;eth_mdns.conf" DTC_OVERLAY_FILE=link_board_eth.overlay
   sample.dect.dect_shell.arceli_eth_w5500_dect_rx_pool:
     extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;dect_rx_pool.conf;dlc_resilient.conf" DTC_OVERLAY_FILE=w5500-static-mac.overlay
+  sample.dect.dect_shell.seeed_eth_w5500_dect_rx_pool:
+    extra_args: SHIELD=seeed_w5500 EXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" DTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay

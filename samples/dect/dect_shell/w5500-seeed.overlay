@@ -4,19 +4,32 @@
  * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
  */
 
+#include <zephyr/dt-bindings/gpio/arduino-header-r3.h>
+
 /*
  * Seeed W5500 Ethernet shield on nRF9151 DK (Zephyr shield seeed_w5500).
  *
  * Build:
  *   west build -b nrf9151dk/nrf9151/ns -- \
  *     -DSHIELD=seeed_w5500 \
- *     -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" \
+ *     -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" \
  *     -DDTC_OVERLAY_FILE=w5500-seeed.overlay
  *
  * For a fixed MAC, use w5500-seeed-static-mac.overlay instead.
+ *
+ * INT pin: the WIZnet/Seeed W5500 shield routes the W5500 INTn to Arduino D2
+ * through R25, and Rev 1.01 ships with R25 removed, so INTn never reaches a
+ * header pin (and cannot be jumpered without soldering). Pair this overlay with
+ * eth_w5500_seeed.conf, which runs the driver in poll mode
+ * (CONFIG_ETH_W5500_POLL_MODE=y):
+ * SENDOK/RX are serviced by polling over SPI, so no INTn wiring is needed - just
+ * plug the shield in. The int-gpios property is still required by the binding;
+ * point it at the stock D2 and add GPIO_PULL_UP so the unconnected pin idles
+ * inactive and cannot raise spurious interrupts. If your unit has R25 populated
+ * (real INTn on D2) you may drop poll mode and the GPIO_PULL_UP flag.
  */
 
 &eth_w5500 {
 	zephyr,random-mac-address;
-	/* spi-max-frequency = <24000000>; */
+	int-gpios = <&arduino_header ARDUINO_HEADER_R3_D2 (GPIO_ACTIVE_LOW | GPIO_PULL_UP)>;
 };
