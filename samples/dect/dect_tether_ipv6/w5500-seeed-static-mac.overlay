@@ -1,0 +1,23 @@
+/*
+ * Copyright (c) 2026 Nordic Semiconductor ASA
+ *
+ * SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+ */
+
+/*
+ * Seeed W5500 Ethernet shield on nRF9151 DK (Zephyr shield seeed_w5500).
+ *
+ * Build (from the sample directory):
+ *   cd nrf/samples/dect/dect_tether_ipv6
+ *   west build -p -b nrf9151dk/nrf9151/ns -- \
+ *     -DSHIELD=seeed_w5500 \
+ *     -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf" \
+ *     -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+ *
+ * MAC below is locally administered unicast (U/L bit set). Replace all six octets
+ * per unit if several boards share one broadcast domain.
+ */
+
+&eth_w5500 {
+	local-mac-address = [f6 ce 36 04 73 b1];
+};

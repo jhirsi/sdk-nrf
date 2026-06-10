@@ -1,0 +1,32 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+
+sample:
+  name: DECT IPv6 tethering
+  description: DECT IPv6 tethering (minimal RA + DHCPv6 + optional mDNS forward) trial
+common:
+  tags:
+    - ci_build
+    - sysbuild
+    - ci_samples_dect
+  sysbuild: true
+  build_only: true
+  integration_platforms:
+    - nrf9151dk/nrf9151/ns
+  platform_allow:
+    - nrf9151dk/nrf9151/ns
+tests:
+  sample.dect.dect_tether_ipv6.pt:
+    extra_args: EXTRA_CONF_FILE=pt.conf
+  sample.dect.dect_tether_ipv6.ft:
+    extra_args: EXTRA_CONF_FILE=ft.conf
+  sample.dect.dect_tether_ipv6.pt_arceli_w5500:
+    extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE=pt.conf;eth_common.conf;eth_w5500.conf DTC_OVERLAY_FILE=w5500-static-mac.overlay
+  sample.dect.dect_tether_ipv6.pt_arceli_w5500_random_mac:
+    extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE=pt.conf;eth_common.conf;eth_w5500.conf DTC_OVERLAY_FILE=w5500.overlay
+  sample.dect.dect_tether_ipv6.pt_link_board_eth:
+    extra_args: SHIELD=link_board_eth EXTRA_CONF_FILE=pt.conf;eth_common.conf;eth_link_board_eth.conf
+  sample.dect.dect_tether_ipv6.pt_mdns:
+    extra_args: EXTRA_CONF_FILE=pt.conf;mdns-common.conf;mdns.conf
+  sample.dect.dect_tether_ipv6.pt_arceli_w5500_mdns:
+    extra_args: SHIELD=arceli_eth_w5500 EXTRA_CONF_FILE=pt.conf;eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf;mdns_forward.conf DTC_OVERLAY_FILE=w5500-static-mac.overlay
