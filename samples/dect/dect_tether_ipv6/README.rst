@@ -560,7 +560,8 @@ Ethernet with W5500 shield (Seeed / Wiznet mapping)
 WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn your DK!
 
 Use this when the host leg should use **Ethernet** via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
-Merge :file:`pt.conf`, :file:`eth_common.conf`, and :file:`eth_w5500.conf` (PT default).
+Merge :file:`pt.conf`, :file:`eth_common.conf`, :file:`eth_w5500.conf`, and :file:`eth_w5500_seeed.conf` (PT default).
+The Seeed shield (Rev 1.01) leaves the W5500 INTn disconnected, so :file:`eth_w5500_seeed.conf` enables :kconfig:option:`CONFIG_ETH_W5500_POLL_MODE` to service the driver over SPI instead of the interrupt line.
 Devicetree comes from the Zephyr shield devicetree :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
 plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
 
@@ -573,7 +574,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -581,7 +582,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
 Ethernet with ENC424J600 shield (Phytec link_board_eth)
 ======================================================
@@ -612,7 +613,7 @@ Append :file:`dect_rx_pool.conf` **last** in ``EXTRA_CONF_FILE`` to enable ``CON
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION=y`` already set by the overlay):
 
@@ -642,13 +643,13 @@ Append :file:`dlc_resilient.conf` **last** in ``EXTRA_CONF_FILE``:
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 The overlay is composable with :file:`dect_rx_pool.conf` (append both, in any order):
 
 .. code-block:: console
 
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 Both knobs are also tunable at runtime via the DECT L2 shell, no rebuild required:
 
