@@ -51,7 +51,7 @@ config DECT_SHELL_MDNS_DNS_SD_ADVERTISE
 	  port is bound; datagrams on that port are discarded. The instance name follows
 	  net_hostname_get() (hostname shell / settings), truncated per DNS-SD label rules.
 	  Disable to save resources when you do not need to be discoverable via DNS-SD.
-	  For a turnkey mDNS/DNS-SD build, use mdns-discover.conf in the sample.
+	  For mDNS/DNS-SD, merge mdns-common.conf and mdns-discover.conf in the sample.
 	  Tune DECT_MDM_NRF_RX_MSGQ_SIZE / DECT_MDM_NRF_RX_EVENT_POOL_COUNT if you see
 	  RX queue or event-pool exhaustion under mDNS bursts.
 

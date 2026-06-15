@@ -25,13 +25,11 @@ DeSh enables testing of the DECT NR+ networking stack in the |NCS| with DECT NR+
 
 The subsections list the DeSh features, show shell command examples, and describe their usage.
 
-The default :file:`prj.conf` enables the Zephyr **mDNS / DNS-SD** stack (resolver and responder)
-and sets ``CONFIG_NET_SOCKETS_SERVICE_THREAD_PRIO`` above the DECT modem RX thread so the DNS
-socket service can drain multicast traffic under load.
+The default :file:`prj.conf` enables unicast DNS only. Merge :file:`mdns-common.conf` for the Zephyr **mDNS / DNS-SD** stack (resolver and responder), RFC 6762 hop-limit handling, and DNS dispatcher tuning (``CONFIG_ZVFS_POLL_MAX``, buffer pools). Sample-specific mDNS options and pool tuning are in :file:`mdns-discover.conf`; see :ref:`dect_shell_mdns_discover_build`.
 
-The **sample** options ``CONFIG_DECT_SHELL_MDNS_DNS_SD_ADVERTISE`` and ``CONFIG_DECT_SHELL_MDNS_DISCOVER`` default to off. Build with :file:`mdns-discover.conf` to enable DNS-SD advertisement on dect0 (stub UDP bind), the ``dect discover`` shell command, and extra DNS/RX pool tuning recommended for browse-heavy mDNS (``west build ... -- -DEXTRA_CONF_FILE=mdns-discover.conf``). Implementation lives under :file:`src/mdns/` in the sample tree.
+The **sample** options ``CONFIG_DECT_SHELL_MDNS_DNS_SD_ADVERTISE`` and ``CONFIG_DECT_SHELL_MDNS_DISCOVER`` default to off. Build with :file:`mdns-common.conf` and :file:`mdns-discover.conf` to enable DNS-SD advertisement on dect0 (stub UDP bind) and the ``dect discover`` shell command. Implementation lives under :file:`src/mdns/` in the sample tree.
 
-That fragment is meant to layer on the default :file:`prj.conf`, which sets ``CONFIG_NET_NATIVE=y`` and ``CONFIG_NET_IPV6=y`` (IPv4 off). In Zephyr, ``CONFIG_NET_NATIVE_IPV6`` then defaults to enabled whenever IPv6 is on, so the usual DeSh + :file:`mdns-discover.conf` profile has native IPv6. The fragment also enables ``CONFIG_MDNS_RESPONDER_DNS_SD_MULTIPLE_AAAA``, which depends on ``CONFIG_NET_NATIVE_IPV6`` in the stack Kconfig—if you merge a custom configuration that turns off native IPv6, drop or unset that option.
+Those fragments layer on :file:`prj.conf`, which assumes ``CONFIG_NET_NATIVE=y`` and ``CONFIG_NET_IPV6=y`` (IPv4 off).
 
 The following abbreviations from the DECT NR+ MAC specification (`ETSI TS 103 636-4`_) are used in the examples:
 
@@ -133,8 +131,16 @@ Discover DECT NR+ peers (mDNS)
 
 DeSh command ``dect discover``.
 
-The **mDNS stack** is already enabled in the default :file:`prj.conf`. To use this command,
-enable the sample options by building with :file:`mdns-discover.conf`.
+Merge :file:`mdns-common.conf` and :file:`mdns-discover.conf` to enable the mDNS stack and this command.
+
+.. _dect_shell_mdns_discover_build:
+
+* From the sample directory (copy-paste each line):
+
+  .. code-block:: console
+
+     cd nrf/samples/dect/dect_shell
+     west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="mdns-common.conf;mdns-discover.conf"
 
 Use this command to list peers that advertise the DNS-SD service ``_dect-nr._udp`` on the DECT NR+ network.
 When ``CONFIG_NET_L2_DECT_ULA`` has configured an on-link ULA prefix on ``dect0``, the table includes a **ula (on-link)** column: the same /96 layout the L2 stack uses (common /64 from the ULA prefix, 32-bit long RD id from the mDNS address, last 32 bits of IID from the link-local AAAA), so you can ping or connect over ULA even though mDNS answers are often link-local.
@@ -784,18 +790,25 @@ Ethernet with W5500 shield (Arceli)
 
 Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet.
 The sample adds :file:`eth_common.conf` and :file:`eth_w5500.conf` (Kconfig) and an Arceli tuning overlay: default :file:`w5500-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
+For mDNS, append :file:`mdns-common.conf` and :file:`eth_mdns.conf` in that order (add :file:`mdns-discover.conf` before :file:`eth_mdns.conf` for ``dect discover``).
 The pinout and SPI node come from the Zephyr shield devicetree: :file:`zephyr/boards/shields/arceli_eth_w5500/arceli_eth_w5500.overlay`.
 
 .. note::
    Arduino **D8** (reset) and **D9** (interrupt) are shared with **BUTTON1** and **BUTTON2** on the nRF9151 DK.
    Thus, DK library is disabled in the Ethernet Kconfig overlays to avoid conflicts with Arceli shield.
 
-* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace):
+* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace; default without mDNS):
 
   .. code-block:: console
 
      nrf/samples/dect/dect_shell:
      west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+
+   * With mDNS on dect0 and eth0:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -804,6 +817,12 @@ The pinout and SPI node come from the Zephyr shield devicetree: :file:`zephyr/bo
      .. code-block:: console
 
         west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500.overlay
+
+     With mDNS:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500.overlay
 
    * To also obtain an IPv6 address via DHCPv6 (in addition to SLAAC), append
      :file:`eth_dhcpv6_client.conf` to the configuration file list.  The DHCPv6
@@ -844,7 +863,7 @@ Ethernet with W5500 shield (Seeed / Wiznet mapping)
 WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn your DK!
 
 Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
-Merge :file:`eth_common.conf` and :file:`eth_w5500.conf`.
+Merge :file:`eth_common.conf` and :file:`eth_w5500.conf` for Ethernet sink without mDNS. For mDNS, append :file:`mdns-common.conf` and :file:`eth_mdns.conf` in that order (add :file:`mdns-discover.conf` before :file:`eth_mdns.conf` for ``dect discover``).
 Devicetree comes from :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
 plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
 
@@ -852,12 +871,18 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
    The sample :file:`w5500.overlay` is Arceli-specific (targets ``&eth_w5500_arceli_eth_w5500``).
    For ``seeed_w5500``, use :file:`w5500-seeed-static-mac.overlay` or :file:`w5500-seeed.overlay` (targets ``&eth_w5500``).
 
-* From the sample directory (copy-paste each line):
+* From the sample directory (default without mDNS):
 
   .. code-block:: console
 
      cd nrf/samples/dect/dect_shell
      west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+
+   * With mDNS on dect0 and eth0:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -867,6 +892,12 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
 
         west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
+     With mDNS:
+
+     .. code-block:: console
+
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+
 Ethernet with ENC424J600 shield (Phytec link_board_eth)
 -------------------------------------------------------
 
@@ -874,15 +905,22 @@ Use this when the DECT sink (FT with BR) should reach the Internet over Ethernet
 via the Zephyr ``link_board_eth`` shield.
 
 The sample adds :file:`eth_common.conf` and :file:`eth_link_board_eth.conf` (Kconfig).
+For mDNS, append :file:`mdns-common.conf` and :file:`eth_mdns.conf` in that order (add :file:`mdns-discover.conf` before :file:`eth_mdns.conf` for ``dect discover``).
 Pin mapping and SPI node come from the Zephyr shield devicetree:
 :file:`zephyr/boards/shields/link_board_eth/link_board_eth.overlay`.
 
-* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace):
+* Build the DeSh sample as DECT BR sink over Ethernet (from the |NCS| workspace; default without mDNS):
 
   .. code-block:: console
 
      nrf/samples/dect/dect_shell:
      west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf"
+
+  * With mDNS on dect0 and eth0:
+
+    .. code-block:: console
+
+       west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf;mdns-common.conf;eth_mdns.conf"
 
   * To also obtain an IPv6 address via DHCPv6 (in addition to SLAAC), append
     :file:`eth_dhcpv6_client.conf`:
@@ -898,19 +936,14 @@ Pin mapping and SPI node come from the Zephyr shield devicetree:
 iperf3 support
 ==============
 
-To build the DeSh sample with iperf3 support, for example:
-
-PT (or FT without the sink) device: DeSh with Zephyr's network management-based shell commands:
+To build the DeSh sample with iperf3 support (mDNS disabled in :file:`iperf3-common.conf`). From the sample directory:
 
 .. code-block:: console
 
-   nrf9151dk:
-   west build -p -b nrf9151dk/nrf9151/ns
+   cd nrf/samples/dect/dect_shell
 
-   With iperf3 support with TX optimized (usually acts as iperf3 client in PT device):
    west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="iperf3-common.conf;iperf3-tx.conf"
 
-   With iperf3 support with RX optimized (usually acts as iperf3 server in FT device):
    west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="iperf3-common.conf;iperf3-rx.conf"
 
 nRF Cloud
@@ -940,19 +973,18 @@ MQTT
 
 .. code-block:: console
 
-   nrf9151dk:
-   $ west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="nrf_cloud_mqtt.conf"
+   cd nrf/samples/dect/dect_shell
+   west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="nrf_cloud_mqtt.conf"
 
 CoAP
 ----
 
 .. code-block:: console
 
-   nrf9151dk:
-   $ west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
+   cd nrf/samples/dect/dect_shell
+   west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
 
-   thingy91x:
-   $ west build -p -b thingy91x/nrf9151/ns -- -DPM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual" -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
+   west build -p -b thingy91x/nrf9151/ns -- -DPM_STATIC_YML_FILE="pm_static_thingy91x_nrf9151_ns.yml.manual" -DEXTRA_CONF_FILE="nrf_cloud_coap.conf"
 
 .. note::
    System time is retrieved by using NTP.
