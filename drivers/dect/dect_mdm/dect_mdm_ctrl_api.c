@@ -218,15 +218,15 @@ int dect_mdm_ctrl_api_tx_cmd(struct dect_mdm_ctrl_api_tx_cmd_params *params)
 		CTRL_DATA_UNLOCK();
 		return -ENOMEM;
 	}
+	if (data->dlc_data_tx_infos[arr_index].req_on_going) {
+		LOG_DBG("Transaction ID %d already in use", params->transaction_id);
+		CTRL_DATA_UNLOCK();
+		return -EBUSY;
+	}
 	if (arr_index < 0 || arr_index >= DECT_MDM_DLC_DATA_INFO_MAX_COUNT) {
 		LOG_ERR("Invalid transaction ID: %d", params->transaction_id);
 		CTRL_DATA_UNLOCK();
 		return -EINVAL;
-	}
-	if (data->dlc_data_tx_infos[arr_index].req_on_going) {
-		LOG_WRN("Transaction ID %d already in use", params->transaction_id);
-		CTRL_DATA_UNLOCK();
-		return -EBUSY;
 	}
 	data->dlc_data_tx_infos[arr_index].transaction_id = params->transaction_id;
 	data->dlc_data_tx_infos[arr_index].data_len = params->data_len;
