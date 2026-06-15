@@ -7,7 +7,7 @@ nRF91x1: DECT IPv6 tethering (RA + DHCPv6 + mDNS forward)
    :local:
    :depth: 2
 
-This sample is built as a **PT** (Portable Termination) device by default; merge :file:`pt.conf` so ``CONFIG_DECT_DEFAULT_DEV_TYPE_PT`` is explicit (see `Building`_). Use :file:`ft.conf` only when you need **FT** instead.
+This sample is always built as a **PT** (Portable Termination) device (``CONFIG_DECT_DEFAULT_DEV_TYPE_PT`` in :file:`prj.conf`).
 
 The sample enables ``CONFIG_DECT_TETHER_IPV6_LIB`` for a tethered host on **Ethernet**:
 
@@ -497,27 +497,20 @@ Example — Ethernet tether + W5500 (from the sample directory):
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
-**PT (default)** — merge :file:`pt.conf` (Zephyr DECT Kconfig also defaults to PT if you omit it, but the sample documents :file:`pt.conf` for clarity):
-
-.. code-block:: console
-
-   cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE=pt.conf
-
-**FT** — when the kit should act as Fixed Termination (for example Ethernet sink to a PC), use :file:`ft.conf` instead of :file:`pt.conf`:
+DECT-only (no Ethernet shield):
 
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE=ft.conf
+   west build -p -b nrf9151dk/nrf9151/ns
 
 Ethernet with W5500 shield (Arceli)
 ===================================
 
 Use this when the host leg should use **Ethernet** via the Zephyr :ref:`arceli_eth_w5500` shield on the nRF9151 DK.
-Merge :file:`pt.conf`, :file:`eth_common.conf`, and :file:`eth_w5500.conf` (PT default); devicetree comes from :file:`w5500-static-mac.overlay` in this sample plus the Zephyr shield devicetree :file:`zephyr/boards/shields/arceli_eth_w5500/arceli_eth_w5500.overlay`.
+Merge :file:`eth_common.conf` and :file:`eth_w5500.conf`; devicetree comes from :file:`w5500-static-mac.overlay` in this sample plus the Zephyr shield devicetree :file:`zephyr/boards/shields/arceli_eth_w5500/arceli_eth_w5500.overlay`.
 Optional :file:`eth_w5500_10bt_hd.conf` caps the link at 10BASE-T half-duplex (see :ref:`dect_tether_ipv6_eth_w5500_10bt_hd`).
 
 .. note::
@@ -529,7 +522,7 @@ Optional :file:`eth_w5500_10bt_hd.conf` caps the link at 10BASE-T half-duplex (s
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
 * Wiring as in the Arceli ETH W5500 shield overlay. Connect the RJ45 port to your LAN (router/switch) or directly to a PC as needed for your test.
 
@@ -564,7 +557,7 @@ Ethernet with W5500 shield (Seeed / Wiznet mapping)
 WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn your DK!
 
 Use this when the host leg should use **Ethernet** via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
-Merge :file:`pt.conf`, :file:`eth_common.conf`, :file:`eth_w5500.conf`, and :file:`eth_w5500_seeed.conf` (PT default).
+Merge :file:`eth_common.conf`, :file:`eth_w5500.conf`, and :file:`eth_w5500_seeed.conf`.
 The Seeed shield (Rev 1.01) leaves the W5500 INTn disconnected, so :file:`eth_w5500_seeed.conf` enables :kconfig:option:`CONFIG_ETH_W5500_POLL_MODE` to service the driver over SPI instead of the interrupt line.
 Devicetree comes from the Zephyr shield devicetree :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
 plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
@@ -578,7 +571,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -586,7 +579,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
 .. _dect_tether_ipv6_eth_w5500_10bt_hd:
 
@@ -607,13 +600,13 @@ Append after :file:`eth_w5500.conf`. **Lock the PC NIC to 10 Mbps half-duplex** 
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_10bt_hd.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_10bt_hd.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
 Ethernet with ENC424J600 shield (Phytec link_board_eth)
 ======================================================
 
 Use this when the host leg should use **Ethernet** via the Zephyr ``link_board_eth`` shield.
-Merge :file:`pt.conf`, :file:`eth_common.conf`, and :file:`eth_link_board_eth.conf` (PT default).
+Merge :file:`eth_common.conf` and :file:`eth_link_board_eth.conf`.
 Pin mapping and SPI node come from the Zephyr shield devicetree :file:`zephyr/boards/shields/link_board_eth/link_board_eth.overlay`.
 
 * From the sample directory (copy-paste each line):
@@ -621,7 +614,7 @@ Pin mapping and SPI node come from the Zephyr shield devicetree :file:`zephyr/bo
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_link_board_eth.conf"
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=link_board_eth -DEXTRA_CONF_FILE="eth_common.conf;eth_link_board_eth.conf"
 
 * Before attaching the shield to the DK, set VDD (nPM VOUT1) to 3.3 V.
 * Connect the shield so shield pins are not shorted to other DK connections, attach it, then connect the RJ45 port to your LAN (router/switch).
@@ -638,7 +631,7 @@ Append :file:`dect_rx_pool.conf` **last** in ``EXTRA_CONF_FILE`` to enable ``CON
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 Runtime inspection (with ``CONFIG_NET_BUF_POOL_USAGE=y`` and ``CONFIG_MEM_SLAB_TRACE_MAX_UTILIZATION=y`` already set by the overlay):
 
@@ -668,13 +661,13 @@ Append :file:`dlc_resilient.conf` **last** in ``EXTRA_CONF_FILE``:
 .. code-block:: console
 
    cd nrf/samples/dect/dect_tether_ipv6
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 The overlay is composable with :file:`dect_rx_pool.conf` (append both, in any order):
 
 .. code-block:: console
 
-   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+   west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
 Both knobs are also tunable at runtime via the DECT L2 shell, no rebuild required:
 
@@ -695,26 +688,26 @@ To advertise **``_dect-nr._udp``** (same service name as ``dect_shell``), merge 
 
 * From the sample directory (copy-paste each line):
 
-  DECT-only (append to ``pt.conf`` or ``ft.conf``):
+  DECT-only (append mDNS overlays):
 
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="pt.conf;mdns-common.conf;mdns.conf"
+     west build -p -b nrf9151dk/nrf9151/ns -- -DEXTRA_CONF_FILE="mdns-common.conf;mdns.conf"
 
   Arceli W5500 — mDNS responder on ``eth0`` and ``dect0``:
 
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
   Arceli W5500 — add :file:`mdns_forward.conf` for the **eth0 ↔ dect0** mDNS tap in ``dect_tether_ipv6_lib`` (``CONFIG_DECT_TETHER_IPV6_MDNS_FORWARD``):
 
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="pt.conf;eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf;mdns_forward.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=arceli_eth_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;mdns-common.conf;mdns.conf;eth_mdns.conf;mdns_forward.conf" -DDTC_OVERLAY_FILE=w5500-static-mac.overlay
 
   Seeed W5500 and ``link_board_eth`` use the same mDNS conf chain; change ``SHIELD``, shield-specific conf, and ``DTC_OVERLAY_FILE`` as in the Ethernet sections above.
 

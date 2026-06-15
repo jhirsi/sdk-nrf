@@ -21,13 +21,8 @@
 
 LOG_MODULE_REGISTER(dect_tether_ipv6_sample, CONFIG_LOG_DEFAULT_LEVEL);
 
-#if defined(CONFIG_DECT_DEFAULT_DEV_TYPE_FT)
-#define DEVICE_TYPE_STR "FT"
-#elif defined(CONFIG_DECT_DEFAULT_DEV_TYPE_PT)
-#define DEVICE_TYPE_STR "PT"
-#else
-#error "Either CONFIG_DECT_DEFAULT_DEV_TYPE_FT or _PT must be defined."
-#endif
+BUILD_ASSERT(IS_ENABLED(CONFIG_DECT_DEFAULT_DEV_TYPE_PT),
+	     "dect_tether_ipv6 is a PT-only sample");
 
 void nrf_modem_fault_handler(struct nrf_modem_fault_info *fault_info)
 {
@@ -41,7 +36,7 @@ int main(void)
 	int err;
 	struct net_if *dect;
 
-	LOG_INF("=== DECT host-leg IPv6 sample (device type: %s) ===", DEVICE_TYPE_STR);
+	LOG_INF("=== DECT host-leg IPv6 sample (device type: PT) ===");
 
 	dect = net_if_get_first_by_type(&NET_L2_GET_NAME(DECT));
 	if (dect == NULL) {
