@@ -12,4 +12,4 @@ add_subdirectory_ifdef(CONFIG_DECT_UTILS_LIB utils)
 # Include l2_shell library
 add_subdirectory_ifdef(CONFIG_DECT_L2_SHELL_LIB l2_shell)
 
-add_subdirectory_ifdef(CONFIG_DECT_TETHER_IPV6_LIB dect_tether_ipv6)
+add_subdirectory_ifdef(CONFIG_DECT_TETHER_IPV6_LIB tether_ipv6)
