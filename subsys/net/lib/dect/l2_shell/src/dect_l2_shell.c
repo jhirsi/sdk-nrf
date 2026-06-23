@@ -231,12 +231,17 @@ static const char dect_shell_sett_sec_conf_usage_str[] =
 	"                                     Example: 0123456789abcdef0123456789abcdef\n";
 static const char dect_shell_sett_dlc_usage_str[] =
 	"DLC settings\n"
-	"      --dlc_discard_release_assoc <on/off>,\n"
-	"                                     On DLC TX response DLC_DISCARD_TIMER_EXPIRED:\n"
-	"                                     \"on\" release the association toward the\n"
-	"                                     unreachable peer (cause BAD_RADIO_QUALITY);\n"
-	"                                     \"off\" keep it alive across transient losses.\n"
-	"                                     Default: on (from Kconfig).\n"
+	"      --dlc_discard_release_assoc_count <n>,\n"
+	"                                     DLC_DISCARD_TIMER_EXPIRED TX responses\n"
+	"                                     from a peer before releasing the association\n"
+	"                                     (cause BAD_RADIO_QUALITY). 0 = never release;\n"
+	"                                     counter resets on successful DLC TX.\n"
+#if defined(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_PEER_TRACKING)
+	"                                     Valid: 0 or 1..255. Default: 1.\n"
+#else
+	"                                     Valid: 0 or 1 only (Kconfig count > 1 required\n"
+	"                                     for values > 1). Default: 1.\n"
+#endif
 	"      --dlc_sdu_lifetime <n>,        DLC SDU discard-timer (lifetime) for PT->FT\n"
 	"                                     data flow. enum dect_dlc_sdu_lifetime value:\n"
 	"                                     1..31 = 0.5 ms..60 s (e.g. 31 = 60 s),\n"
@@ -270,7 +275,7 @@ enum {
 	DECT_SHELL_SETT_CMD_SEC_MODE,
 	DECT_SHELL_SETT_CMD_SEC_INTEG_KEY,
 	DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY,
-	DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC,
+	DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC_COUNT,
 	DECT_SHELL_SETT_CMD_DLC_SDU_LIFETIME,
 };
 
@@ -317,8 +322,8 @@ static struct sys_getopt_option long_options_sett_cmd[] = {
 	{"sec_mode", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_MODE},
 	{"sec_integ_key", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_INTEG_KEY},
 	{"sec_cipher_key", sys_getopt_required_argument, 0, DECT_SHELL_SETT_CMD_SEC_CIPHER_KEY},
-	{"dlc_discard_release_assoc", sys_getopt_required_argument, 0,
-	 DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC},
+	{"dlc_discard_release_assoc_count", sys_getopt_required_argument, 0,
+	 DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC_COUNT},
 	{"dlc_sdu_lifetime", sys_getopt_required_argument, 0,
 	 DECT_SHELL_SETT_CMD_DLC_SDU_LIFETIME},
 	{0, 0, 0, 0}};
@@ -2161,8 +2166,13 @@ static void dect_shell_sett_cmd_print(struct dect_settings *dect_sett)
 	}
 
 	dect_l2_shell_print("  DLC:");
-	dect_l2_shell_print("   Release assoc on discard timer expiry: %s",
-			    dect_sett->dlc.discard_timer_release_assoc ? "on" : "off");
+	if (dect_sett->dlc.discard_timer_release_assoc_count ==
+	    DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_DISABLED) {
+		dect_l2_shell_print("   Discard timer expiries before assoc release: disabled (0)");
+	} else {
+		dect_l2_shell_print("   Discard timer expiries before assoc release: %u",
+				    dect_sett->dlc.discard_timer_release_assoc_count);
+	}
 	{
 		/* The same setting drives the local node's default user-data
 		 * TX flow on both roles - direction differs:
@@ -2586,17 +2596,25 @@ static void dect_shell_sett_cmd_impl(const struct shell *shell, size_t argc, cha
 				DECT_SETTINGS_WRITE_SCOPE_SECURITY_CONFIGURATION;
 			break;
 		}
-		case DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC: {
-			if (!strcmp(sys_getopt_optarg, "on")) {
-				newsettings.dlc.discard_timer_release_assoc = true;
-			} else if (!strcmp(sys_getopt_optarg, "off")) {
-				newsettings.dlc.discard_timer_release_assoc = false;
-			} else {
+		case DECT_SHELL_SETT_CMD_DLC_DISCARD_RELEASE_ASSOC_COUNT: {
+			tmp_value = shell_strtoul(sys_getopt_optarg, 10, &ret);
+			if (ret || tmp_value > DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_RUNTIME_MAX) {
+#if defined(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_PEER_TRACKING)
 				dect_l2_shell_error(
-					"Invalid dlc_discard_release_assoc value: %s",
+					"Invalid dlc_discard_release_assoc_count value: %s "
+					"(valid: 0..%u; 0 = disabled)",
+					sys_getopt_optarg,
+					DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_RUNTIME_MAX);
+#else
+				dect_l2_shell_error(
+					"Invalid dlc_discard_release_assoc_count value: %s "
+					"(valid: 0 or 1; values > 1 need Kconfig "
+					"DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT > 1)",
 					sys_getopt_optarg);
+#endif
 				return;
 			}
+			newsettings.dlc.discard_timer_release_assoc_count = (uint8_t)tmp_value;
 			newsettings.cmd_params.write_scope_bitmap |= DECT_SETTINGS_WRITE_SCOPE_DLC;
 			break;
 		}

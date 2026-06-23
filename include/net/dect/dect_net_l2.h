@@ -945,16 +945,33 @@ enum dect_dlc_sdu_lifetime {
 	DECT_DLC_SDU_LIFETIME_INFINITY = 255,
 };
 
+/** Disable association release on DLC discard-timer expiry (see
+ *  @ref dect_settings_dlc.discard_timer_release_assoc_count).
+ */
+#define DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_DISABLED 0
+
+/** Maximum @ref dect_settings_dlc.discard_timer_release_assoc_count (uint8_t). */
+#define DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT_MAX UINT8_MAX
+
+/** Maximum discard release count accepted at runtime (``dect sett``).
+ *  Values greater than 1 require per-peer tracking at build time
+ *  (``CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT`` > 1).
+ */
+#if defined(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_PEER_TRACKING)
+#define DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_RUNTIME_MAX \
+	DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT_MAX
+#else
+#define DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_RUNTIME_MAX 1
+#endif
+
 /** @brief DLC (Data Link Control) settings. */
 struct dect_settings_dlc {
-	/** Release association when a DLC TX response returns
-	 *  DLC_DISCARD_TIMER_EXPIRED. true = release peer with cause
-	 *  BAD_RADIO_QUALITY (driver default, set via Kconfig
-	 *  DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION); false = keep
-	 *  the association alive across transient link losses and let upper
-	 *  layers decide.
+	/** Number of consecutive DLC_DISCARD_TIMER_EXPIRED TX responses from a
+	 *  peer before releasing the association (cause BAD_RADIO_QUALITY).
+	 *  Boot default from CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT.
+	 *  0 = never release (@ref DECT_DLC_DISCARD_TIMER_RELEASE_ASSOC_DISABLED).
 	 */
-	bool discard_timer_release_assoc;
+	uint8_t discard_timer_release_assoc_count;
 
 	/** DLC SDU discard-timer (lifetime) used for the PT->FT data flow on
 	 *  association. Boot default from CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME.

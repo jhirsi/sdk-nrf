@@ -1,4 +1,4 @@
-.. _dect_tether_ipv6_sample:
+git log.. _dect_tether_ipv6_sample:
 
 nRF91x1: DECT IPv6 tethering (RA + DHCPv6 + mDNS forward)
 #########################################################
@@ -654,7 +654,7 @@ Loss-resilient DLC profile (:file:`dlc_resilient.conf`)
 The modem's stock DLC defaults — ``LIFETIME_60_S`` and "release association on DLC discard" — are not a great match for a tether deployment: stale SDUs can sit in the TX queue for up to 60 s, and a single discard-timer expiry tears down the association and forces a full PT reconnect. The :file:`dlc_resilient.conf` overlay replaces them with a loss-resilient profile:
 
 * ``CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME=21`` — ``LIFETIME_1_5_S``: applied to the PT's ``flow_config[0]`` at association (the PT->FT direction). In the typical tether topology the PT sources data toward the internet, so **PT->FT is the heavy uplink**. 1.5 s is generous enough to absorb several DLC retransmission rounds across short outages without dropping queued payload, but small enough that a fundamentally broken link surfaces in seconds rather than the ~minute the 60 s default would impose. For latency-sensitive workloads where stale SDUs are useless, drop the value at runtime to e.g. ``=4`` (10 ms) or ``=6`` (30 ms). The FT counterpart in :ref:`dect_shell <dect_shell_dlc_resilient>` uses a slightly more tolerant ``=23`` (2.5 s) on its return path.
-* ``CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION=n`` — DLC-discard expiry no longer releases the association, so bursty loss does not cause link flaps and PT-side reconnect storms.
+* ``CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT=10`` — release the association only after **10 consecutive** DLC-discard expiries (counter resets on successful DLC TX). With the 1.5 s lifetime above, a fully stuck **PT->FT** uplink tolerates roughly **10 × 1.5 s ≈ 15 s** before reconnect (often longer under TX flow control). Use ``0`` to disable discard-driven release entirely.
 
 Append :file:`dlc_resilient.conf` **last** in ``EXTRA_CONF_FILE``:
 
@@ -674,7 +674,7 @@ Both knobs are also tunable at runtime via the DECT L2 shell, no rebuild require
 .. code-block:: console
 
    uart:~$ dect sett --dlc_sdu_lifetime 21
-   uart:~$ dect sett --dlc_discard_release_assoc off
+   uart:~$ dect sett --dlc_discard_release_assoc_count 10
    uart:~$ dect sett --read
 
 The ``--read`` output annotates which TX flow the lifetime applies to — ``PT->FT`` here (``PT`` role applies it to ``flow_config[0]`` at association). The FT-side **return path (FT->PT)** is controlled independently by the matching :file:`dlc_resilient.conf` in :ref:`dect_shell <dect_shell_dlc_resilient>`; pick each side's value for its own traffic profile.

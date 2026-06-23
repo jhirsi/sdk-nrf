@@ -63,8 +63,8 @@ static const struct dect_settings_security_conf security_configuration_data = {
 };
 
 static const struct dect_settings_dlc dlc_data = {
-	.discard_timer_release_assoc =
-		IS_ENABLED(CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION),
+	.discard_timer_release_assoc_count =
+		CONFIG_DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT,
 	.sdu_lifetime = CONFIG_DECT_MDM_NRF_DLC_SDU_LIFETIME,
 };
 
@@ -297,8 +297,8 @@ dect_mdm_settings_write(struct dect_mdm_settings *dect_sett_in)
 		return_status.reactivate = true;
 	}
 	if (write_scope_bitmap_in & DECT_SETTINGS_WRITE_SCOPE_DLC) {
-		current_sett->dlc.discard_timer_release_assoc =
-			new_sett->dlc.discard_timer_release_assoc;
+		current_sett->dlc.discard_timer_release_assoc_count =
+			new_sett->dlc.discard_timer_release_assoc_count;
 		current_sett->dlc.sdu_lifetime = new_sett->dlc.sdu_lifetime;
 	}
 

@@ -33,17 +33,24 @@ config DECT_MDM_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
 	help
 	  Enable TX window based flow ctrl on unacked mdm TX DLC data requests.
 
-config DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOCIATION
-	bool "Release association on DLC discard timer expiry"
+config DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT
+	int "DLC discard timer expiries before association release"
 	depends on DECT_MDM_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
-	default y
+	range 0 255
+	default 1
 	help
 	  When a DLC data TX response returns
-	  NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED, release the
-	  association toward the unreachable peer with cause
-	  NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY. Disable to keep
-	  the association alive across transient link losses and let upper
-	  layers decide; the status is still logged either way.
+	  NRF_MODEM_DECT_MAC_STATUS_DLC_DISCARD_TIMER_EXPIRED, count consecutive
+	  expiries per peer before releasing the association with cause
+	  NRF_MODEM_DECT_MAC_RELEASE_CAUSE_BAD_RADIO_QUALITY. The counter resets
+	  on a successful DLC TX response to that peer. 0 disables association
+	  release on discard-timer expiry (upper layers decide). Valid range
+	  1..255 when enabled. Values greater than 1 compile in per-peer
+	  expiry counting.
+
+config DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_PEER_TRACKING
+	def_bool DECT_MDM_NRF_DLC_DISCARD_TIMER_RELEASE_ASSOC_COUNT > 1
+	depends on DECT_MDM_NRF_TX_FLOW_CTRL_BASED_ON_MDM_TX_DLC_REQS
 
 config DECT_MDM_NRF_DLC_SDU_LIFETIME
 	int "DLC SDU discard-timer (lifetime) for PT->FT data flow"
