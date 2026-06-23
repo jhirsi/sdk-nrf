@@ -558,6 +558,7 @@ WARNING: Wiznet w5500 shield (red one) is not working correctly and can burn you
 
 Use this when the host leg should use **Ethernet** via the Zephyr :ref:`seeed_w5500` shield on the nRF9151 DK.
 Merge :file:`eth_common.conf`, :file:`eth_w5500.conf`, and :file:`eth_w5500_seeed.conf`.
+For tethering, also append :file:`dect_rx_pool.conf` and :file:`dlc_resilient.conf` (see :ref:`dect_tether_ipv6_dect_rx_pool` and :ref:`dect_tether_ipv6_dlc_resilient`) — without the private DECT RX pool, sustained PC traffic can starve buffers and stall eth0 in poll mode.
 The Seeed shield (Rev 1.01) leaves the W5500 INTn disconnected, so :file:`eth_w5500_seeed.conf` enables :kconfig:option:`CONFIG_ETH_W5500_POLL_MODE` to service the driver over SPI instead of the interrupt line.
 Devicetree comes from the Zephyr shield devicetree :file:`zephyr/boards/shields/seeed_w5500/seeed_w5500.overlay`
 plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed locally administered Ethernet MAC), or :file:`w5500-seeed.overlay` for ``zephyr,random-mac-address`` (new MAC each boot).
@@ -571,7 +572,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
   .. code-block:: console
 
      cd nrf/samples/dect/dect_tether_ipv6
-     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
+     west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed-static-mac.overlay
 
    * Edit ``local-mac-address`` in :file:`w5500-seeed-static-mac.overlay` so each board on the same LAN has a unique MAC.
 
@@ -579,7 +580,7 @@ plus a sample overlay: default :file:`w5500-seeed-static-mac.overlay` (fixed loc
 
      .. code-block:: console
 
-        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
+        west build -p -b nrf9151dk/nrf9151/ns -- -DSHIELD=seeed_w5500 -DEXTRA_CONF_FILE="eth_common.conf;eth_w5500.conf;eth_w5500_seeed.conf;dect_rx_pool.conf;dlc_resilient.conf" -DDTC_OVERLAY_FILE=w5500-seeed.overlay
 
 .. _dect_tether_ipv6_eth_w5500_10bt_hd:
 
