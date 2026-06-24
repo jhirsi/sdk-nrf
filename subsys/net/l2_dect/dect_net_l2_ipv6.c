@@ -392,6 +392,12 @@ static void dect_pt_nd_proxy_na_work_handler(struct k_work *work)
  * Schedule a solicited ND proxy NA for a PT GUA. Returns true when the NS was
  * accepted (NA queued). Used from the ICMP handler and from the unicast-intercept
  * packet filter.
+ *
+ * The caller is responsible for verifying that @p tgt is a PT GUA known on
+ * this device (membership test against the DECT child associations). The two
+ * callers use different membership helpers because they run in different
+ * locking contexts: see dect_net_l2_child_global_ipv6_match() and its
+ * net_pkt_filter-context counterpart dect_net_l2_npf_child_global_ipv6_match().
  */
 static bool dect_pt_nd_proxy_ns_schedule(struct net_if *rx, const struct net_in6_addr *tgt,
 				      const struct net_in6_addr *ns_src, const char *via)
@@ -400,10 +406,6 @@ static bool dect_pt_nd_proxy_ns_schedule(struct net_if *rx, const struct net_in6
 	int qret;
 
 	if (!net_ipv6_is_global_addr(tgt)) {
-		return false;
-	}
-
-	if (!dect_net_l2_child_global_ipv6_match((const struct in6_addr *)tgt)) {
 		return false;
 	}
 
@@ -494,6 +496,11 @@ static bool dect_pt_nd_proxy_unicast_ns_npf_test(struct npf_test *test, struct n
 		return false;
 	}
 
+	/* npf rule callback context: lock-free, best-effort match. */
+	if (!dect_net_l2_npf_child_global_ipv6_match((const struct in6_addr *)&tgt)) {
+		return false;
+	}
+
 	return dect_pt_nd_proxy_ns_schedule(rx, &tgt,
 					 (const struct net_in6_addr *)&hdr->src,
 					 "unicast intercept");
@@ -556,6 +563,13 @@ static enum net_verdict dect_net_l2_ipv6_pt_nd_proxy_ns_handler(struct net_icmp_
 	}
 
 	net_ipv6_addr_copy_raw(tgt.s6_addr, ns_hdr->tgt);
+
+	/* ICMP handler runs in regular thread context: take the mutex-guarded
+	 * variant so the membership decision is exact.
+	 */
+	if (!dect_net_l2_child_global_ipv6_match((const struct in6_addr *)&tgt)) {
+		return NET_CONTINUE;
+	}
 
 	(void)dect_pt_nd_proxy_ns_schedule(rx, &tgt,
 					(const struct net_in6_addr *)&ip_hdr->ipv6->src,
