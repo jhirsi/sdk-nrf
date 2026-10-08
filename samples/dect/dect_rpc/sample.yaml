@@ -1,0 +1,41 @@
+# Copyright (c) 2026 Nordic Semiconductor ASA
+# SPDX-License-Identifier: LicenseRef-Nordic-5-Clause
+
+sample:
+  name: DECT NR+ net_if on external MCU (experimental)
+  description: Experimental DECT NR+ RPC — Zephyr net_if on an external MCU, modem and stack on nRF91
+common:
+  tags:
+    - ci_build
+    - sysbuild
+    - ci_samples_dect
+  sysbuild: true
+  build_only: true
+  integration_platforms:
+    - nrf54l15dk/nrf54l15/cpuapp
+    - nrf9151dk/nrf9151/ns
+  platform_allow:
+    - nrf54l15dk/nrf54l15/cpuapp
+    - nrf9151dk/nrf9151/ns
+
+tests:
+  sample.dect.dect_rpc.server:
+    platform_allow:
+      - nrf9151dk/nrf9151/ns
+    extra_args:
+      - EXTRA_CONF_FILE=server.conf
+      - EXTRA_DTC_OVERLAY_FILE=overlay-nrf9151-server-modem.overlay
+  sample.dect.dect_rpc.client:
+    platform_allow:
+      - nrf54l15dk/nrf54l15/cpuapp
+  sample.dect.dect_rpc.client.iperf3_tx:
+    platform_allow:
+      - nrf54l15dk/nrf54l15/cpuapp
+    extra_args: EXTRA_CONF_FILE="iperf3-common.conf;iperf3-tx.conf"
+  sample.dect.dect_rpc.client.ping_dns:
+    platform_allow:
+      - nrf54l15dk/nrf54l15/cpuapp
+    extra_args: EXTRA_CONF_FILE="ping.conf;dns.conf"
+  sample.dect.dect_rpc.client.nrf9151:
+    platform_allow:
+      - nrf9151dk/nrf9151/ns
