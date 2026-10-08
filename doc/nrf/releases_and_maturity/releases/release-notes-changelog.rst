@@ -248,6 +248,12 @@ DECT NR+
 
 * Added:
 
+  * DECT NR+ L2 integration for the experimental DECT NR+ RPC library (:kconfig:option:`CONFIG_DECT_NR_RPC`):
+
+    * On the RPC server (:kconfig:option:`CONFIG_DECT_NR_RPC_SERVER`), :file:`dect_net_l2_rpc.h` hooks register IPv6 RX forwarding and link-state notifications when a client session is active (:c:func:`dect_net_l2_rpc_forward_register`, :c:func:`dect_net_l2_link_state_register`, :c:func:`dect_net_l2_rpc_client_set_connected`); :c:enumerator:`DECT_RPC_CMD_CONNECT` / :c:enumerator:`DECT_RPC_CMD_DISCONNECT` call Connection Manager on the real ``dect0`` interface when :kconfig:option:`CONFIG_NET_L2_DECT_CONN_MGR` is enabled
+    * On the RPC client (:kconfig:option:`CONFIG_DECT_NR_RPC_CONN_MGR`), a Connection Manager connectivity backend on the tunneled ``net_if`` proxies :c:func:`conn_mgr_if_connect` / :c:func:`conn_mgr_if_disconnect` to the server; DECT NR+ association policy remains on the server (:kconfig:option:`CONFIG_NET_L2_DECT_CONN_MGR` and related options), while the Connection Manager monitor raises ``NET_EVENT_L4_*`` on the client from mirrored IPv6 and interface state
+    * L2 shell support for remote ``dect`` commands over RPC (:kconfig:option:`CONFIG_DECT_L2_SHELL_RPC`, selected by :kconfig:option:`CONFIG_DECT_NR_RPC_SHELL`): session-lock wrappers around shell handlers and :c:func:`dect_shell_exec_by_name` for server-side execution by subcommand name
+
   * DECT NR+ L2 Ethernet sink mode for IPv6 bridging over an Ethernet uplink:
 
     * Delegated ``/96`` prefix and ULA on DECT NR+
@@ -585,6 +591,10 @@ DECT NR+ samples
 
 * Added the :ref:`dect_tether_ipv6_sample` sample for an nRF91x1 PT device that bridges a DECT NR+ uplink to a wired Ethernet host, acting as an IPv6 gateway (GW) using the new :ref:`lib_dect_tethering` library.
   Ethernet connectivity uses a W5500 SPI shield (Arceli interrupt-driven or Seeed poll-mode) on the nRF9151 DK.
+
+* Added the :ref:`dect_rpc_sample` sample that builds RPC client and server images from one tree using the :ref:`dect_rpc` library.
+  It showcases a split design: run your application on nRF54L15 while nRF9151 keeps the DECT NR+ modem and L2 stack, joined by a 1 Mbps UART nRF RPC link with RTS/CTS.
+  On the host MCU you still work with a familiar ``dect0`` ``net_if``—IPv6 traffic, Connection Manager connect and disconnect, and optional ``dect`` shell and ping—without integrating the modem on that chip.
 
 * :ref:`dect_shell_application` sample:
 
@@ -1060,6 +1070,14 @@ Libraries for networking
     * Sends ICMPv6 Router Advertisements (default router, RDNSS, Managed flag, PIO with ``A=0``/``L=0``) so that the host uses DHCPv6 for addressing.
     * Provides a built-in minimal DHCPv6 server (UDP 547) that offers ULA and delegated GUA ``/128`` addresses derived from the DECT NR+ interface.
     * Optionally forwards IPv6 mDNS (UDP 5353) between the Ethernet and DECT NR+ interfaces through an ``AF_PACKET`` tap.
+
+  * The :ref:`dect_rpc` library (:kconfig:option:`CONFIG_DECT_NR_RPC`, :ref:`experimental <software_maturity>`) that offloads the DECT NR+ modem and L2 stack to nRF91 while an external MCU keeps a standard Zephyr ``net_if`` over :ref:`nrf_rpc` (UART by default).
+    It provides the following:
+
+    * A client role that mirrors server ``dect0`` IPv6 addresses, link state, and MTU, and tunnels send and receive over CBOR RPC (:c:enumerator:`DECT_RPC_CMD_IF_SEND`, :c:enumerator:`DECT_RPC_CMD_IF_RECEIVE`, and related commands).
+    * A server role on :kconfig:option:`CONFIG_NET_L2_DECT` that injects client traffic into the real DECT NR+ path and forwards modem RX to the client when an RPC session is active.
+    * Optional Connection Manager on the client (:kconfig:option:`CONFIG_DECT_NR_RPC_CONN_MGR`) with connect and disconnect proxied to the server DECT interface, plus optional remote DECT L2 shell (:kconfig:option:`CONFIG_DECT_NR_RPC_SHELL`).
+    * See the :ref:`dect_rpc_sample` sample for a two-board nRF54L15 + nRF9151 reference design.
 
   * The DECT ICMPv6 ping shell library (:kconfig:option:`CONFIG_DECT_ICMP_PING_LIB`), which provides ICMPv6 ping functionality for use from shell commands.
     The functionality was extracted from the ``ping`` command of the :ref:`dect_shell_application` application into a reusable library.
